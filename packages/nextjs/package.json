@@ -1,0 +1,70 @@
+{
+  "name": "@fonte-is/nextjs",
+  "version": "0.1.0",
+  "description": "Next.js App Router integration over @fonte-is/core and @fonte-is/react",
+  "license": "Apache-2.0",
+  "homepage": "https://fonte.is",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fonte-is/fonte-sdk-js.git",
+    "directory": "packages/nextjs"
+  },
+  "bugs": {
+    "url": "https://github.com/fonte-is/fonte-sdk-js/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "server": [
+        "./dist/server.d.ts"
+      ],
+      "installation-verification": [
+        "./dist/installation-verification.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "node": "./dist/server.js"
+    },
+    "./installation-verification": {
+      "types": "./dist/installation-verification.d.ts",
+      "import": "./dist/installation-verification.js",
+      "default": "./dist/installation-verification.js"
+    }
+  },
+  "dependencies": {
+    "@fonte-is/core": "0.1.0",
+    "@fonte-is/react": "0.1.0"
+  },
+  "peerDependencies": {
+    "next": ">=15 <17",
+    "react": ">=18.2.0 <20",
+    "react-dom": ">=18.2.0 <20"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

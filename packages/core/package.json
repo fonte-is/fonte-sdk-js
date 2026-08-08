@@ -1,0 +1,61 @@
+{
+  "name": "@fonte-is/core",
+  "version": "0.1.0",
+  "description": "Framework-neutral browser and server primitives for Fonte",
+  "license": "Apache-2.0",
+  "homepage": "https://fonte.is",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fonte-is/fonte-sdk-js.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/fonte-is/fonte-sdk-js/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "server": [
+        "./dist/server.d.ts"
+      ],
+      "installation-verification": [
+        "./dist/installation-verification.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "node": "./dist/server.js"
+    },
+    "./installation-verification": {
+      "types": "./dist/installation-verification.d.ts",
+      "import": "./dist/installation-verification.js",
+      "default": "./dist/installation-verification.js"
+    }
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,5 @@
+.artifacts/
+.vendor/
+node_modules/
+packages/*/dist/
+package-lock.json

@@ -1,0 +1,47 @@
+{
+  "name": "fonte-sdk-js",
+  "version": "0.0.0-private",
+  "private": true,
+  "description": "Workspace for the public Fonte JavaScript SDK",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "node scripts/run-packages.mjs build",
+    "typecheck": "node scripts/run-packages.mjs typecheck",
+    "typecheck:strict": "node scripts/run-packages.mjs typecheck:strict",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:readability": "node scripts/check-source-readability.mjs",
+    "lint:source": "npm run format:check && npm run typecheck:strict && npm run check:readability",
+    "test": "node --test tests/*.test.mjs",
+    "pack:local": "node scripts/pack-local.mjs",
+    "verify:packs": "node scripts/verify-packed-manifests.mjs",
+    "lint:packs": "node scripts/lint-packed-packages.mjs",
+    "check:core-boundary": "node scripts/check-core-boundary.mjs",
+    "smoke:local-pack-consumers": "node scripts/smoke-local-consumers.mjs",
+    "smoke:node-floor": "npx --yes node@20.9.0 .artifacts/consumers/vanilla/index.mjs",
+    "smoke:packed-browser": "node scripts/smoke-packed-browser.mjs",
+    "verify:local": "npm run clean && npm run build && npm run typecheck && npm run lint:source && npm test && npm run pack:local && npm run verify:packs && npm run lint:packs && npm run check:core-boundary && npm run smoke:local-pack-consumers && npm run smoke:node-floor && npm run smoke:packed-browser"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@types/node": "24.6.0",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.3",
+    "next": "16.2.11",
+    "playwright": "^1.62.1",
+    "prettier": "3.9.6",
+    "publint": "^0.3.23",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "typescript": "5.9.3"
+  }
+}

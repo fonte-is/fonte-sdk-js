@@ -1,0 +1,50 @@
+{
+  "controlPlaneCommit": "43fa22a056665424278d8db3a7bcf2ff3430f8f5",
+  "route": "/v1/touches",
+  "controlPlaneTopLevelFields": [
+    "batchId",
+    "environment",
+    "eventType",
+    "idempotencyKey",
+    "logicalEventId",
+    "observedAt",
+    "occurredAt",
+    "rawPayload",
+    "sourceSystem",
+    "tenantId",
+    "touch"
+  ],
+  "sdkSerializedTopLevelFields": [
+    "environment",
+    "eventType",
+    "idempotencyKey",
+    "logicalEventId",
+    "occurredAt",
+    "rawPayload",
+    "sourceSystem",
+    "tenantId",
+    "touch"
+  ],
+  "touchFields": [
+    "channelType",
+    "clientUserAgent",
+    "fbc",
+    "fbclid",
+    "fbp",
+    "fonteLinkToken",
+    "gbraid",
+    "gclid",
+    "isPaid",
+    "journeyId",
+    "landingUrl",
+    "platform",
+    "referrer",
+    "sourcePlatform",
+    "utmCampaign",
+    "utmContent",
+    "utmMedium",
+    "utmSource",
+    "utmTerm",
+    "wbraid"
+  ]
+}
