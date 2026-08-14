@@ -78,6 +78,29 @@ test("hosted blockers explain the problem and next action to a human", () => {
   assert.match(output, /Sandbox draft retained: no/);
 });
 
+test("draft retention is unknown when the create response is lost", async () => {
+  let request = 0;
+  const receipt = await runHostedTest(
+    "fonte",
+    "10000000-0000-4000-8000-000000000014",
+    {
+      fetch: async () => {
+        request += 1;
+        if (request === 1) return json(config);
+        throw new Error("connection lost after draft commit");
+      },
+      authorize: async () => "header.payload.signature",
+      sleep: async () => assert.fail("a lost create response must not poll"),
+    },
+  );
+
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "core_api_unavailable");
+  assert.equal(receipt.sandbox_draft_id, null);
+  assert.equal(receipt.sandbox_draft_retained, null);
+  assert.match(renderHuman(receipt), /Sandbox draft retained: unknown/);
+});
+
 test("test returns a truthful accepted-only terminal receipt", async () => {
   const requests = [];
   const receipt = await runHostedTest(

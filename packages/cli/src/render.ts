@@ -60,9 +60,11 @@ function renderTest(receipt: HostedTestReceipt): string {
       guidance.summary,
       `Reason: ${receipt.reason}.`,
       "No provider submission was confirmed.",
-      receipt.sandbox_draft_retained
+      receipt.sandbox_draft_retained === true
         ? `Sandbox draft retained: ${receipt.sandbox_draft_id}.`
-        : "Sandbox draft retained: no.",
+        : receipt.sandbox_draft_retained === false
+          ? "Sandbox draft retained: no."
+          : "Sandbox draft retained: unknown; the create response was lost.",
       `Next: ${guidance.next}`,
       "",
     ].join("\n");

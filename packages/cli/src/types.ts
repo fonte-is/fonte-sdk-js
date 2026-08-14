@@ -128,7 +128,7 @@ export interface HostedTestReceipt {
   reason: string;
   workspace: string;
   sandbox_draft_id: string | null;
-  sandbox_draft_retained: boolean;
+  sandbox_draft_retained: boolean | null;
   local_verification: "passed" | "failed";
   account_created: false;
   production_email: "locked_pending_verified_domain";

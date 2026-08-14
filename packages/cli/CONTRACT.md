@@ -71,7 +71,9 @@ one included unit only for accepted, and always reports
 `production_email: "locked_pending_verified_domain"`.
 The fixed sandbox draft remains as a workspace audit artifact. Every test
 receipt reports `sandbox_draft_id` and `sandbox_draft_retained`; failures before
-creation report `null` and `false`.
+creation report `null` and `false`. If the create request may have committed but
+its response is lost, both fields report `null`; the retention value therefore
+means unknown rather than falsely claiming that no draft exists.
 
 Exit codes:
 
