@@ -4,8 +4,10 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { packageOrder } from "./workspace-utils.mjs";
+
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const packageNames = ["core", "react", "nextjs"];
+const packageNames = packageOrder;
 const packsDirectory = path.join(root, ".artifacts", "packs");
 
 await rm(packsDirectory, { recursive: true, force: true });

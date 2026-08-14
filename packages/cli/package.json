@@ -1,0 +1,35 @@
+{
+  "name": "@fonte-is/cli",
+  "version": "0.1.0",
+  "description": "Prepare, verify, and remove a local Fonte installation",
+  "license": "Apache-2.0",
+  "homepage": "https://fonte.is",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fonte-is/fonte-sdk-js.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/fonte-is/fonte-sdk-js/issues"
+  },
+  "type": "module",
+  "bin": {
+    "fonte": "./dist/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

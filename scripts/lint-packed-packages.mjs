@@ -7,14 +7,16 @@ const report = readJson(join(packs, "pack-report.json"));
 for (const packed of report.packages) {
   const tarball = join(packs, packed.filename);
   run("npx", ["publint", "run", tarball, "--strict", "--pack=false"]);
-  run("npx", [
-    "attw",
-    tarball,
-    "--profile",
-    "esm-only",
-    "--no-emoji",
-    "--no-color",
-  ]);
+  if (packed.name !== "@fonte-is/cli") {
+    run("npx", [
+      "attw",
+      tarball,
+      "--profile",
+      "esm-only",
+      "--no-emoji",
+      "--no-color",
+    ]);
+  }
 }
 
 process.stdout.write(
@@ -25,7 +27,10 @@ process.stdout.write(
         name,
         filename,
       })),
-      checks: ["publint-strict", "arethetypeswrong-esm-only"],
+      checks: [
+        "publint-strict-all-packages",
+        "arethetypeswrong-esm-only-library-packages",
+      ],
     },
     null,
     2,

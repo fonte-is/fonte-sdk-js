@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const packageDirectories = ["core", "react", "nextjs"];
+const packageDirectories = ["core", "react", "nextjs", "cli"];
 
 const readJson = async (relativePath) =>
   JSON.parse(await readFile(path.join(root, relativePath), "utf8"));
@@ -20,7 +20,7 @@ const sourceFiles = async (directory) => {
   return files;
 };
 
-test("the public graph contains exactly three 0.1.0 packages", async () => {
+test("the public graph contains exactly four 0.1.0 packages", async () => {
   const entries = (await readdir(path.join(root, "packages"))).sort();
   assert.deepEqual(entries, packageDirectories.toSorted());
   const manifests = await Promise.all(
@@ -28,7 +28,7 @@ test("the public graph contains exactly three 0.1.0 packages", async () => {
   );
   assert.deepEqual(
     manifests.map(({ name }) => name),
-    ["@fonte-is/core", "@fonte-is/react", "@fonte-is/nextjs"],
+    ["@fonte-is/core", "@fonte-is/react", "@fonte-is/nextjs", "@fonte-is/cli"],
   );
   assert.equal(
     manifests.every(({ version }) => version === "0.1.0"),
@@ -40,6 +40,7 @@ test("dependency edges point only from framework bindings to Core", async () => 
   const core = await readJson("packages/core/package.json");
   const react = await readJson("packages/react/package.json");
   const nextjs = await readJson("packages/nextjs/package.json");
+  const cli = await readJson("packages/cli/package.json");
   assert.deepEqual(core.dependencies ?? {}, {});
   assert.deepEqual(core.peerDependencies ?? {}, {});
   assert.deepEqual(react.dependencies, { "@fonte-is/core": "0.1.0" });
@@ -47,6 +48,15 @@ test("dependency edges point only from framework bindings to Core", async () => 
     "@fonte-is/core": "0.1.0",
     "@fonte-is/react": "0.1.0",
   });
+  assert.deepEqual(cli.dependencies ?? {}, {});
+  assert.deepEqual(cli.peerDependencies ?? {}, {});
+});
+
+test("the CLI package has one stable binary and no library surface", async () => {
+  const cli = await readJson("packages/cli/package.json");
+  assert.deepEqual(cli.bin, { fonte: "./dist/main.js" });
+  assert.equal(cli.main, undefined);
+  assert.equal(cli.exports, undefined);
 });
 
 test("server entry points are Node-only conditional exports", async () => {

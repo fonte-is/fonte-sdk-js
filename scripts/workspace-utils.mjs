@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const packageOrder = ["core", "react", "nextjs"];
+export const packageOrder = ["core", "react", "nextjs", "cli"];
 export const packageNames = packageOrder.map((name) => `@fonte-is/${name}`);
 
 export function readJson(path) {

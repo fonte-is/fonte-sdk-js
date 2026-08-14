@@ -39,6 +39,13 @@ for (const name of packageOrder) {
       `${manifest.name} export target missing: ${target}`,
     );
   }
+  for (const target of Object.values(packedManifest.bin ?? {})) {
+    const normalized = posix.join("package", target.replace(/^\.\//, ""));
+    assert.ok(
+      entrySet.has(normalized),
+      `${manifest.name} binary target missing: ${target}`,
+    );
+  }
   for (const entry of entries) {
     assert.match(
       entry,
@@ -61,7 +68,8 @@ for (const name of packageOrder) {
   verified.push({
     name: manifest.name,
     entryCount: entries.length,
-    exports: Object.keys(manifest.exports),
+    exports: Object.keys(manifest.exports ?? {}),
+    binaries: Object.keys(manifest.bin ?? {}),
   });
 }
 

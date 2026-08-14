@@ -5,7 +5,7 @@ import path from "node:path";
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 await Promise.all([
-  ...["core", "react", "nextjs"].map((name) =>
+  ...["core", "react", "nextjs", "cli"].map((name) =>
     rm(path.join(root, "packages", name, "dist"), {
       recursive: true,
       force: true,
