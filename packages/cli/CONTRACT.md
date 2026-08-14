@@ -88,7 +88,7 @@ The package manager is npm when no foreign lockfile exists and either:
 `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, `bun.lockb`, or a non-npm
 `packageManager` blocks with `unsupported_package_manager`.
 
-Exactly one App Router layout must exist. Supported layout names are
+Exactly one regular, non-symlink App Router layout file must exist. Supported layout names are
 `layout.js`, `layout.jsx`, `layout.ts`, and `layout.tsx`. None blocks with
 `unsupported_framework`; layouts under both `app` and `src/app` block with
 `ambiguous_app_router_root`.
@@ -124,17 +124,22 @@ existing `package-lock.json`, `.gitignore`, and every target file.
 Apply executes in this order:
 
 1. `npm install --save-exact --ignore-scripts --no-audit --no-fund
-@fonte-is/nextjs@0.1.0` when the dependency was absent;
+@fonte-is/nextjs@0.1.0` when the dependency was absent, adding
+   `--package-lock=false` when the project began without `package-lock.json`;
 2. atomically create `fonte/installation.ts` with exclusive semantics;
 3. atomically append the ignore block when required;
 4. create `.fonte/installation.json` last, with mode `0600` where supported;
 5. run the same checks as `doctor`.
 
 The manifest receives a fresh UUID v4 only during apply. The raw UUID is not
-authority. Any failure restores exact file snapshots and reconciles npm using
-`npm install --ignore-scripts --no-audit --no-fund` after restoring the
-original package manifest and lockfile. A failed rollback is reported as
-`rollback_failed`; it is never rendered as prepared.
+authority. Rollback restores only paths whose current state still matches the
+state produced by the CLI. It never deletes or overwrites a concurrently
+changed path. When npm reconciliation is required, rollback restores the
+original manifests, reconciles with scripts disabled, then restores the exact
+original manifest and lockfile bytes again. Projects that began without a
+lockfile use `--package-lock=false` throughout. A failed rollback is reported
+as `rollback_failed`; it is never collapsed into an ordinary execution error
+or rendered as prepared.
 
 ## Manifest
 
@@ -180,12 +185,10 @@ Doctor is read-only. It verifies:
 - successful resolution of
   `@fonte-is/nextjs/installation-verification` from the customer project;
 - successful normalization of manifest metadata through that package;
-- one explicit local project check.
 
-The project check runs `npm run typecheck` when that script exists, otherwise
-`npm run build` when that script exists. If neither exists, doctor blocks with
-`project_check_unavailable`. A nonzero command blocks with
-`project_check_failed`. Captured output is not copied into receipts.
+Doctor never executes project scripts. A project-owned `typecheck`, `build`,
+or other script may write files, contact the network, or invoke providers, so
+it cannot be part of a read-only verification receipt.
 
 ## Remove
 
@@ -195,7 +198,8 @@ Any mismatch blocks with `managed_code_drifted` and leaves everything intact.
 The ordered removal is the inverse of owned operations:
 
 1. remove the exact direct dependency with
-   `npm uninstall --ignore-scripts --no-audit --no-fund @fonte-is/nextjs`;
+   `npm uninstall --ignore-scripts --no-audit --no-fund @fonte-is/nextjs`,
+   adding `--package-lock=false` when the project has no lockfile;
 2. delete the exact-digest managed source file;
 3. remove the exact managed ignore block, preserving all other bytes;
 4. delete the manifest and remove `.fonte` only when empty.
@@ -256,12 +260,13 @@ arguments.ts       invocation grammar only
 project.ts         project and package-manager detection only
 plan.ts            pure plan construction and sealing only
 plan-material.ts   fixed ordered plan material only
+installation-plan.ts read-only project state inspection and plan composition only
 manifest.ts        exact manifest read, parse, and serialization only
 filesystem.ts      snapshots and atomic local file operations only
 dependency.ts      exact npm dependency posture and commands only
 ignore.ts          exact ignore-line/block ownership only
 installation-state.ts exact local ownership composition only
-project-check.ts   select and run the one sanctioned local check only
+mutation-journal.ts record exact CLI-produced filesystem states only
 doctor.ts          compose read-only verification only
 mutations.ts       compose init/remove transactions only
 rollback.ts        exact snapshot restoration and npm reconciliation only

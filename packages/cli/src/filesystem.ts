@@ -47,16 +47,32 @@ export async function captureSnapshots(
 /** Restore exact snapshots atomically; delete only paths absent in the snapshot. */
 export async function restoreSnapshots(
   root: string,
-  snapshots: readonly FileSnapshot[],
+  originals: readonly FileSnapshot[],
+  expectedCurrent: readonly FileSnapshot[],
 ): Promise<void> {
-  for (const snapshot of snapshots) {
-    const target = await assertManagedPathSafe(root, snapshot.path);
-    if (snapshot.existed) {
-      await writeAtomic(target, snapshot.bytes!, snapshot.mode);
+  const originalByPath = new Map(
+    originals.map((snapshot) => [snapshot.path, snapshot]),
+  );
+  for (const expected of expectedCurrent) {
+    const original = originalByPath.get(expected.path);
+    if (!original) throw new Error("snapshot_original_missing");
+    const [current] = await captureSnapshots(root, [expected.path]);
+    if (!current || !sameSnapshot(current, expected)) {
+      throw new Error("snapshot_current_drifted");
+    }
+    const target = await assertManagedPathSafe(root, original.path);
+    if (original.existed) {
+      await writeAtomic(target, original.bytes!, original.mode);
     } else {
       await rm(target, { force: true });
     }
   }
+}
+
+function sameSnapshot(left: FileSnapshot, right: FileSnapshot): boolean {
+  if (left.existed !== right.existed) return false;
+  if (!left.existed) return true;
+  return Buffer.from(left.bytes!).equals(Buffer.from(right.bytes!));
 }
 
 /** Write through a same-directory temporary file and atomic rename. */
@@ -77,15 +93,23 @@ export async function writeAtomic(
   }
 }
 
-export async function writeExclusiveAtomic(
-  target: string,
+export async function writeExclusiveManaged(
+  root: string,
+  relativePath: string,
   bytes: string | Uint8Array,
   mode = 0o644,
 ): Promise<void> {
+  const target = await assertManagedPathSafe(root, relativePath);
   await mkdir(path.dirname(target), { recursive: true });
+  if ((await assertManagedPathSafe(root, relativePath)) !== target) {
+    throw new Error("managed_path_changed");
+  }
   const temporary = temporaryPath(target);
   try {
     await writeTemporary(temporary, bytes, mode);
+    if ((await assertManagedPathSafe(root, relativePath)) !== target) {
+      throw new Error("managed_path_changed");
+    }
     await link(temporary, target);
   } finally {
     await unlink(temporary).catch(() => undefined);

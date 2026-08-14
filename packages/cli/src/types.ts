@@ -17,8 +17,6 @@ export type BlockReason =
   | "local_state_not_ignored"
   | "managed_code_drifted"
   | "managed_path_unsafe"
-  | "project_check_failed"
-  | "project_check_unavailable"
   | "project_manifest_invalid"
   | "unsupported_framework"
   | "unsupported_package_manager";

@@ -3,16 +3,17 @@ import {
   EXECUTION_ERROR_TEXT,
   HELP_TEXT,
   LOCAL_MANIFEST_PATH,
+  ROLLBACK_ERROR_TEXT,
   USAGE_TEXT,
   VERSION_TEXT,
 } from "./constants.js";
 import { verifyInstallation } from "./doctor.js";
-import { CliBlockedError, CliUsageError } from "./errors.js";
+import { CliBlockedError, CliExecutionError, CliUsageError } from "./errors.js";
 import { readOptional } from "./filesystem.js";
+import { createInitPlan, createRemovePlan } from "./installation-plan.js";
 import { readManifest } from "./manifest.js";
 import { applyInit, applyRemove } from "./mutations.js";
 import { assertManagedPathSafe } from "./paths.js";
-import { createInitPlan, createRemovePlan } from "./plan.js";
 import { detectProject } from "./project.js";
 import { blockedReceipt, plannedReceipt } from "./receipts.js";
 import { renderHuman, renderJson } from "./render.js";
@@ -52,6 +53,9 @@ export async function runProgram(
         3,
       );
     }
+    if (error instanceof CliExecutionError) {
+      return executionFailure(error.reason === "rollback_failed");
+    }
     return executionFailure();
   }
 }
@@ -63,11 +67,7 @@ async function executeCommand(
 ): Promise<CliReceipt> {
   if (parsed.command === "init") {
     if (await manifestExists(profile.root)) {
-      return verifyInstallation(
-        profile,
-        await readManifest(profile.root),
-        dependencies.runner,
-      );
+      return verifyInstallation(profile, await readManifest(profile.root));
     }
     const plan = await createInitPlan(profile);
     return parsed.apply
@@ -76,7 +76,7 @@ async function executeCommand(
   }
   const manifest = await readManifest(profile.root);
   if (parsed.command === "doctor") {
-    return verifyInstallation(profile, manifest, dependencies.runner);
+    return verifyInstallation(profile, manifest);
   }
   const plan = await createRemovePlan(profile, manifest);
   return parsed.apply
@@ -102,6 +102,10 @@ function receiptResult(
   };
 }
 
-function executionFailure(): CommandResult {
-  return { exitCode: 1, stdout: "", stderr: EXECUTION_ERROR_TEXT };
+function executionFailure(rollbackFailed = false): CommandResult {
+  return {
+    exitCode: 1,
+    stdout: "",
+    stderr: rollbackFailed ? ROLLBACK_ERROR_TEXT : EXECUTION_ERROR_TEXT,
+  };
 }

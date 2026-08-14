@@ -5,21 +5,19 @@ import { pathToFileURL } from "node:url";
 import { SDK_PACKAGE, SDK_VERSION } from "./constants.js";
 import { CliBlockedError } from "./errors.js";
 import { readOptional } from "./filesystem.js";
-import { createRemovePlan, initPlanFromManifest } from "./plan.js";
-import { runProjectCheck } from "./project-check.js";
+import { createRemovePlan } from "./installation-plan.js";
+import { initPlanFromManifest } from "./plan.js";
 import { preparedReceipt } from "./receipts.js";
-import type { CommandRunner, ProjectProfile } from "./runtime-types.js";
+import type { ProjectProfile } from "./runtime-types.js";
 import type { CliReceipt, LocalManifest } from "./types.js";
 
 /** Verify every doctor invariant in CONTRACT.md without writing. */
 export async function verifyInstallation(
   profile: ProjectProfile,
   manifest: LocalManifest,
-  runner: CommandRunner,
 ): Promise<CliReceipt> {
   await createRemovePlan(profile, manifest);
   await verifyInstalledSdk(profile, manifest);
-  await runProjectCheck(profile, runner);
   return preparedReceipt("doctor", initPlanFromManifest(manifest), "verified");
 }
 

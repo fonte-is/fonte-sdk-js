@@ -1,4 +1,4 @@
-import { access, readFile, realpath } from "node:fs/promises";
+import { access, lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import { CliBlockedError } from "./errors.js";
@@ -10,6 +10,15 @@ const layoutNames = ["layout.js", "layout.jsx", "layout.ts", "layout.tsx"];
 const exists = async (target: string): Promise<boolean> =>
   access(target).then(
     () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    },
+  );
+
+const isRegularFile = async (target: string): Promise<boolean> =>
+  lstat(target).then(
+    (entry) => entry.isFile(),
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return false;
       throw error;
@@ -38,6 +47,9 @@ export async function detectProject(root: string): Promise<ProjectProfile> {
   }
   const input = packageManifest as Record<string, unknown>;
   const manager = input.packageManager;
+  const packageLockPresent = await exists(
+    path.join(canonicalRoot, "package-lock.json"),
+  );
   const foreignLockPresent = (
     await Promise.all(
       foreignLocks.map((name) => exists(path.join(canonicalRoot, name))),
@@ -55,7 +67,9 @@ export async function detectProject(root: string): Promise<ProjectProfile> {
       (["app", "src/app"] as const).flatMap((directory) =>
         layoutNames.map(async (name) => ({
           directory,
-          present: await exists(path.join(canonicalRoot, directory, name)),
+          present: await isRegularFile(
+            path.join(canonicalRoot, directory, name),
+          ),
         })),
       ),
     )
@@ -64,20 +78,11 @@ export async function detectProject(root: string): Promise<ProjectProfile> {
   if (layouts.length !== 1) {
     throw new CliBlockedError("ambiguous_app_router_root");
   }
-  const scripts = input.scripts;
-  const normalizedScripts =
-    scripts && typeof scripts === "object" && !Array.isArray(scripts)
-      ? Object.fromEntries(
-          Object.entries(scripts).filter(
-            (entry): entry is [string, string] => typeof entry[1] === "string",
-          ),
-        )
-      : {};
   return {
     root: canonicalRoot,
     app_directory: layouts[0]!.directory,
     package_manager: "npm",
+    package_lock_present: packageLockPresent,
     package_manifest: input,
-    scripts: normalizedScripts,
   };
 }

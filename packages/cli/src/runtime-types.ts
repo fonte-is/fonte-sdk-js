@@ -4,8 +4,8 @@ export interface ProjectProfile {
   root: string;
   app_directory: "app" | "src/app";
   package_manager: "npm";
+  package_lock_present: boolean;
   package_manifest: Record<string, unknown>;
-  scripts: Record<string, string>;
 }
 
 export interface CommandResult {

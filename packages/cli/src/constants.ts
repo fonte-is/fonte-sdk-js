@@ -74,3 +74,4 @@ export const HELP_TEXT = [
 
 export const VERSION_TEXT = `@fonte-is/cli ${CLI_VERSION}\n`;
 export const EXECUTION_ERROR_TEXT = "Fonte failed: execution_failed.\n";
+export const ROLLBACK_ERROR_TEXT = "Fonte failed: rollback_failed.\n";

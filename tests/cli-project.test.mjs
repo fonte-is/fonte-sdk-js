@@ -81,3 +81,28 @@ test("managed paths reject traversal, metadata, dependencies, and symlinks", asy
     { reason: "managed_path_unsafe" },
   );
 });
+
+test("a directory or symlink cannot impersonate an App Router layout", async () => {
+  const directory = await fixture();
+  await rm(path.join(directory, "app/layout.tsx"));
+  await mkdir(path.join(directory, "app/layout.ts"));
+  await assert.rejects(() => detectProject(directory), {
+    reason: "unsupported_framework",
+  });
+
+  const linked = await fixture();
+  await rm(path.join(linked, "app/layout.tsx"));
+  await writeFile(
+    path.join(linked, "real-layout.tsx"),
+    "export default null;\n",
+  );
+  await import("node:fs/promises").then(({ symlink }) =>
+    symlink(
+      path.join(linked, "real-layout.tsx"),
+      path.join(linked, "app/layout.tsx"),
+    ),
+  );
+  await assert.rejects(() => detectProject(linked), {
+    reason: "unsupported_framework",
+  });
+});

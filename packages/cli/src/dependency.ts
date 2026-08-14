@@ -42,7 +42,13 @@ export async function installSdk(
   profile: ProjectProfile,
   runner: CommandRunner,
 ): Promise<void> {
-  if ((await runner.run("npm", INSTALL_COMMAND, profile.root)) !== 0) {
+  if (
+    (await runner.run(
+      "npm",
+      commandFor(profile, INSTALL_COMMAND),
+      profile.root,
+    )) !== 0
+  ) {
     throw new CliExecutionError("execution_failed");
   }
 }
@@ -51,7 +57,13 @@ export async function uninstallSdk(
   profile: ProjectProfile,
   runner: CommandRunner,
 ): Promise<void> {
-  if ((await runner.run("npm", UNINSTALL_COMMAND, profile.root)) !== 0) {
+  if (
+    (await runner.run(
+      "npm",
+      commandFor(profile, UNINSTALL_COMMAND),
+      profile.root,
+    )) !== 0
+  ) {
     throw new CliExecutionError("execution_failed");
   }
 }
@@ -60,7 +72,22 @@ export async function reconcileNpm(
   profile: ProjectProfile,
   runner: CommandRunner,
 ): Promise<void> {
-  if ((await runner.run("npm", RECONCILE_COMMAND, profile.root)) !== 0) {
+  if (
+    (await runner.run(
+      "npm",
+      commandFor(profile, RECONCILE_COMMAND),
+      profile.root,
+    )) !== 0
+  ) {
     throw new CliExecutionError("rollback_failed");
   }
+}
+
+function commandFor(
+  profile: ProjectProfile,
+  command: readonly string[],
+): readonly string[] {
+  return profile.package_lock_present
+    ? command
+    : [...command, "--package-lock=false"];
 }

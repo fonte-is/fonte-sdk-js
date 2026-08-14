@@ -28,7 +28,7 @@ test("CLI package identity stays independent from the fonte binary", async () =>
   assert.equal(manifest.name, "@fonte-is/cli");
   assert.deepEqual(manifest.bin, { fonte: "./dist/main.js" });
   assert.deepEqual(manifest.dependencies ?? {}, {});
-  assert.equal(manifest.exports, undefined);
+  assert.deepEqual(manifest.exports, {});
 });
 
 test("argument grammar has no implicit confirmation or extra flags", () => {

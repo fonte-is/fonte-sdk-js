@@ -13,6 +13,7 @@
     "url": "https://github.com/fonte-is/fonte-sdk-js/issues"
   },
   "type": "module",
+  "exports": {},
   "bin": {
     "fonte": "./dist/main.js"
   },

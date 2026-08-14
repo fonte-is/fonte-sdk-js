@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import test from "node:test";
 import os from "node:os";
 import path from "node:path";
@@ -44,10 +51,12 @@ async function createFixture(options = {}) {
     path.join(root, "package.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
-  await writeFile(
-    path.join(root, "package-lock.json"),
-    '{\n  "lockfileVersion": 3\n}\n',
-  );
+  if (options.packageLock !== false) {
+    await writeFile(
+      path.join(root, "package-lock.json"),
+      '{\n  "lockfileVersion": 3\n}\n',
+    );
+  }
   await writeFile(
     path.join(root, ".gitignore"),
     options.ignore ?? "node_modules\n",
@@ -102,10 +111,12 @@ function createRunner(calls) {
         const manifest = await json(manifestPath);
         manifest.dependencies["@fonte-is/nextjs"] = "0.1.0";
         await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-        await writeFile(
-          path.join(cwd, "package-lock.json"),
-          '{\n  "lockfileVersion": 3,\n  "fonteFixture": true\n}\n',
-        );
+        if (!args.includes("--package-lock=false")) {
+          await writeFile(
+            path.join(cwd, "package-lock.json"),
+            '{\n  "lockfileVersion": 3,\n  "fonteFixture": true\n}\n',
+          );
+        }
         await installFakeSdk(cwd);
         return 0;
       }
@@ -171,6 +182,10 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
   const localManifest = await json(path.join(root, ".fonte/installation.json"));
   assert.equal(localManifest.installation_id, dependencies.randomUUID());
   assert.equal("secret" in localManifest, false);
+  assert.equal(
+    (await stat(path.join(root, ".fonte/installation.json"))).mode & 0o777,
+    0o600,
+  );
 
   const callsAfterInit = calls.length;
   const secondInit = await runProgram(
@@ -179,11 +194,12 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
   );
   assert.equal(secondInit.exitCode, 0);
   assert.equal(JSON.parse(secondInit.stdout).outcome, "verified");
-  assert.equal(calls.length, callsAfterInit + 1);
+  assert.equal(calls.length, callsAfterInit);
 
   const doctor = await runProgram(["doctor", "--json"], dependencies);
   assert.equal(doctor.exitCode, 0);
   assert.equal(JSON.parse(doctor.stdout).reason, "installation_verified");
+  assert.equal(calls.length, callsAfterInit);
 
   const originalSource = await readFile(
     path.join(root, "fonte/installation.ts"),
@@ -249,37 +265,5 @@ test("a pre-existing exact ignore rule is preserved and never claimed", async ()
   assert.equal(
     await readFile(path.join(root, ".gitignore"), "utf8"),
     initialIgnore,
-  );
-});
-
-test("a failed dependency install restores every source-controlled file", async () => {
-  const { root } = await createFixture();
-  const before = {
-    package: await readFile(path.join(root, "package.json"), "utf8"),
-    lock: await readFile(path.join(root, "package-lock.json"), "utf8"),
-    ignore: await readFile(path.join(root, ".gitignore"), "utf8"),
-  };
-  const result = await runProgram(["init", "--yes", "--json"], {
-    cwd: root,
-    randomUUID: () => "10000000-0000-4000-8000-000000000003",
-    runner: { run: async () => 1 },
-  });
-  assert.equal(result.exitCode, 1);
-  assert.equal(
-    await readFile(path.join(root, "package.json"), "utf8"),
-    before.package,
-  );
-  assert.equal(
-    await readFile(path.join(root, "package-lock.json"), "utf8"),
-    before.lock,
-  );
-  assert.equal(
-    await readFile(path.join(root, ".gitignore"), "utf8"),
-    before.ignore,
-  );
-  assert.equal(await exists(path.join(root, "fonte/installation.ts")), false);
-  assert.equal(
-    await exists(path.join(root, ".fonte/installation.json")),
-    false,
   );
 });

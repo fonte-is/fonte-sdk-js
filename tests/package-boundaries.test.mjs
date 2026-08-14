@@ -56,7 +56,7 @@ test("the CLI package has one stable binary and no library surface", async () =>
   const cli = await readJson("packages/cli/package.json");
   assert.deepEqual(cli.bin, { fonte: "./dist/main.js" });
   assert.equal(cli.main, undefined);
-  assert.equal(cli.exports, undefined);
+  assert.deepEqual(cli.exports, {});
 });
 
 test("server entry points are Node-only conditional exports", async () => {

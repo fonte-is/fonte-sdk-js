@@ -9,7 +9,11 @@ import {
 import { installSdk, uninstallSdk } from "./dependency.js";
 import { verifyInstallation } from "./doctor.js";
 import { CliBlockedError } from "./errors.js";
-import { captureSnapshots, writeExclusiveAtomic } from "./filesystem.js";
+import {
+  captureSnapshots,
+  readOptional,
+  writeExclusiveManaged,
+} from "./filesystem.js";
 import {
   appendIgnoreBlock,
   inspectIgnore,
@@ -20,13 +24,18 @@ import {
   manifestForPlan,
   operationActs,
 } from "./installation-state.js";
+import { createInitPlan, createRemovePlan } from "./installation-plan.js";
 import { readManifest, serializeManifest } from "./manifest.js";
+import { recordCurrent, runAndRecord } from "./mutation-journal.js";
 import { assertManagedPathSafe } from "./paths.js";
-import { createInitPlan, createRemovePlan } from "./plan.js";
 import { detectProject } from "./project.js";
 import { preparedReceipt, removedReceipt } from "./receipts.js";
 import { removeEmptyDirectories, rollback } from "./rollback.js";
-import type { CommandRunner, ProjectProfile } from "./runtime-types.js";
+import type {
+  CommandRunner,
+  FileSnapshot,
+  ProjectProfile,
+} from "./runtime-types.js";
 import type { CliReceipt, InstallationPlan } from "./types.js";
 
 const snapshotPaths = [
@@ -50,34 +59,41 @@ export async function applyInit(
     throw new CliBlockedError("managed_code_drifted");
   }
   const snapshots = await captureSnapshots(profile.root, snapshotPaths);
+  const applied: FileSnapshot[] = [];
   const addDependency = operationActs(plan, "sdk_dependency", "add");
   try {
     if (addDependency) {
-      await installSdk(current, runner);
+      await runAndRecord(
+        () => installSdk(current, runner),
+        profile.root,
+        ["package.json", "package-lock.json"],
+        applied,
+      );
       current = await detectProject(profile.root);
     }
-    const sourcePath = await assertManagedPathSafe(
+    await assertInitTargetsStillCompatible(profile.root, plan);
+    await writeExclusiveManaged(
       profile.root,
       MANAGED_SOURCE_PATH,
+      MANAGED_SOURCE_TEXT,
     );
-    await writeExclusiveAtomic(sourcePath, MANAGED_SOURCE_TEXT);
+    await recordCurrent(profile.root, [MANAGED_SOURCE_PATH], applied);
     if (operationActs(plan, "local_state_ignore", "add")) {
       await appendIgnoreBlock(profile.root);
+      await recordCurrent(profile.root, [IGNORE_PATH], applied);
     }
     const manifest = manifestForPlan(plan, installationId);
-    const manifestPath = await assertManagedPathSafe(
+    await writeExclusiveManaged(
       profile.root,
       LOCAL_MANIFEST_PATH,
-    );
-    await writeExclusiveAtomic(
-      manifestPath,
       serializeManifest(manifest),
       0o600,
     );
-    await verifyInstallation(current, manifest, runner);
+    await recordCurrent(profile.root, [LOCAL_MANIFEST_PATH], applied);
+    await verifyInstallation(current, manifest);
     return preparedReceipt("init", plan, "applied");
   } catch (error) {
-    await rollback(profile, snapshots, runner, addDependency);
+    await rollback(profile, snapshots, applied, runner, addDependency);
     throw error;
   }
 }
@@ -95,22 +111,51 @@ export async function applyRemove(
     throw new CliBlockedError("managed_code_drifted");
   }
   const snapshots = await captureSnapshots(profile.root, snapshotPaths);
+  const applied: FileSnapshot[] = [];
   const removeDependency = operationActs(plan, "sdk_dependency", "remove");
   try {
-    if (removeDependency) await uninstallSdk(current, runner);
+    if (removeDependency) {
+      await runAndRecord(
+        () => uninstallSdk(current, runner),
+        profile.root,
+        ["package.json", "package-lock.json"],
+        applied,
+      );
+    }
     await assertSourceStillExact(profile.root, manifest);
     await rm(await assertManagedPathSafe(profile.root, MANAGED_SOURCE_PATH));
+    await recordCurrent(profile.root, [MANAGED_SOURCE_PATH], applied);
     if (operationActs(plan, "local_state_ignore", "remove")) {
       if (!(await inspectIgnore(profile.root)).owned) {
         throw new CliBlockedError("managed_code_drifted");
       }
       await removeIgnoreBlock(profile.root);
+      await recordCurrent(profile.root, [IGNORE_PATH], applied);
     }
     await rm(await assertManagedPathSafe(profile.root, LOCAL_MANIFEST_PATH));
+    await recordCurrent(profile.root, [LOCAL_MANIFEST_PATH], applied);
     await removeEmptyDirectories(profile.root);
     return removedReceipt(plan);
   } catch (error) {
-    await rollback(profile, snapshots, runner, removeDependency);
+    await rollback(profile, snapshots, applied, runner, removeDependency);
     throw error;
+  }
+}
+
+async function assertInitTargetsStillCompatible(
+  root: string,
+  plan: InstallationPlan,
+): Promise<void> {
+  const source = await readOptional(
+    await assertManagedPathSafe(root, MANAGED_SOURCE_PATH),
+  );
+  const manifest = await readOptional(
+    await assertManagedPathSafe(root, LOCAL_MANIFEST_PATH),
+  );
+  if (source || manifest) throw new CliBlockedError("managed_code_drifted");
+  const ignore = await inspectIgnore(root);
+  const expectsAdd = operationActs(plan, "local_state_ignore", "add");
+  if (expectsAdd ? ignore.ignored : !ignore.ignored) {
+    throw new CliBlockedError("managed_code_drifted");
   }
 }
