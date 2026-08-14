@@ -69,14 +69,17 @@ schema `fonte.cli.test_receipt.v1`, preserves accepted/refused/unknown, records
 one included unit only for accepted, and always reports
 `inbox_delivery_confirmed: false`, `token_persisted: false`, and
 `production_email: "locked_pending_verified_domain"`.
+The fixed sandbox draft remains as a workspace audit artifact. Every test
+receipt reports `sandbox_draft_id` and `sandbox_draft_retained`; failures before
+creation report `null` and `false`.
 
 Exit codes:
 
 ```text
-0  planned, applied, verified, removed, help, or version
+0  planned, applied, verified, removed, help, version, or accepted sandbox proof
 1  unexpected local execution failure
 2  invalid invocation
-3  safe product blocker or detected drift; no writes
+3  safe product blocker, detected drift, refused proof, or unknown proof
 ```
 
 `init` and `remove` without `--yes` return a plan with exit 0 and make no
@@ -163,7 +166,9 @@ Apply executes in this order:
 The manifest receives a fresh UUID v4 only during apply. The raw UUID is not
 authority. Before each managed mutation and during rollback, the CLI compares
 bytes, mode, device, and inode with its exact preimage or produced state. A
-detected concurrent change blocks and is preserved. When npm reconciliation is required, rollback restores the
+change observed at those checkpoints blocks and is preserved. This protects
+ordinary concurrent edits; it does not claim atomic protection against an
+actively racing local process. When npm reconciliation is required, rollback restores the
 original manifests, reconciles with scripts disabled, then restores the exact
 original manifest and lockfile bytes again. Projects that began without a
 lockfile use `--package-lock=false` throughout. A failed rollback is reported
@@ -233,6 +238,8 @@ The ordered removal is the inverse of owned operations:
 4. delete the manifest and remove `.fonte` only when empty.
 
 Removal uses the same snapshot and rollback rules as init.
+Successful npm removal is semantically reversible, but npm may retain its own
+JSON formatting or key-order changes. Rollback remains byte-exact.
 
 ## Receipt contract
 

@@ -3,8 +3,12 @@ import test from "node:test";
 
 import { parseHostedConfig } from "../packages/cli/dist/hosted-config.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
-import { runHostedTest } from "../packages/cli/dist/hosted-test.js";
+import {
+  runHostedTest,
+  testBlockedReceipt,
+} from "../packages/cli/dist/hosted-test.js";
 import { parseOAuthCallback } from "../packages/cli/dist/oauth-callback.js";
+import { renderHuman } from "../packages/cli/dist/render.js";
 
 const config = {
   schema: "fonte.cli.hosted_config.v1",
@@ -64,6 +68,16 @@ test("OAuth callback requires the fixed host, exact state, and one result", () =
   );
 });
 
+test("hosted blockers explain the problem and next action to a human", () => {
+  const output = renderHuman(
+    testBlockedReceipt("fonte", "verified_account_email_required"),
+  );
+  assert.match(output, /no stable verified email recipient/i);
+  assert.match(output, /Reason: verified_account_email_required/);
+  assert.match(output, /Next: Verify the account email/);
+  assert.match(output, /Sandbox draft retained: no/);
+});
+
 test("test returns a truthful accepted-only terminal receipt", async () => {
   const requests = [];
   const receipt = await runHostedTest(
@@ -104,6 +118,8 @@ test("test returns a truthful accepted-only terminal receipt", async () => {
 
   assert.equal(receipt.outcome, "terminal");
   assert.equal(receipt.provider_submission, "accepted");
+  assert.equal(receipt.sandbox_draft_id, draftId);
+  assert.equal(receipt.sandbox_draft_retained, true);
   assert.equal(receipt.accepted_email_usage_quantity, 1);
   assert.equal(receipt.inbox_delivery_confirmed, false);
   assert.equal(receipt.token_persisted, false);
@@ -137,6 +153,8 @@ test("test refuses a non-accepted usage charge", async () => {
   assert.equal(receipt.outcome, "blocked");
   assert.equal(receipt.reason, "core_receipt_invalid");
   assert.equal(receipt.provider_submission, "processing");
+  assert.equal(receipt.sandbox_draft_id, draftId);
+  assert.equal(receipt.sandbox_draft_retained, true);
   assert.equal(receipt.accepted_email_usage_quantity, null);
 });
 

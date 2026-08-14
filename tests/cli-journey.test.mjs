@@ -252,9 +252,10 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
   assert.equal(calls.length, callsAfterInit);
 
   const hostedTest = await runHostedProviderProof(dependencies);
-  assert.equal(hostedTest.exitCode, 0);
+  assert.equal(hostedTest.exitCode, 3);
   assert.equal(JSON.parse(hostedTest.stdout).provider_submission, "refused");
   assert.equal(JSON.parse(hostedTest.stdout).accepted_email_usage_quantity, 0);
+  assert.equal(JSON.parse(hostedTest.stdout).sandbox_draft_retained, true);
 
   const originalSource = await readFile(
     path.join(root, "fonte/installation.ts"),

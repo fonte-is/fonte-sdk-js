@@ -15,6 +15,7 @@ export async function runHostedTest(
 ): Promise<HostedTestReceipt> {
   let providerSubmission: HostedTestReceipt["provider_submission"] =
     "not_requested";
+  let sandboxDraftId: string | null = null;
   try {
     const config = await loadHostedConfig(dependencies.fetch as typeof fetch);
     const token = await dependencies.authorize(config);
@@ -24,6 +25,7 @@ export async function runHostedTest(
       token,
       dependencies.fetch,
     );
+    sandboxDraftId = draft.draftId;
     providerSubmission = "processing";
     const canaryId = await queueSandboxCanary(
       config,
@@ -46,6 +48,8 @@ export async function runHostedTest(
       outcome: "terminal",
       reason: "provider_submission_terminal",
       workspace,
+      sandbox_draft_id: sandboxDraftId,
+      sandbox_draft_retained: true,
       local_verification: "passed",
       account_created: false,
       production_email: "locked_pending_verified_domain",
@@ -61,7 +65,13 @@ export async function runHostedTest(
       error instanceof HostedTestBlockedError
         ? error.reason
         : "hosted_test_failed";
-    return testBlockedReceipt(workspace, reason, "passed", providerSubmission);
+    return testBlockedReceipt(
+      workspace,
+      reason,
+      "passed",
+      providerSubmission,
+      sandboxDraftId,
+    );
   }
 }
 
@@ -70,6 +80,7 @@ export function testBlockedReceipt(
   reason: string,
   localVerification: "passed" | "failed" = "passed",
   providerSubmission: HostedTestReceipt["provider_submission"] = "not_requested",
+  sandboxDraftId: string | null = null,
 ): HostedTestReceipt {
   return {
     schema_version: "fonte.cli.test_receipt.v1",
@@ -77,6 +88,8 @@ export function testBlockedReceipt(
     outcome: "blocked",
     reason,
     workspace,
+    sandbox_draft_id: sandboxDraftId,
+    sandbox_draft_retained: sandboxDraftId !== null,
     local_verification: localVerification,
     account_created: false,
     production_email: "locked_pending_verified_domain",

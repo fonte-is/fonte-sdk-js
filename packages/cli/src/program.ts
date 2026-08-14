@@ -45,14 +45,7 @@ export async function runProgram(
   try {
     const profile = await detectProject(dependencies.cwd);
     const receipt = await executeCommand(request, profile, dependencies);
-    return receiptResult(
-      receipt,
-      parsed.json,
-      receipt.schema_version === "fonte.cli.test_receipt.v1" &&
-        receipt.outcome === "blocked"
-        ? 3
-        : 0,
-    );
+    return receiptResult(receipt, parsed.json, receiptExitCode(receipt));
   } catch (error) {
     if (error instanceof CliBlockedError) {
       if (parsed.command === "test") {
@@ -77,6 +70,14 @@ export async function runProgram(
     }
     return executionFailure();
   }
+}
+
+function receiptExitCode(receipt: AnyCliReceipt): 0 | 3 {
+  if (receipt.schema_version !== "fonte.cli.test_receipt.v1") return 0;
+  return receipt.outcome === "terminal" &&
+    receipt.provider_submission === "accepted"
+    ? 0
+    : 3;
 }
 
 async function executeCommand(

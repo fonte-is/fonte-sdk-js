@@ -1,4 +1,5 @@
 import { blockerGuidance } from "./blocker-guidance.js";
+import { hostedBlockerGuidance } from "./hosted-blocker-guidance.js";
 import type { AnyCliReceipt, HostedTestReceipt } from "./types.js";
 
 export function renderJson(receipt: AnyCliReceipt): string {
@@ -53,15 +54,23 @@ export function renderHuman(receipt: AnyCliReceipt): string {
 
 function renderTest(receipt: HostedTestReceipt): string {
   if (receipt.outcome === "blocked") {
+    const guidance = hostedBlockerGuidance(receipt.reason);
     return [
-      `Fonte test blocked: ${receipt.reason}.`,
+      "Fonte test could not continue.",
+      guidance.summary,
+      `Reason: ${receipt.reason}.`,
       "No provider submission was confirmed.",
+      receipt.sandbox_draft_retained
+        ? `Sandbox draft retained: ${receipt.sandbox_draft_id}.`
+        : "Sandbox draft retained: no.",
+      `Next: ${guidance.next}`,
       "",
     ].join("\n");
   }
   return [
     `Fonte sandbox provider result: ${receipt.provider_submission}.`,
     `Accepted email usage: ${receipt.accepted_email_usage_quantity ?? "unavailable"}.`,
+    `Sandbox draft retained: ${receipt.sandbox_draft_id}.`,
     "Inbox delivery confirmed: no.",
     "Production email: locked pending a verified domain.",
     "Credential stored: no.",

@@ -17,7 +17,8 @@ CLI supports Node.js 20.9 or newer and npm projects with exactly one regular
 Next.js App Router `app/layout.*` or `src/app/layout.*` file. Add `--json` to
 receive a machine-readable receipt. Exit codes are `0` for success or a plan,
 `1` for execution or rollback failure, `2` for invalid invocation, and `3` for
-a safe blocker or detected drift.
+a safe blocker, detected drift, or a sandbox provider result that was not
+accepted.
 
 Init may add exact dependency `@fonte-is/nextjs@0.1.0`, create
 `fonte/installation.ts`, append a managed `.gitignore` block, and create the
@@ -36,6 +37,11 @@ Fonte in the browser for consent and requests one sandbox email to the verified
 email address on the signed-in account. The short-lived OAuth access token stays
 in memory for that command and is discarded when the process exits. No token is
 copied into the terminal or written to disk.
+
+The fixed synthetic sandbox draft is retained in the workspace as an audit
+artifact. Its ID and retention are always reported, including when a later step
+fails. A refused or unknown provider result exits `3`; only provider acceptance
+exits `0`.
 
 A successful `doctor` proves only that the local Fonte package metadata,
 declared export files, managed file, and ownership manifest agree. The terminal test receipt separates provider
