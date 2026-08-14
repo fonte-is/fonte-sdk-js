@@ -3,29 +3,64 @@ import type {
   DependencyPosture,
   ProjectProfile,
 } from "./runtime-types.js";
+import {
+  INSTALL_COMMAND,
+  RECONCILE_COMMAND,
+  SDK_PACKAGE,
+  SDK_VERSION,
+  UNINSTALL_COMMAND,
+} from "./constants.js";
+import { CliBlockedError, CliExecutionError } from "./errors.js";
+
+const dependencySections = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+] as const;
 
 /** Return absent or exact; throw dependency_version_conflict otherwise. */
-export function dependencyPosture(_profile: ProjectProfile): DependencyPosture {
-  throw new Error("fonte_cli_frame_incomplete");
+export function dependencyPosture(profile: ProjectProfile): DependencyPosture {
+  const occurrences = dependencySections.flatMap((section) => {
+    const value = profile.package_manifest[section];
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const version = (value as Record<string, unknown>)[SDK_PACKAGE];
+    return version === undefined ? [] : [{ section, version }];
+  });
+  if (occurrences.length === 0) return "absent";
+  if (
+    occurrences.length !== 1 ||
+    occurrences[0]!.section !== "dependencies" ||
+    occurrences[0]!.version !== SDK_VERSION
+  ) {
+    throw new CliBlockedError("dependency_version_conflict");
+  }
+  return "exact";
 }
 
 export async function installSdk(
-  _profile: ProjectProfile,
-  _runner: CommandRunner,
+  profile: ProjectProfile,
+  runner: CommandRunner,
 ): Promise<void> {
-  throw new Error("fonte_cli_frame_incomplete");
+  if ((await runner.run("npm", INSTALL_COMMAND, profile.root)) !== 0) {
+    throw new CliExecutionError("execution_failed");
+  }
 }
 
 export async function uninstallSdk(
-  _profile: ProjectProfile,
-  _runner: CommandRunner,
+  profile: ProjectProfile,
+  runner: CommandRunner,
 ): Promise<void> {
-  throw new Error("fonte_cli_frame_incomplete");
+  if ((await runner.run("npm", UNINSTALL_COMMAND, profile.root)) !== 0) {
+    throw new CliExecutionError("execution_failed");
+  }
 }
 
 export async function reconcileNpm(
-  _profile: ProjectProfile,
-  _runner: CommandRunner,
+  profile: ProjectProfile,
+  runner: CommandRunner,
 ): Promise<void> {
-  throw new Error("fonte_cli_frame_incomplete");
+  if ((await runner.run("npm", RECONCILE_COMMAND, profile.root)) !== 0) {
+    throw new CliExecutionError("rollback_failed");
+  }
 }

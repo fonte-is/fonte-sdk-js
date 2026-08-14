@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import os from "node:os";
 import path from "node:path";
@@ -42,7 +42,7 @@ async function fixture(overrides = {}) {
 test("detects only one npm Next.js App Router root", async () => {
   const root = await fixture();
   const project = await detectProject(root);
-  assert.equal(project.root, root);
+  assert.equal(project.root, await realpath(root));
   assert.equal(project.app_directory, "app");
   assert.equal(project.package_manager, "npm");
 });

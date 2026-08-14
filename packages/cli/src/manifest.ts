@@ -1,4 +1,8 @@
 import type { LocalManifest, ManagedOperation } from "./types.js";
+import { LOCAL_MANIFEST_PATH } from "./constants.js";
+import { CliBlockedError } from "./errors.js";
+import { readOptional } from "./filesystem.js";
+import { assertManagedPathSafe } from "./paths.js";
 
 const manifestKeys = new Set([
   "schema_version",
@@ -111,11 +115,23 @@ export function parseManifest(value: unknown): LocalManifest | null {
 }
 
 /** Read and validate the fixed local manifest path. */
-export async function readManifest(_root: string): Promise<LocalManifest> {
-  throw new Error("fonte_cli_frame_incomplete");
+export async function readManifest(root: string): Promise<LocalManifest> {
+  const target = await assertManagedPathSafe(root, LOCAL_MANIFEST_PATH);
+  const bytes = await readOptional(target);
+  if (!bytes) throw new CliBlockedError("installation_not_found");
+  const parsed = (() => {
+    try {
+      return JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown;
+    } catch {
+      return null;
+    }
+  })();
+  const manifest = parseManifest(parsed);
+  if (!manifest) throw new CliBlockedError("installation_manifest_invalid");
+  return manifest;
 }
 
 /** Serialize with two-space indentation, fixed key order, and final newline. */
-export function serializeManifest(_manifest: LocalManifest): string {
-  throw new Error("fonte_cli_frame_incomplete");
+export function serializeManifest(manifest: LocalManifest): string {
+  return `${JSON.stringify(manifest, null, 2)}\n`;
 }

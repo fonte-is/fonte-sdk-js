@@ -255,13 +255,16 @@ The fixed private module split is:
 arguments.ts       invocation grammar only
 project.ts         project and package-manager detection only
 plan.ts            pure plan construction and sealing only
+plan-material.ts   fixed ordered plan material only
 manifest.ts        exact manifest read, parse, and serialization only
 filesystem.ts      snapshots and atomic local file operations only
 dependency.ts      exact npm dependency posture and commands only
 ignore.ts          exact ignore-line/block ownership only
+installation-state.ts exact local ownership composition only
 project-check.ts   select and run the one sanctioned local check only
 doctor.ts          compose read-only verification only
-mutations.ts       compose init/remove transactions and rollback only
+mutations.ts       compose init/remove transactions only
+rollback.ts        exact snapshot restoration and npm reconciliation only
 program.ts         command dispatch and presentation selection only
 ```
 
