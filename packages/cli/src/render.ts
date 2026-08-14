@@ -1,10 +1,13 @@
-import type { CliReceipt } from "./types.js";
+import { blockerGuidance } from "./blocker-guidance.js";
+import type { AnyCliReceipt, HostedTestReceipt } from "./types.js";
 
-export function renderJson(receipt: CliReceipt): string {
+export function renderJson(receipt: AnyCliReceipt): string {
   return `${JSON.stringify(receipt)}\n`;
 }
 
-export function renderHuman(receipt: CliReceipt): string {
+export function renderHuman(receipt: AnyCliReceipt): string {
+  if (receipt.schema_version === "fonte.cli.test_receipt.v1")
+    return renderTest(receipt);
   if (receipt.outcome === "planned") {
     const changes = receipt.operations.filter(
       ({ result }) => result === "planned",
@@ -21,9 +24,13 @@ export function renderHuman(receipt: CliReceipt): string {
     ].join("\n");
   }
   if (receipt.outcome === "blocked") {
+    const guidance = blockerGuidance(receipt.reason);
     return [
-      `Fonte ${receipt.command} blocked: ${receipt.reason}.`,
-      "No files changed.",
+      `Fonte ${receipt.command} could not continue.`,
+      guidance.summary,
+      `Reason: ${receipt.reason}.`,
+      "No Fonte changes were kept.",
+      `Next: ${guidance.next}`,
       "",
     ].join("\n");
   }
@@ -37,9 +44,27 @@ export function renderHuman(receipt: CliReceipt): string {
       "Account created: no.",
       "Provider effect: none.",
       "Application email: unavailable.",
-      "Activation: unavailable in this build.",
+      `Sandbox provider proof: run ${receipt.next_action?.kind === "run_command" ? receipt.next_action.command : "fonte test"}.`,
       "",
     ].join("\n");
   }
   return `Fonte ${receipt.command} failed: ${receipt.reason}.\n`;
+}
+
+function renderTest(receipt: HostedTestReceipt): string {
+  if (receipt.outcome === "blocked") {
+    return [
+      `Fonte test blocked: ${receipt.reason}.`,
+      "No provider submission was confirmed.",
+      "",
+    ].join("\n");
+  }
+  return [
+    `Fonte sandbox provider result: ${receipt.provider_submission}.`,
+    `Accepted email usage: ${receipt.accepted_email_usage_quantity ?? "unavailable"}.`,
+    "Inbox delivery confirmed: no.",
+    "Production email: locked pending a verified domain.",
+    "Credential stored: no.",
+    "",
+  ].join("\n");
 }

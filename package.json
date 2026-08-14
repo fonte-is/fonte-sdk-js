@@ -25,11 +25,12 @@
     "pack:local": "node scripts/pack-local.mjs",
     "verify:packs": "node scripts/verify-packed-manifests.mjs",
     "lint:packs": "node scripts/lint-packed-packages.mjs",
+    "smoke:packed-cli": "node scripts/smoke-packed-cli.mjs",
     "check:core-boundary": "node scripts/check-core-boundary.mjs",
     "smoke:local-pack-consumers": "node scripts/smoke-local-consumers.mjs",
     "smoke:node-floor": "npx --yes node@20.9.0 .artifacts/consumers/vanilla/index.mjs",
     "smoke:packed-browser": "node scripts/smoke-packed-browser.mjs",
-    "verify:local": "npm run clean && npm run build && npm run typecheck && npm run lint:source && npm test && npm run pack:local && npm run verify:packs && npm run lint:packs && npm run check:core-boundary && npm run smoke:local-pack-consumers && npm run smoke:node-floor && npm run smoke:packed-browser"
+    "verify:local": "npm run clean && npm run build && npm run typecheck && npm run lint:source && npm test && npm run pack:local && npm run verify:packs && npm run lint:packs && npm run smoke:packed-cli && npm run check:core-boundary && npm run smoke:local-pack-consumers && npm run smoke:node-floor && npm run smoke:packed-browser"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

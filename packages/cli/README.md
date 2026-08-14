@@ -1,12 +1,13 @@
 # `@fonte-is/cli`
 
-Prepare, verify, and remove a local Fonte installation in a supported Next.js
+Prepare, verify, test, and remove a Fonte installation in a supported Next.js
 App Router project.
 
 ```sh
 npx @fonte-is/cli init
 npx @fonte-is/cli init --yes
 npx @fonte-is/cli doctor
+npx @fonte-is/cli test --workspace my-workspace
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
@@ -25,9 +26,20 @@ Fonte-owned installation state and never runs project scripts. Remove refuses
 to overwrite drifted or concurrently changed files and reports a distinct
 rollback failure when exact restoration cannot be proven.
 
-The CLI never creates a Fonte account, stores a production credential,
-contacts an email provider, or sends email.
+When the CLI reports drift, inspect and preserve the local change before
+retrying. A `rollback_failed` result means automatic restoration could not be
+proved; stop and inspect `package.json`, the lockfile, `.gitignore`, `fonte/`,
+and `.fonte/` rather than rerunning the command blindly.
 
-A successful `doctor` proves only that the local Fonte package, managed file,
-manifest, and project check agree. Activation and application email remain
-unavailable until their hosted authority and API contracts are implemented.
+`fonte test` first requires a passing local installation check. It then opens
+Fonte in the browser for consent and requests one sandbox email to the verified
+email address on the signed-in account. The short-lived OAuth access token stays
+in memory for that command and is discarded when the process exits. No token is
+copied into the terminal or written to disk.
+
+A successful `doctor` proves only that the local Fonte package metadata,
+declared export files, managed file, and ownership manifest agree. The terminal test receipt separates provider
+acceptance, refusal, or an unknown provider result from inbox delivery. Only an
+accepted email contributes one included sandbox usage unit. Account creation,
+arbitrary recipients, production email, and transactional application email
+remain unavailable; production capability requires the verified-domain journey.

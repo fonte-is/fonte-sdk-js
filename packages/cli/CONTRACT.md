@@ -18,12 +18,15 @@ V0 supports only:
 - Next.js App Router projects with exactly one of `app/layout.*` or
   `src/app/layout.*`;
 - exact SDK version `0.1.0` from `@fonte-is/nextjs`;
-- local preparation, verification, and removal.
+- local preparation, verification, and removal;
+- one browser-authorized sandbox provider proof to the signed-in account's
+  verified email address.
 
-V0 does not create an account, activation URL, credential, sender, domain,
-contact, payment, provider submission, Test Email, broadcast, or application
-email request. Every receipt reports `provider_effect: "none"` and
-`application_email: "unavailable"`.
+V0 does not create an account, arbitrary recipient, sender, domain, contact,
+payment, production broadcast, or transactional application-email request.
+Local-command receipts retain `provider_effect: "none"` and
+`application_email: "unavailable"`. The separate test receipt reports only the
+hosted sandbox provider result it actually reads back.
 
 ## Invocation
 
@@ -32,6 +35,7 @@ Accepted invocations are exactly:
 ```text
 fonte init [--yes] [--json]
 fonte doctor [--json]
+fonte test --workspace <slug> [--json]
 fonte remove [--yes] [--json]
 fonte --help
 fonte --version
@@ -39,7 +43,32 @@ fonte --version
 
 Flags may appear in either order after a command. Duplicate, unknown, or
 command-incompatible flags are usage errors. `--help` and `--version` must be
-the only argument. There is no interactive prompt.
+the only argument. There is no terminal prompt. `test` opens the system browser
+for an existing signed-in human to approve the registered public CLI client.
+The workspace slug is explicit, lowercase, and remains subject to server-side
+Fonte workspace membership.
+
+## Hosted sandbox proof
+
+The CLI fetches `https://app.fonte.is/.well-known/fonte-cli.json`, accepts only
+schema `fonte.cli.hosted_config.v1`, HTTPS authority/API URLs, scope `email`,
+and callback `http://127.0.0.1:49671/callback`. OAuth Authorization Code with
+mandatory S256 PKCE is implemented by `openid-client`; Fonte does not implement
+production cryptography.
+
+The callback listener binds only `127.0.0.1:49671`, requires the exact Host,
+path, random state, and one code-or-error result. The OAuth access token remains
+in process memory. It is never rendered, copied by the user, placed in an
+installation manifest, or refreshed on disk.
+
+After a passing Doctor check, `test` creates fixed synthetic sandbox content,
+requests the existing signed-in sandbox canary, and polls its existing readback.
+The server chooses the verified account email and platform sandbox sender. The
+CLI cannot provide an arbitrary recipient or sender. The terminal receipt uses
+schema `fonte.cli.test_receipt.v1`, preserves accepted/refused/unknown, records
+one included unit only for accepted, and always reports
+`inbox_delivery_confirmed: false`, `token_persisted: false`, and
+`production_email: "locked_pending_verified_domain"`.
 
 Exit codes:
 
@@ -132,9 +161,9 @@ Apply executes in this order:
 5. run the same checks as `doctor`.
 
 The manifest receives a fresh UUID v4 only during apply. The raw UUID is not
-authority. Rollback restores only paths whose current state still matches the
-state produced by the CLI. It never deletes or overwrites a concurrently
-changed path. When npm reconciliation is required, rollback restores the
+authority. Before each managed mutation and during rollback, the CLI compares
+bytes, mode, device, and inode with its exact preimage or produced state. A
+detected concurrent change blocks and is preserved. When npm reconciliation is required, rollback restores the
 original manifests, reconciles with scripts disabled, then restores the exact
 original manifest and lockfile bytes again. Projects that began without a
 lockfile use `--package-lock=false` throughout. A failed rollback is reported
@@ -182,13 +211,12 @@ Doctor is read-only. It verifies:
 - exact digest of every Fonte-created file;
 - exact ignore ownership state;
 - safe normalized paths without symlink escape;
-- successful resolution of
-  `@fonte-is/nextjs/installation-verification` from the customer project;
-- successful normalization of manifest metadata through that package;
+- the exact declared `@fonte-is/nextjs/installation-verification` export paths;
+- regular, non-symlink JavaScript and declaration files at those paths.
 
-Doctor never executes project scripts. A project-owned `typecheck`, `build`,
-or other script may write files, contact the network, or invoke providers, so
-it cannot be part of a read-only verification receipt.
+Doctor never executes project scripts or installed package code. Either could
+write files, contact the network, or invoke providers, so neither can be part
+of a read-only verification receipt.
 
 ## Remove
 
@@ -233,13 +261,13 @@ provider_effect    none
 application_email  unavailable
 ```
 
-Successful local preparation uses state `prepared`; it does not imply hosted
-activation or email readiness. A prepared receipt's next action is exactly:
+Successful local preparation uses state `prepared`; it does not imply
+production email readiness. A prepared receipt's next action is exactly:
 
 ```json
 {
-  "kind": "activation_unavailable",
-  "reason": "fonte_activation_not_implemented"
+  "kind": "run_command",
+  "command": "npx @fonte-is/cli test --workspace <slug>"
 }
 ```
 
@@ -250,8 +278,10 @@ rendered as numeric zero.
 
 The implementation task may edit only paths explicitly supplied by the parent.
 It may replace `fonte_cli_frame_incomplete` bodies with code conforming to this
-contract. It may not add dependencies, files, commands, flags, output fields,
-fallback behavior, network calls, telemetry, activation, or email claims.
+contract. Hosted-test implementation may add only the declared OAuth library,
+fixed browser bridge, exact hosted calls, and test receipt. It may not add
+fallback authority, token persistence, telemetry, arbitrary recipients, or
+production/application-email claims.
 
 The fixed private module split is:
 

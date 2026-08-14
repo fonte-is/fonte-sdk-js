@@ -1,7 +1,7 @@
 {
   "name": "@fonte-is/cli",
   "version": "0.1.0",
-  "description": "Prepare, verify, and remove a local Fonte installation",
+  "description": "Prepare, verify, test, and remove a Fonte installation",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
   "repository": {
@@ -32,5 +32,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "openid-client": "6.8.5"
   }
 }

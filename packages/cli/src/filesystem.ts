@@ -32,12 +32,19 @@ export async function captureSnapshots(
   for (const relativePath of paths) {
     const target = await assertManagedPathSafe(root, relativePath);
     const bytes = await readOptional(target);
-    const metadata = bytes ? await lstat(target) : null;
+    const metadata = bytes ? await lstat(target, { bigint: true }) : null;
     if (metadata && !metadata.isFile())
       throw new Error("managed_path_not_file");
     snapshots.push(
       bytes
-        ? { path: relativePath, existed: true, bytes, mode: metadata!.mode }
+        ? {
+            path: relativePath,
+            existed: true,
+            bytes,
+            mode: Number(metadata!.mode),
+            device: metadata!.dev,
+            inode: metadata!.ino,
+          }
         : { path: relativePath, existed: false },
     );
   }
@@ -69,10 +76,28 @@ export async function restoreSnapshots(
   }
 }
 
+export async function assertSnapshotsCurrent(
+  root: string,
+  expected: readonly FileSnapshot[],
+  paths: readonly string[],
+): Promise<void> {
+  const byPath = new Map(expected.map((snapshot) => [snapshot.path, snapshot]));
+  for (const current of await captureSnapshots(root, paths)) {
+    const prior = byPath.get(current.path);
+    if (!prior || !sameSnapshot(current, prior))
+      throw new Error("snapshot_current_drifted");
+  }
+}
+
 function sameSnapshot(left: FileSnapshot, right: FileSnapshot): boolean {
   if (left.existed !== right.existed) return false;
   if (!left.existed) return true;
-  return Buffer.from(left.bytes!).equals(Buffer.from(right.bytes!));
+  return (
+    left.mode === right.mode &&
+    left.device === right.device &&
+    left.inode === right.inode &&
+    Buffer.from(left.bytes!).equals(Buffer.from(right.bytes!))
+  );
 }
 
 /** Write through a same-directory temporary file and atomic rename. */

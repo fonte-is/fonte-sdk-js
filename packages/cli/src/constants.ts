@@ -56,6 +56,7 @@ export const USAGE_TEXT = [
   "Usage:",
   "  fonte init [--yes] [--json]",
   "  fonte doctor [--json]",
+  "  fonte test --workspace <slug> [--json]",
   "  fonte remove [--yes] [--json]",
   "  fonte --help",
   "  fonte --version",
@@ -68,7 +69,8 @@ export const HELP_TEXT = [
   USAGE_TEXT.trimEnd(),
   "",
   "init and remove print a plan unless --yes is supplied.",
-  "This build does not create accounts, activate Fonte, or send email.",
+  "test opens Fonte in your browser and requests one sandbox provider proof.",
+  "Production and transactional application email remain locked.",
   "",
 ].join("\n");
 

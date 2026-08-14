@@ -1,10 +1,11 @@
-export type CommandName = "init" | "doctor" | "remove";
+export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand = CommandName | "help" | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
   apply: boolean;
   json: boolean;
+  workspaceSlug?: string;
 }
 
 export type BlockReason =
@@ -101,10 +102,6 @@ export type ReceiptNextAction =
       command: string;
     }
   | {
-      kind: "activation_unavailable";
-      reason: "fonte_activation_not_implemented";
-    }
-  | {
       kind: "resolve_blocker";
       reason: BlockReason;
     }
@@ -123,3 +120,23 @@ export interface CliReceipt {
   operations: ReceiptOperation[];
   next_action: ReceiptNextAction;
 }
+
+export interface HostedTestReceipt {
+  schema_version: "fonte.cli.test_receipt.v1";
+  command: "test";
+  outcome: "terminal" | "blocked";
+  reason: string;
+  workspace: string;
+  local_verification: "passed" | "failed";
+  account_created: false;
+  production_email: "locked_pending_verified_domain";
+  provider_submission:
+    "not_requested" | "processing" | "accepted" | "refused" | "unknown";
+  provider_message_id: string | null;
+  provider_error_code: string | null;
+  accepted_email_usage_quantity: number | null;
+  inbox_delivery_confirmed: false;
+  token_persisted: false;
+}
+
+export type AnyCliReceipt = CliReceipt | HostedTestReceipt;

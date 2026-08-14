@@ -66,7 +66,7 @@ async function createFixture(options = {}) {
 
 async function installFakeSdk(root) {
   const directory = path.join(root, "node_modules/@fonte-is/nextjs");
-  await mkdir(directory, { recursive: true });
+  await mkdir(path.join(directory, "dist"), { recursive: true });
   await writeFile(
     path.join(directory, "package.json"),
     `${JSON.stringify(
@@ -75,7 +75,11 @@ async function installFakeSdk(root) {
         version: "0.1.0",
         type: "module",
         exports: {
-          "./installation-verification": "./installation-verification.js",
+          "./installation-verification": {
+            types: "./dist/installation-verification.d.ts",
+            import: "./dist/installation-verification.js",
+            default: "./dist/installation-verification.js",
+          },
         },
       },
       null,
@@ -83,7 +87,7 @@ async function installFakeSdk(root) {
     )}\n`,
   );
   await writeFile(
-    path.join(directory, "installation-verification.js"),
+    path.join(directory, "dist/installation-verification.js"),
     [
       'export const FONTE_CONFIG_VERSION = "fonte.config.v2";',
       'export const INSTALLATION_VERIFICATION_SCHEMA_VERSION = "fonte.installation_verification.v2";',
@@ -95,6 +99,10 @@ async function installFakeSdk(root) {
       "}",
       "",
     ].join("\n"),
+  );
+  await writeFile(
+    path.join(directory, "dist/installation-verification.d.ts"),
+    "export {};\n",
   );
 }
 
@@ -138,6 +146,48 @@ function createRunner(calls) {
   };
 }
 
+async function runHostedProviderProof(dependencies) {
+  const responses = [
+    {
+      schema: "fonte.cli.hosted_config.v1",
+      authorizationServer: "https://project.supabase.co/auth/v1",
+      clientId: "fonte-cli-client-v0",
+      coreApiBaseUrl: "https://api.fonte.is",
+      redirectUri: "http://127.0.0.1:49671/callback",
+      scopes: ["email"],
+    },
+    {
+      draft: {
+        broadcastDraftId: "10000000-0000-4000-8000-000000000020",
+        version: 1,
+      },
+    },
+    { sandboxEmailId: "10000000-0000-4000-8000-000000000021" },
+    {
+      status: "terminal",
+      provider: {
+        acceptedCount: 0,
+        refusedCount: 1,
+        unknownCount: 0,
+        messageId: null,
+        errorCode: "provider_refused",
+      },
+      billing: { quantity: 0 },
+    },
+  ];
+  return runProgram(["test", "--workspace", "fonte", "--json"], {
+    ...dependencies,
+    hosted: {
+      fetch: async () =>
+        new Response(JSON.stringify(responses.shift()), {
+          headers: { "content-type": "application/json" },
+        }),
+      authorize: async () => "header.payload.signature",
+      sleep: async () => undefined,
+    },
+  });
+}
+
 test("plan, init, idempotent init, doctor, drift refusal, and remove", async () => {
   const { root, manifest: originalManifest } = await createFixture();
   const calls = [];
@@ -168,8 +218,8 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
   assert.equal(initReceipt.provider_effect, "none");
   assert.equal(initReceipt.application_email, "unavailable");
   assert.deepEqual(initReceipt.next_action, {
-    kind: "activation_unavailable",
-    reason: "fonte_activation_not_implemented",
+    kind: "run_command",
+    command: "npx @fonte-is/cli test --workspace <slug>",
   });
   assert.equal(
     await readFile(path.join(root, "fonte/installation.ts"), "utf8"),
@@ -200,6 +250,11 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
   assert.equal(doctor.exitCode, 0);
   assert.equal(JSON.parse(doctor.stdout).reason, "installation_verified");
   assert.equal(calls.length, callsAfterInit);
+
+  const hostedTest = await runHostedProviderProof(dependencies);
+  assert.equal(hostedTest.exitCode, 0);
+  assert.equal(JSON.parse(hostedTest.stdout).provider_submission, "refused");
+  assert.equal(JSON.parse(hostedTest.stdout).accepted_email_usage_quantity, 0);
 
   const originalSource = await readFile(
     path.join(root, "fonte/installation.ts"),

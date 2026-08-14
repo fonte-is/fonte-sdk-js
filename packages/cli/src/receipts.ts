@@ -58,10 +58,10 @@ export function blockedReceipt(
   };
 }
 
-export function activationUnavailable(): CliReceipt["next_action"] {
+export function hostedTestAvailable(): CliReceipt["next_action"] {
   return {
-    kind: "activation_unavailable",
-    reason: "fonte_activation_not_implemented",
+    kind: "run_command",
+    command: "npx @fonte-is/cli test --workspace <slug>",
   };
 }
 
@@ -82,7 +82,7 @@ export function preparedReceipt(
     provider_effect: "none",
     application_email: "unavailable",
     operations: receiptOperations(plan, outcome),
-    next_action: activationUnavailable(),
+    next_action: hostedTestAvailable(),
   };
 }
 

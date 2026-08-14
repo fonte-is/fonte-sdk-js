@@ -1,4 +1,5 @@
-import type { CliReceipt } from "./types.js";
+import type { AnyCliReceipt } from "./types.js";
+import type { HostedConfig } from "./hosted-config.js";
 
 export interface ProjectProfile {
   root: string;
@@ -12,7 +13,7 @@ export interface CommandResult {
   exitCode: 0 | 1 | 2 | 3;
   stdout: string;
   stderr: string;
-  receipt?: CliReceipt;
+  receipt?: AnyCliReceipt;
 }
 
 export interface CommandRunner {
@@ -23,6 +24,13 @@ export interface ProgramDependencies {
   cwd: string;
   randomUUID(): string;
   runner: CommandRunner;
+  hosted?: HostedTestDependencies;
+}
+
+export interface HostedTestDependencies {
+  fetch(input: string | URL, init?: RequestInit): Promise<Response>;
+  authorize(config: HostedConfig): Promise<string>;
+  sleep(milliseconds: number): Promise<void>;
 }
 
 export interface FileSnapshot {
@@ -30,6 +38,8 @@ export interface FileSnapshot {
   existed: boolean;
   bytes?: Uint8Array;
   mode?: number;
+  device?: bigint;
+  inode?: bigint;
 }
 
 export type DependencyPosture = "absent" | "exact";

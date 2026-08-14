@@ -11,6 +11,7 @@ import { verifyInstallation } from "./doctor.js";
 import { CliBlockedError } from "./errors.js";
 import {
   captureSnapshots,
+  assertSnapshotsCurrent,
   readOptional,
   writeExclusiveManaged,
 } from "./filesystem.js";
@@ -72,6 +73,7 @@ export async function applyInit(
       current = await detectProject(profile.root);
     }
     await assertInitTargetsStillCompatible(profile.root, plan);
+    await assertUnchanged(profile.root, snapshots, [MANAGED_SOURCE_PATH]);
     await writeExclusiveManaged(
       profile.root,
       MANAGED_SOURCE_PATH,
@@ -79,10 +81,12 @@ export async function applyInit(
     );
     await recordCurrent(profile.root, [MANAGED_SOURCE_PATH], applied);
     if (operationActs(plan, "local_state_ignore", "add")) {
+      await assertUnchanged(profile.root, snapshots, [IGNORE_PATH]);
       await appendIgnoreBlock(profile.root);
       await recordCurrent(profile.root, [IGNORE_PATH], applied);
     }
     const manifest = manifestForPlan(plan, installationId);
+    await assertUnchanged(profile.root, snapshots, [LOCAL_MANIFEST_PATH]);
     await writeExclusiveManaged(
       profile.root,
       LOCAL_MANIFEST_PATH,
@@ -122,16 +126,19 @@ export async function applyRemove(
         applied,
       );
     }
+    await assertUnchanged(profile.root, snapshots, [MANAGED_SOURCE_PATH]);
     await assertSourceStillExact(profile.root, manifest);
     await rm(await assertManagedPathSafe(profile.root, MANAGED_SOURCE_PATH));
     await recordCurrent(profile.root, [MANAGED_SOURCE_PATH], applied);
     if (operationActs(plan, "local_state_ignore", "remove")) {
+      await assertUnchanged(profile.root, snapshots, [IGNORE_PATH]);
       if (!(await inspectIgnore(profile.root)).owned) {
         throw new CliBlockedError("managed_code_drifted");
       }
       await removeIgnoreBlock(profile.root);
       await recordCurrent(profile.root, [IGNORE_PATH], applied);
     }
+    await assertUnchanged(profile.root, snapshots, [LOCAL_MANIFEST_PATH]);
     await rm(await assertManagedPathSafe(profile.root, LOCAL_MANIFEST_PATH));
     await recordCurrent(profile.root, [LOCAL_MANIFEST_PATH], applied);
     await removeEmptyDirectories(profile.root);
@@ -139,6 +146,18 @@ export async function applyRemove(
   } catch (error) {
     await rollback(profile, snapshots, applied, runner, removeDependency);
     throw error;
+  }
+}
+
+async function assertUnchanged(
+  root: string,
+  snapshots: readonly FileSnapshot[],
+  paths: readonly string[],
+): Promise<void> {
+  try {
+    await assertSnapshotsCurrent(root, snapshots, paths);
+  } catch {
+    throw new CliBlockedError("managed_code_drifted");
   }
 }
 

@@ -50,7 +50,7 @@ async function createFixture({ packageLock = true } = {}) {
 
 async function installFakeSdk(root) {
   const directory = path.join(root, "node_modules/@fonte-is/nextjs");
-  await mkdir(directory, { recursive: true });
+  await mkdir(path.join(directory, "dist"), { recursive: true });
   await writeFile(
     path.join(directory, "package.json"),
     `${JSON.stringify({
@@ -58,12 +58,16 @@ async function installFakeSdk(root) {
       version: "0.1.0",
       type: "module",
       exports: {
-        "./installation-verification": "./installation-verification.js",
+        "./installation-verification": {
+          types: "./dist/installation-verification.d.ts",
+          import: "./dist/installation-verification.js",
+          default: "./dist/installation-verification.js",
+        },
       },
     })}\n`,
   );
   await writeFile(
-    path.join(directory, "installation-verification.js"),
+    path.join(directory, "dist/installation-verification.js"),
     [
       'export const FONTE_CONFIG_VERSION = "fonte.config.v2";',
       'export const INSTALLATION_VERIFICATION_SCHEMA_VERSION = "fonte.installation_verification.v2";',
@@ -73,6 +77,10 @@ async function installFakeSdk(root) {
       "export const normalizeInstallationVerificationConfig = value => value;",
       "",
     ].join("\n"),
+  );
+  await writeFile(
+    path.join(directory, "dist/installation-verification.d.ts"),
+    "export {};\n",
   );
 }
 
@@ -160,6 +168,24 @@ test("doctor never executes a project-owned script", async () => {
   assert.equal(calls.length, afterInit);
 });
 
+test("doctor never executes the installed SDK module", async () => {
+  const root = await createFixture();
+  const request = dependencies(root, createRunner([]));
+  assert.equal((await runProgram(["init", "--yes"], request)).exitCode, 0);
+  const marker = path.join(root, "sdk-module-executed");
+  const modulePath = path.join(
+    root,
+    "node_modules/@fonte-is/nextjs/dist/installation-verification.js",
+  );
+  await writeFile(
+    modulePath,
+    `await import("node:fs/promises").then(fs => fs.writeFile(${JSON.stringify(marker)}, "bad"));\n`,
+  );
+
+  assert.equal((await runProgram(["doctor"], request)).exitCode, 0);
+  assert.equal(await exists(marker), false);
+});
+
 test("a project without a lockfile never gains one", async () => {
   const root = await createFixture({ packageLock: false });
   const calls = [];
@@ -192,5 +218,33 @@ test("rollback preserves a concurrently created unmanaged source", async () => {
   assert.equal(
     await readFile(path.join(root, "fonte/installation.ts"), "utf8"),
     "unowned\n",
+  );
+});
+
+test("rollback preserves an unrelated ignore edit made during npm install", async () => {
+  const root = await createFixture();
+  const runner = createRunner([]);
+  const originalRun = runner.run.bind(runner);
+  runner.run = async (command, args, cwd) => {
+    const result = await originalRun(command, args, cwd);
+    if (args.some((arg) => arg.includes("nextjs@"))) {
+      await writeFile(
+        path.join(cwd, ".gitignore"),
+        "node_modules\nconcurrent-edit\n",
+      );
+    }
+    return result;
+  };
+
+  const result = await runProgram(
+    ["init", "--yes"],
+    dependencies(root, runner),
+  );
+  assert.equal(result.exitCode, 3);
+  assert.match(result.stdout, /detected a local or concurrent change/);
+  assert.match(result.stdout, /Reason: managed_code_drifted/);
+  assert.equal(
+    await readFile(path.join(root, ".gitignore"), "utf8"),
+    "node_modules\nconcurrent-edit\n",
   );
 });
