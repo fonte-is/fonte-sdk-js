@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { HostedTestBlockedError } from "./hosted-errors.js";
+import { renderCallbackPage } from "./loopback-callback-page.js";
 import { parseOAuthCallback } from "./oauth-callback.js";
 
 export interface CallbackListener {
@@ -29,17 +30,15 @@ export async function listenForOAuthCallback(
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
       });
-      response.end(
-        "<!doctype html><title>Fonte CLI</title><p>Authorization received. Return to your terminal.</p>",
-      );
+      response.end(renderCallbackPage("success"));
       resolveCallback(url);
       server.close();
     } catch (error) {
       response.writeHead(400, {
-        "content-type": "text/plain; charset=utf-8",
+        "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
       });
-      response.end("Fonte CLI authorization was not accepted.");
+      response.end(renderCallbackPage("failure"));
       if (
         error instanceof HostedTestBlockedError &&
         error.reason === "authorization_state_invalid"
