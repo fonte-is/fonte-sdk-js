@@ -1,7 +1,6 @@
 import { HostedTestBlockedError } from "./hosted-errors.js";
 
-export const HOSTED_CONFIG_URL =
-  "https://app.fonte.is/.well-known/fonte-cli.json";
+export const HOSTED_CONFIG_URL = "https://fonte.is/.well-known/fonte-cli.json";
 
 export interface HostedConfig {
   readonly schema: "fonte.cli.hosted_config.v1";

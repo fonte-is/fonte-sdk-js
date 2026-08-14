@@ -50,7 +50,7 @@ Fonte workspace membership.
 
 ## Hosted sandbox proof
 
-The CLI fetches `https://app.fonte.is/.well-known/fonte-cli.json`, accepts only
+The CLI fetches `https://fonte.is/.well-known/fonte-cli.json`, accepts only
 schema `fonte.cli.hosted_config.v1`, HTTPS authority/API URLs, scope `email`,
 and callback `http://127.0.0.1:49671/callback`. OAuth Authorization Code with
 mandatory S256 PKCE is implemented by `openid-client`; Fonte does not implement

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseHostedConfig } from "../packages/cli/dist/hosted-config.js";
+import {
+  HOSTED_CONFIG_URL,
+  parseHostedConfig,
+} from "../packages/cli/dist/hosted-config.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
 import {
   runHostedTest,
@@ -22,6 +25,10 @@ const draftId = "10000000-0000-4000-8000-000000000010";
 const canaryId = "10000000-0000-4000-8000-000000000011";
 
 test("hosted configuration is exact and HTTPS-bound", () => {
+  assert.equal(
+    HOSTED_CONFIG_URL,
+    "https://fonte.is/.well-known/fonte-cli.json",
+  );
   assert.deepEqual(parseHostedConfig(config), config);
   assert.throws(
     () =>
