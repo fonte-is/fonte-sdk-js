@@ -56,6 +56,16 @@ test("argument grammar has no implicit confirmation or extra flags", () => {
       workspaceSlug: "my-workspace",
     },
   );
+  assert.deepEqual(
+    parseArguments(["auth", "exec", "--", "npm", "run", "local:core"]),
+    {
+      command: "auth-exec",
+      apply: false,
+      json: false,
+      consumerCommand: "npm",
+      consumerArguments: ["run", "local:core"],
+    },
+  );
   for (const argv of [
     [],
     ["doctor", "--yes"],
@@ -65,6 +75,10 @@ test("argument grammar has no implicit confirmation or extra flags", () => {
     ["test"],
     ["test", "--workspace", "UPPERCASE"],
     ["test", "--workspace", "my-workspace", "--workspace", "other"],
+    ["auth"],
+    ["auth", "exec"],
+    ["auth", "exec", "npm"],
+    ["auth", "exec", "--"],
   ]) {
     assert.throws(() => parseArguments(argv), { name: "Error" });
   }
@@ -75,6 +89,7 @@ test("help, version, and usage bytes are literal public contracts", () => {
   assert.equal(HELP_TEXT.endsWith("\n"), true);
   assert.equal(USAGE_TEXT.endsWith("\n"), true);
   assert.equal(VERSION_TEXT, "@fonte-is/cli 0.1.0\n");
+  assert.match(USAGE_TEXT, /fonte auth exec -- <command> \[args\.\.\.\]/);
 });
 
 test("program renders help, version, and invalid invocation exactly", async () => {

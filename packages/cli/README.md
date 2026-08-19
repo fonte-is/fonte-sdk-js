@@ -8,6 +8,7 @@ npx @fonte-is/cli init
 npx @fonte-is/cli init --yes
 npx @fonte-is/cli doctor
 npx @fonte-is/cli test --workspace my-workspace
+npx @fonte-is/cli auth exec -- npm run local:core-bootstrap
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
@@ -37,6 +38,25 @@ Fonte in the browser for consent and requests one sandbox email to the verified
 email address on the signed-in account. The short-lived OAuth access token stays
 in memory for that command and is discarded when the process exits. No token is
 copied into the terminal or written to disk.
+
+`fonte auth exec -- <command> [args...]` reuses that official browser flow
+without running the sandbox provider proof. It directly spawns the command
+without a shell and supplies the short-lived access token only as
+`FONTE_HUMAN_BEARER` in the child's environment. The CLI never places the
+token in command arguments, terminal output, receipts, files, or persistent
+credential storage. The child should read the value once, delete it from
+`process.env`, keep it in memory for the local bootstrap, and avoid rendering
+it:
+
+```js
+const bearer = process.env.FONTE_HUMAN_BEARER;
+delete process.env.FONTE_HUMAN_BEARER;
+if (!bearer) throw new Error("Fonte human authorization is required");
+await bootstrapLocalCore({ bearer });
+```
+
+The spawned consumer owns its subsequent API use. This command itself makes
+no Core API, provider, email, or production request.
 
 The fixed synthetic sandbox draft is retained in the workspace as an audit
 artifact. Its ID and retention are always reported, including when a later step

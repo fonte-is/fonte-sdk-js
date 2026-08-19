@@ -1,5 +1,6 @@
 import { parseArguments } from "./arguments.js";
 import {
+  AUTHORIZATION_ERROR_TEXT,
   EXECUTION_ERROR_TEXT,
   HELP_TEXT,
   LOCAL_MANIFEST_PATH,
@@ -7,6 +8,7 @@ import {
   USAGE_TEXT,
   VERSION_TEXT,
 } from "./constants.js";
+import { runAuthorizedConsumer } from "./auth-exec.js";
 import { verifyInstallation } from "./doctor.js";
 import { CliBlockedError, CliExecutionError, CliUsageError } from "./errors.js";
 import { readOptional } from "./filesystem.js";
@@ -14,6 +16,7 @@ import { createInitPlan, createRemovePlan } from "./installation-plan.js";
 import { readManifest } from "./manifest.js";
 import { applyInit, applyRemove } from "./mutations.js";
 import { runHostedTest, testBlockedReceipt } from "./hosted-test.js";
+import { HostedTestBlockedError } from "./hosted-errors.js";
 import { assertManagedPathSafe } from "./paths.js";
 import { detectProject } from "./project.js";
 import { blockedReceipt, plannedReceipt } from "./receipts.js";
@@ -40,6 +43,9 @@ export async function runProgram(
   }
   if (parsed.command === "version") {
     return { exitCode: 0, stdout: VERSION_TEXT, stderr: "" };
+  }
+  if (parsed.command === "auth-exec") {
+    return executeAuthExec(parsed, dependencies);
   }
   const request = { ...parsed, command: parsed.command };
   try {
@@ -70,6 +76,28 @@ export async function runProgram(
     }
     return executionFailure();
   }
+}
+
+async function executeAuthExec(
+  parsed: ParsedArguments,
+  dependencies: ProgramDependencies,
+): Promise<CommandResult> {
+  if (!dependencies.authExec) return authorizationFailure();
+  try {
+    await runAuthorizedConsumer(
+      parsed.consumerCommand!,
+      parsed.consumerArguments!,
+      dependencies.authExec,
+    );
+    return { exitCode: 0, stdout: "", stderr: "" };
+  } catch (error) {
+    if (error instanceof HostedTestBlockedError) return authorizationFailure();
+    return executionFailure();
+  }
+}
+
+function authorizationFailure(): CommandResult {
+  return { exitCode: 3, stdout: "", stderr: AUTHORIZATION_ERROR_TEXT };
 }
 
 function receiptExitCode(receipt: AnyCliReceipt): 0 | 3 {

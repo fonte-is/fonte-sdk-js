@@ -8,8 +8,14 @@ export interface CallbackListener {
   close(): void;
 }
 
+export interface CallbackListenerOptions {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+}
+
 export async function listenForOAuthCallback(
   expectedState: string,
+  options: CallbackListenerOptions = {},
 ): Promise<CallbackListener> {
   let resolveCallback!: (url: URL) => void;
   let rejectCallback!: (error: Error) => void;
@@ -53,14 +59,32 @@ export async function listenForOAuthCallback(
     }
   });
   await bind(server);
-  const timer = setTimeout(() => {
-    rejectCallback(new HostedTestBlockedError("authorization_timeout"));
+  if (options.signal?.aborted) {
     server.close();
-  }, 300_000);
+    throw new HostedTestBlockedError("authorization_cancelled");
+  }
+  let settled = false;
+  const rejectOnce = (error: Error) => {
+    if (settled) return;
+    settled = true;
+    rejectCallback(error);
+    server.close();
+  };
+  const cancel = () =>
+    rejectOnce(new HostedTestBlockedError("authorization_cancelled"));
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  const timer = setTimeout(() => {
+    rejectOnce(new HostedTestBlockedError("authorization_timeout"));
+  }, options.timeoutMs ?? 300_000);
   timer.unref();
+  const cleanup = () => {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", cancel);
+  };
   return {
-    callback: callback.finally(() => clearTimeout(timer)),
+    callback: callback.finally(cleanup),
     close: () => {
+      cleanup();
       if (server.listening) server.close();
     },
   };

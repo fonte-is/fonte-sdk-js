@@ -19,6 +19,7 @@ V0 supports only:
   `src/app/layout.*`;
 - exact SDK version `0.1.0` from `@fonte-is/nextjs`;
 - local preparation, verification, and removal;
+- one browser-authorized, directly spawned local consumer process; and
 - one browser-authorized sandbox provider proof to the signed-in account's
   verified email address.
 
@@ -36,6 +37,7 @@ Accepted invocations are exactly:
 fonte init [--yes] [--json]
 fonte doctor [--json]
 fonte test --workspace <slug> [--json]
+fonte auth exec -- <command> [args...]
 fonte remove [--yes] [--json]
 fonte --help
 fonte --version
@@ -47,6 +49,24 @@ the only argument. There is no terminal prompt. `test` opens the system browser
 for an existing signed-in human to approve the registered public CLI client.
 The workspace slug is explicit, lowercase, and remains subject to server-side
 Fonte workspace membership.
+
+`auth exec` is the reusable local authority seam. It performs the same hosted
+browser OAuth Authorization Code flow with mandatory S256 PKCE, then directly
+spawns exactly the command after `--` without a shell. The access token is
+present only in the parent process memory and the direct child's
+`FONTE_HUMAN_BEARER` environment. It is never placed in process arguments,
+stdout, stderr, a receipt, a file, shell history, or persistent credential
+storage. The child inherits terminal I/O and owns its use of the bearer. The
+CLI removes no project state because it creates none.
+
+`auth exec` does not run Doctor, create a sandbox draft, request an email,
+contact a provider, or call the Core API. Browser authorization failure or
+cancellation exits `3` with the fixed authorization failure text. A missing or
+nonzero child exits `1` with the existing execution failure text. A successful
+child exits `0` without CLI-produced stdout or stderr. The callback listener
+and browser authorization retain the fixed issuer/client discovery, loopback
+host, callback path, random state, five-minute timeout, and one code-or-error
+validation used by `test`.
 
 ## Hosted sandbox proof
 
@@ -83,6 +103,9 @@ Exit codes:
 2  invalid invocation
 3  safe product blocker, detected drift, refused proof, or unknown proof
 ```
+
+For `auth exec`, exit `3` also covers browser authorization timeout,
+cancellation, denial, or unavailable callback authority.
 
 `init` and `remove` without `--yes` return a plan with exit 0 and make no
 changes. `--json` writes exactly one JSON object plus a trailing newline to

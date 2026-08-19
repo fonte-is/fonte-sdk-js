@@ -1,11 +1,13 @@
 export type CommandName = "init" | "doctor" | "remove" | "test";
-export type ParsedCommand = CommandName | "help" | "version";
+export type ParsedCommand = CommandName | "auth-exec" | "help" | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
   apply: boolean;
   json: boolean;
   workspaceSlug?: string;
+  consumerCommand?: string;
+  consumerArguments?: readonly string[];
 }
 
 export type BlockReason =

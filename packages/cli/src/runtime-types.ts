@@ -24,7 +24,20 @@ export interface ProgramDependencies {
   cwd: string;
   randomUUID(): string;
   runner: CommandRunner;
+  authExec?: AuthorizedConsumerDependencies;
   hosted?: HostedTestDependencies;
+}
+
+export interface AuthorizedConsumerDependencies {
+  fetch(input: string | URL, init?: RequestInit): Promise<Response>;
+  authorize(config: HostedConfig, signal?: AbortSignal): Promise<string>;
+  spawn(
+    command: string,
+    args: readonly string[],
+    bearer: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  signal?: AbortSignal;
 }
 
 export interface HostedTestDependencies {

@@ -10,6 +10,7 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     return { command: "version", apply: false, json: false };
   }
   const command = argv[0];
+  if (command === "auth") return parseAuthExecArguments(argv.slice(1));
   if (
     command !== "init" &&
     command !== "doctor" &&
@@ -33,6 +34,28 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     command,
     apply: flags.has("--yes"),
     json: flags.has("--json"),
+  };
+}
+
+function parseAuthExecArguments(argv: readonly string[]): ParsedArguments {
+  const consumerCommand = argv[2];
+  const consumerArguments = argv.slice(3);
+  if (
+    argv[0] !== "exec" ||
+    argv[1] !== "--" ||
+    !consumerCommand ||
+    [consumerCommand, ...consumerArguments].some((value) =>
+      value.includes("\0"),
+    )
+  ) {
+    throw new CliUsageError("invalid_auth_exec");
+  }
+  return {
+    command: "auth-exec",
+    apply: false,
+    json: false,
+    consumerCommand,
+    consumerArguments,
   };
 }
 

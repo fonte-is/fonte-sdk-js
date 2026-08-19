@@ -57,6 +57,7 @@ export const USAGE_TEXT = [
   "  fonte init [--yes] [--json]",
   "  fonte doctor [--json]",
   "  fonte test --workspace <slug> [--json]",
+  "  fonte auth exec -- <command> [args...]",
   "  fonte remove [--yes] [--json]",
   "  fonte --help",
   "  fonte --version",
@@ -70,6 +71,7 @@ export const HELP_TEXT = [
   "",
   "init and remove print a plan unless --yes is supplied.",
   "test opens Fonte in your browser and requests one sandbox provider proof.",
+  "auth exec opens Fonte in your browser and runs one bearer-bound child.",
   "Production and transactional application email remain locked.",
   "",
 ].join("\n");
@@ -77,3 +79,4 @@ export const HELP_TEXT = [
 export const VERSION_TEXT = `@fonte-is/cli ${CLI_VERSION}\n`;
 export const EXECUTION_ERROR_TEXT = "Fonte failed: execution_failed.\n";
 export const ROLLBACK_ERROR_TEXT = "Fonte failed: rollback_failed.\n";
+export const AUTHORIZATION_ERROR_TEXT = "Fonte authorization failed.\n";
