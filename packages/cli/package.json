@@ -1,6 +1,6 @@
 {
   "name": "@fonte-is/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Prepare, verify, test, and remove a Fonte installation",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
