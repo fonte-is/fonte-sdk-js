@@ -71,9 +71,10 @@ export function parseHostedConfig(
 function secureUrl(value: unknown, allowLoopbackHttp: boolean): string {
   if (typeof value !== "string") return invalid();
   const url = new URL(value);
-  const loopbackHttp = allowLoopbackHttp
-    && url.protocol === "http:"
-    && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+  const loopbackHttp =
+    allowLoopbackHttp &&
+    url.protocol === "http:" &&
+    (url.hostname === "127.0.0.1" || url.hostname === "localhost");
   if (
     (url.protocol !== "https:" && !loopbackHttp) ||
     url.username ||
@@ -94,14 +95,15 @@ function localDiscoveryUrl(value: string): boolean {
     return invalid();
   }
   if (
-    url.protocol !== "http:"
-    || url.hostname !== "127.0.0.1"
-    || url.pathname !== "/.well-known/fonte-cli.json"
-    || url.username
-    || url.password
-    || url.search
-    || url.hash
-  ) return invalid();
+    url.protocol !== "http:" ||
+    url.hostname !== "127.0.0.1" ||
+    url.pathname !== "/.well-known/fonte-cli.json" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  )
+    return invalid();
   return true;
 }
 

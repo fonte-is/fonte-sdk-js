@@ -22,8 +22,14 @@ const valid = {
   ],
 };
 
-test("local manifest accepts only exact nonsecret schema", () => {
+test("local manifest accepts compatible exact nonsecret schemas", () => {
   assert.deepEqual(parseManifest(valid), valid);
+  assert.deepEqual(parseManifest({ ...valid, cli_version: "0.1.1" }), {
+    ...valid,
+    cli_version: "0.1.1",
+  });
+  assert.equal(parseManifest({ ...valid, cli_version: "0.1.2" }), null);
+  assert.equal(parseManifest({ ...valid, cli_version: "unknown" }), null);
   assert.equal(parseManifest({ ...valid, secret: "forbidden" }), null);
   assert.equal(
     parseManifest({ ...valid, installation_id: "not-a-uuid" }),

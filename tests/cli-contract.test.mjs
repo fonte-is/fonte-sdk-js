@@ -26,6 +26,7 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fonte-is/cli");
+  assert.equal(manifest.version, "0.1.1");
   assert.deepEqual(manifest.bin, { fonte: "./dist/main.js" });
   assert.deepEqual(manifest.dependencies, { "openid-client": "6.8.5" });
   assert.deepEqual(manifest.exports, {
@@ -89,11 +90,14 @@ test("argument grammar has no implicit confirmation or extra flags", () => {
   }
 });
 
-test("help, version, and usage bytes are literal public contracts", () => {
+test("help, version, and usage bytes are literal public contracts", async () => {
   assert.match(HELP_TEXT, /^Fonte local installation CLI\./);
   assert.equal(HELP_TEXT.endsWith("\n"), true);
   assert.equal(USAGE_TEXT.endsWith("\n"), true);
-  assert.equal(VERSION_TEXT, "@fonte-is/cli 0.1.0\n");
+  const manifest = JSON.parse(
+    await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
+  );
+  assert.equal(VERSION_TEXT, `@fonte-is/cli ${manifest.version}\n`);
   assert.match(USAGE_TEXT, /fonte auth exec -- <command> \[args\.\.\.\]/);
 });
 

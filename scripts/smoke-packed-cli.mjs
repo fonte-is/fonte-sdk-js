@@ -8,6 +8,8 @@ import { readJson, root, run } from "./workspace-utils.mjs";
 
 const packs = path.join(root, ".artifacts", "packs");
 const report = readJson(path.join(packs, "pack-report.json"));
+const cliManifest = readJson(path.join(root, "packages/cli/package.json"));
+const cliVersion = cliManifest.version;
 const fixture = await mkdtemp(path.join(os.tmpdir(), "fonte-packed-cli-"));
 
 try {
@@ -35,11 +37,20 @@ try {
   const cli = path.join(fixture, "node_modules/@fonte-is/cli/dist/main.js");
   assert.equal(
     run(process.execPath, [cli, "--version"], { cwd: fixture, capture: true }),
-    "@fonte-is/cli 0.1.0\n",
+    `@fonte-is/cli ${cliVersion}\n`,
   );
   assert.equal(
     receipt(cli, fixture, ["init", "--yes", "--json"]).outcome,
     "applied",
+  );
+  const localManifestPath = path.join(fixture, ".fonte/installation.json");
+  const localManifest = JSON.parse(await readFile(localManifestPath, "utf8"));
+  assert.equal(localManifest.cli_version, cliVersion);
+  assert.equal(receipt(cli, fixture, ["doctor", "--json"]).outcome, "verified");
+  localManifest.cli_version = "0.1.0";
+  await writeFile(
+    localManifestPath,
+    `${JSON.stringify(localManifest, null, 2)}\n`,
   );
   assert.equal(receipt(cli, fixture, ["doctor", "--json"]).outcome, "verified");
   assert.equal(
@@ -66,11 +77,12 @@ try {
     cwd: fixture,
     capture: true,
   });
-  assert.equal(nodeFloor, "@fonte-is/cli 0.1.0\n");
+  assert.equal(nodeFloor, `@fonte-is/cli ${cliVersion}\n`);
   console.log(
     JSON.stringify({
       ok: true,
       lifecycle: ["version", "init", "doctor", "remove"],
+      manifestVersions: { created: cliVersion, compatible: ["0.1.0"] },
       nodeFloor: "20.9.0",
     }),
   );
@@ -90,7 +102,7 @@ async function writeProject(directory) {
     private: true,
     packageManager: "npm@10.9.2",
     dependencies: {
-      "@fonte-is/cli": "0.1.0",
+      "@fonte-is/cli": cliVersion,
       "@fonte-is/nextjs": "0.1.0",
       next: "16.2.11",
       react: "19.2.0",

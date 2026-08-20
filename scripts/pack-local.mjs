@@ -9,6 +9,9 @@ import { packageOrder } from "./workspace-utils.mjs";
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageNames = packageOrder;
 const packsDirectory = path.join(root, ".artifacts", "packs");
+const workspaceLock = JSON.parse(
+  await readFile(path.join(root, "package-lock.json"), "utf8"),
+);
 
 await rm(packsDirectory, { recursive: true, force: true });
 await mkdir(packsDirectory, { recursive: true });
@@ -43,10 +46,11 @@ for (const packageDirectoryName of packageNames) {
   const packageDirectory = path.join(root, "packages", packageDirectoryName);
   const manifestPath = path.join(packageDirectory, "package.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-
-  if (manifest.version !== "0.1.0") {
+  const lockedVersion =
+    workspaceLock.packages?.[`packages/${packageDirectoryName}`]?.version;
+  if (typeof lockedVersion !== "string" || manifest.version !== lockedVersion) {
     throw new Error(
-      `${manifest.name} must remain at public package version 0.1.0`,
+      `${manifest.name} package version does not match its workspace lock entry`,
     );
   }
 

@@ -17,6 +17,14 @@ import {
 
 const packs = join(root, ".artifacts", "packs");
 const report = readJson(join(packs, "pack-report.json"));
+const packageVersions = new Map(
+  packageOrder.map((shortName) => {
+    const manifest = readJson(
+      join(root, "packages", shortName, "package.json"),
+    );
+    return [manifest.name, manifest.version];
+  }),
+);
 const consumers = join(root, ".artifacts", "consumers");
 const fixtures = join(root, "tests", "consumers");
 resetDirectory(consumers);
@@ -78,7 +86,7 @@ function installConsumer(name, dependencies, options = {}) {
       join(directory, "node_modules", packageName, "package.json"),
     );
     assert.equal(installed.name, packageName);
-    assert.equal(installed.version, "0.1.0");
+    assert.equal(installed.version, packageVersions.get(packageName));
     assert.ok(
       specifier.startsWith("file:"),
       `${packageName} was not installed from a tarball`,

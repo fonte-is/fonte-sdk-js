@@ -68,20 +68,18 @@ implicit copy after preview.
 
 ## Current Core bedrock
 
-The FON-10 preflight contract exists only in local Core candidate
-`65d9a85c1a9ae8a53890fc57e837351a34bd7a66`; it is not admitted or deployed.
-The CLI command therefore cannot operate against production yet. That Core
-route also intentionally rejects the current CLI OAuth client under the frozen
-candidate. The CLI surfaces `oauth_client_route_denied` and does not bypass
-workspace authorization. Admission must compose FON-10 with FON-12 and the
-required exact OAuth route policy before release.
-
-The admitted Resend Bridge route currently calls workspace authorization
-without allowing the configured CLI OAuth client ID. A bearer issued through
-the sanctioned CLI browser flow therefore receives Core's exact
-`403 oauth_client_route_denied` response until Core admits that client on this
-route. The CLI surfaces the blocker and does not substitute another bearer or
+The deployed Core exposes both the Resend Bridge routes and the broadcast
+preflight route. The Resend Bridge routes admit the configured CLI OAuth
+client, subject to Core's ordinary workspace authorization. The CLI uses only
+the sanctioned browser-issued bearer and does not substitute another bearer or
 bypass workspace authorization.
+
+The deployed broadcast preflight route does not currently admit the configured
+CLI OAuth client. A bearer issued through the sanctioned CLI browser flow
+receives Core's exact `403 oauth_client_route_denied` response. The CLI surfaces
+that blocker and does not bypass it. Consequently, a publishable CLI package is
+not production broadcast CLI authority; preflight cannot operate through CLI
+OAuth until Core explicitly admits that client on the route.
 
 Core also leaves the Bridge service disabled unless its production AWS secret
 custody, connection identity, and segment identity are configured. The CLI

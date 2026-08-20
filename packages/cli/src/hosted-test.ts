@@ -29,7 +29,7 @@ export async function runHostedTest(
     );
     sandboxDraftId = draft.draftId;
     sandboxDraftRetained = true;
-    providerSubmission = "processing";
+    providerSubmission = "unknown";
     const canaryId = await queueSandboxCanary(
       config,
       workspace,
@@ -38,6 +38,7 @@ export async function runHostedTest(
       idempotencyKey,
       dependencies.fetch,
     );
+    providerSubmission = "processing";
     const result = await pollSandboxCanary(
       config,
       workspace,

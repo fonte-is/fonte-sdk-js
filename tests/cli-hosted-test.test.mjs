@@ -134,6 +134,62 @@ test("draft retention is unknown when the create response is lost", async () => 
   assert.match(renderHuman(receipt), /Sandbox draft retained: unknown/);
 });
 
+test("a rejected canary queue request never claims processing", async () => {
+  let request = 0;
+  const receipt = await runHostedTest(
+    "fonte",
+    "10000000-0000-4000-8000-000000000015",
+    {
+      fetch: async () => {
+        request += 1;
+        if (request === 1) return json(config);
+        if (request === 2)
+          return json(
+            { draft: { broadcastDraftId: draftId, version: 1 } },
+            201,
+          );
+        return json({ error: "sandbox_canary_rejected" }, 409);
+      },
+      authorize: async () => "header.payload.signature",
+      sleep: async () => assert.fail("a rejected queue request must not poll"),
+    },
+  );
+
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "sandbox_canary_rejected");
+  assert.equal(receipt.provider_submission, "unknown");
+  assert.equal(receipt.sandbox_draft_id, draftId);
+  assert.equal(receipt.sandbox_draft_retained, true);
+});
+
+test("a lost canary mutation response never claims processing", async () => {
+  let request = 0;
+  const receipt = await runHostedTest(
+    "fonte",
+    "10000000-0000-4000-8000-000000000016",
+    {
+      fetch: async () => {
+        request += 1;
+        if (request === 1) return json(config);
+        if (request === 2)
+          return json(
+            { draft: { broadcastDraftId: draftId, version: 1 } },
+            201,
+          );
+        throw new Error("connection lost after canary mutation");
+      },
+      authorize: async () => "header.payload.signature",
+      sleep: async () => assert.fail("a lost queue response must not poll"),
+    },
+  );
+
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "core_api_unavailable");
+  assert.equal(receipt.provider_submission, "unknown");
+  assert.equal(receipt.sandbox_draft_id, draftId);
+  assert.equal(receipt.sandbox_draft_retained, true);
+});
+
 test("test returns a truthful accepted-only terminal receipt", async () => {
   const requests = [];
   const receipt = await runHostedTest(

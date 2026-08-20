@@ -20,7 +20,7 @@ const sourceFiles = async (directory) => {
   return files;
 };
 
-test("the public graph contains exactly four 0.1.0 packages", async () => {
+test("the public graph keeps package-specific release versions", async () => {
   const entries = (await readdir(path.join(root, "packages"))).sort();
   assert.deepEqual(entries, packageDirectories.toSorted());
   const manifests = await Promise.all(
@@ -30,9 +30,14 @@ test("the public graph contains exactly four 0.1.0 packages", async () => {
     manifests.map(({ name }) => name),
     ["@fonte-is/core", "@fonte-is/react", "@fonte-is/nextjs", "@fonte-is/cli"],
   );
-  assert.equal(
-    manifests.every(({ version }) => version === "0.1.0"),
-    true,
+  assert.deepEqual(
+    Object.fromEntries(manifests.map(({ name, version }) => [name, version])),
+    {
+      "@fonte-is/core": "0.1.0",
+      "@fonte-is/react": "0.1.0",
+      "@fonte-is/nextjs": "0.1.0",
+      "@fonte-is/cli": "0.1.1",
+    },
   );
 });
 

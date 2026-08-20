@@ -1,5 +1,5 @@
 import type { LocalManifest, ManagedOperation } from "./types.js";
-import { LOCAL_MANIFEST_PATH } from "./constants.js";
+import { CLI_VERSION, LOCAL_MANIFEST_PATH } from "./constants.js";
 import { CliBlockedError } from "./errors.js";
 import { readOptional } from "./filesystem.js";
 import { assertManagedPathSafe } from "./paths.js";
@@ -19,6 +19,10 @@ const manifestKeys = new Set([
 const uuidV4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const sha256 = /^[0-9a-f]{64}$/;
+const compatibleCliVersions = new Set<LocalManifest["cli_version"]>([
+  "0.1.0",
+  CLI_VERSION,
+]);
 
 function hasExactKeys(
   value: unknown,
@@ -76,7 +80,9 @@ export function parseManifest(value: unknown): LocalManifest | null {
   if (
     value.schema_version !== "fonte.local_installation.v1" ||
     !uuidV4.test(String(value.installation_id)) ||
-    value.cli_version !== "0.1.0" ||
+    !compatibleCliVersions.has(
+      value.cli_version as LocalManifest["cli_version"],
+    ) ||
     value.adapter_id !== "next_app_router" ||
     value.adapter_version !== "v1" ||
     value.sdk_package !== "@fonte-is/nextjs" ||
@@ -104,7 +110,7 @@ export function parseManifest(value: unknown): LocalManifest | null {
   return {
     schema_version: "fonte.local_installation.v1",
     installation_id: String(value.installation_id),
-    cli_version: "0.1.0",
+    cli_version: value.cli_version as LocalManifest["cli_version"],
     adapter_id: "next_app_router",
     adapter_version: "v1",
     sdk_package: "@fonte-is/nextjs",

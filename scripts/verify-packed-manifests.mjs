@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { packageOrder, readJson, root, run } from "./workspace-utils.mjs";
 
@@ -28,7 +29,7 @@ for (const name of packageOrder) {
     run("tar", ["-xOzf", tarball, "package/package.json"], { capture: true }),
   );
   assert.equal(packedManifest.name, manifest.name);
-  assert.equal(packedManifest.version, "0.1.0");
+  assert.equal(packedManifest.version, manifest.version);
   assert.deepEqual(packedManifest.exports, manifest.exports);
   assert.deepEqual(packedManifest.files, manifest.files);
 
@@ -46,10 +47,14 @@ for (const name of packageOrder) {
       `${manifest.name} binary target missing: ${target}`,
     );
   }
+  const allowedEntry =
+    name === "cli"
+      ? /^package\/(package\.json|LICENSE|README\.md|OPERATOR_CONTRACT\.md|dist\/)/
+      : /^package\/(package\.json|README\.md|OPERATOR_CONTRACT\.md|dist\/)/;
   for (const entry of entries) {
     assert.match(
       entry,
-      /^package\/(package\.json|README\.md|OPERATOR_CONTRACT\.md|dist\/)/,
+      allowedEntry,
       `${manifest.name} packed unexpected file ${entry}`,
     );
     assert.ok(
@@ -64,6 +69,12 @@ for (const name of packageOrder) {
   if (name === "core") {
     assert.deepEqual(packedManifest.dependencies ?? {}, {});
     assert.deepEqual(packedManifest.peerDependencies ?? {}, {});
+  }
+  if (name === "cli") {
+    assert.equal(
+      run("tar", ["-xOzf", tarball, "package/LICENSE"], { capture: true }),
+      readFileSync(join(root, "LICENSE"), "utf8"),
+    );
   }
   verified.push({
     name: manifest.name,
