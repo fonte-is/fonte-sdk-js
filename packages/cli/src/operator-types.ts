@@ -1,4 +1,15 @@
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+import type {
+  AudienceReuseOverrideInput,
+  ProductionAudienceInput,
+  ProductionAudienceOptionsResult,
+  ProductionAudiencePreviewResult,
+  ProductionBroadcastProgressResult,
+  ProductionBroadcastResult,
+  ProductionDraftResult,
+  ProductionTestResult,
+  QueuedBroadcastResult,
+} from "./operator-production-types.js";
 
 export type OperatorCommand =
   | {
@@ -21,6 +32,75 @@ export type OperatorCommand =
       readonly draftId: string;
       readonly expectedVersion: number;
       readonly postalAddress: string;
+      readonly audienceReuseOverride: AudienceReuseOverrideInput | null;
+    }
+  | {
+      readonly kind: "broadcast_draft_create";
+      readonly workspace: string;
+      readonly idempotencyKey: string;
+      readonly title: string;
+      readonly subject: string;
+      readonly body: string;
+      readonly preheader: string | null;
+      readonly senderProfileId: string;
+      readonly replyTo: string | null;
+      readonly communicationPurposeId: string;
+      readonly audience: ProductionAudienceInput;
+    }
+  | {
+      readonly kind: "broadcast_draft_read";
+      readonly workspace: string;
+      readonly draftId: string;
+    }
+  | {
+      readonly kind: "broadcast_audience_options";
+      readonly workspace: string;
+    }
+  | {
+      readonly kind: "broadcast_audience_preview";
+      readonly workspace: string;
+      readonly draftId: string;
+    }
+  | {
+      readonly kind: "broadcast_production_test_send";
+      readonly workspace: string;
+      readonly draftId: string;
+      readonly revision: number;
+      readonly postalAddress: string;
+      readonly idempotencyKey: string;
+    }
+  | {
+      readonly kind: "broadcast_production_test_status";
+      readonly workspace: string;
+      readonly draftId: string;
+      readonly testId: string;
+      readonly watch: boolean;
+    }
+  | {
+      readonly kind: "broadcast_authorize";
+      readonly workspace: string;
+      readonly draftId: string;
+      readonly revision: number;
+      readonly postalAddress: string;
+      readonly idempotencyKey: string;
+      readonly audienceReuseOverride: AudienceReuseOverrideInput | null;
+    }
+  | {
+      readonly kind: "broadcast_progress";
+      readonly workspace: string;
+      readonly broadcastId: string;
+      readonly watch: boolean;
+    }
+  | {
+      readonly kind: "broadcast_control";
+      readonly workspace: string;
+      readonly broadcastId: string;
+      readonly operation: "pause" | "resume" | "cancel_remaining";
+    }
+  | {
+      readonly kind: "broadcast_result";
+      readonly workspace: string;
+      readonly broadcastId: string;
     }
   | {
       readonly kind: "bridge_resend_preview";
@@ -110,6 +190,13 @@ export interface ResendBridgeCopyResult extends Omit<
 export type OperatorResult =
   | SandboxTestResult
   | BroadcastPreflightResult
+  | ProductionDraftResult
+  | ProductionAudienceOptionsResult
+  | ProductionAudiencePreviewResult
+  | QueuedBroadcastResult
+  | ProductionTestResult
+  | ProductionBroadcastProgressResult
+  | ProductionBroadcastResult
   | ResendBridgePreviewResult
   | ResendBridgeCopyResult;
 
@@ -125,9 +212,11 @@ export interface OperatorReceipt {
     readonly contract_id:
       | "fonte.core.sandbox_canary.v1"
       | "fonte.core.broadcast_preflight.v1"
+      | "fonte.core.production_broadcast.v1"
       | "fonte.core.resend_bridge.v1"
       | "unavailable";
   };
-  readonly core_effect: "none" | "queued" | "copied" | "unknown";
+  readonly core_effect:
+    "none" | "created" | "queued" | "controlled" | "copied" | "unknown";
   readonly result: OperatorResult | null;
 }

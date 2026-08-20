@@ -13,6 +13,10 @@ import {
   type BroadcastPreflightInput,
 } from "./operator-preflight-client.js";
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+import {
+  createProductionOperatorClient,
+  type ProductionOperatorClient,
+} from "./operator-production-client.js";
 import type {
   ResendBridgeCopyResult,
   ResendBridgePreviewResult,
@@ -27,6 +31,26 @@ export type {
 } from "./operator-types.js";
 export type { BroadcastPreflightInput } from "./operator-preflight-client.js";
 export type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+export type {
+  AudienceReuseOverrideInput,
+  ProductionAudienceInput,
+  ProductionAudienceOptionsResult,
+  ProductionAudiencePreviewResult,
+  ProductionAuthorizeInput,
+  ProductionBroadcastControlInput,
+  ProductionBroadcastProgressResult,
+  ProductionBroadcastReadInput,
+  ProductionBroadcastResult,
+  ProductionDraftCreateInput,
+  ProductionDraftReadInput,
+  ProductionDraftResult,
+  ProductionTestReadInput,
+  ProductionTestResult,
+  ProductionTestSendInput,
+  QueuedBroadcastResult,
+  RecipientExpressionInput,
+  RecipientReferenceInput,
+} from "./operator-production-types.js";
 export { CoreOperatorError } from "./operator-core-request.js";
 
 export interface CoreOperatorClientOptions {
@@ -35,7 +59,7 @@ export interface CoreOperatorClientOptions {
   readonly fetch: typeof fetch;
 }
 
-export interface CoreOperatorClient {
+export interface CoreOperatorClient extends ProductionOperatorClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -77,6 +101,7 @@ export function createCoreOperatorClient(
 ): CoreOperatorClient {
   const request = createCoreRequester(options);
   return {
+    ...createProductionOperatorClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,

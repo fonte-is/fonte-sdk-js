@@ -1,5 +1,6 @@
 import { CliUsageError } from "./errors.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
+import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
 const missingBroadcast = new Set([
@@ -29,6 +30,8 @@ const bridgeDeclarations = new Set([
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const production = parseProductionOperatorArguments(argv);
+  if (production) return production;
   if (argv[0] === "broadcast" && argv[1] === "test") {
     if (argv[2] === "send") return testSend(argv.slice(3));
     if (argv[2] === "status") return testStatus(argv.slice(3));

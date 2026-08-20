@@ -1,5 +1,6 @@
 import { CliUsageError } from "./errors.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
+import type { AudienceReuseOverrideInput } from "./operator-production-types.js";
 
 const valueNames = new Set([
   "--workspace",
@@ -7,6 +8,7 @@ const valueNames = new Set([
   "--draft-id",
   "--expected-version",
   "--postal-address",
+  "--acknowledge-audience-reuse",
 ]);
 
 export function parsePreflightArguments(
@@ -34,8 +36,22 @@ export function parsePreflightArguments(
       draftId: uuid(required(values, "--draft-id")),
       expectedVersion: positiveInteger(required(values, "--expected-version")),
       postalAddress: postalAddress(required(values, "--postal-address")),
+      audienceReuseOverride: reuseOverride(values),
     },
     json,
+  };
+}
+
+function reuseOverride(
+  values: ReadonlyMap<string, string>,
+): AudienceReuseOverrideInput | null {
+  const value = values.get("--acknowledge-audience-reuse");
+  if (value === undefined) return null;
+  if (!/^sha256:[0-9a-f]{64}$/.test(value)) invalid();
+  return {
+    version: "audience_reuse_override.v1",
+    audienceIdentity: value,
+    acknowledged: true,
   };
 }
 

@@ -24,11 +24,17 @@ V0 supports only:
   verified email address;
 - one thin operator-client surface for current Core fixed sandbox canary queue
   and readback; and
+- one thin CLI-only production broadcast journey over Core-owned draft,
+  audience, verified-account test, preflight, authorization, control, and
+  result authority; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
-V0 does not create an account, arbitrary recipient, sender, domain, contact,
-payment, production broadcast, or transactional application-email request.
+V0 does not create an account, arbitrary recipient, sender identity, domain,
+contact, payment, or transactional application-email request. Production
+broadcast commands only submit explicit operator material to admitted Core
+routes; Core remains the sole authority for eligibility, billing, safety,
+sender readiness, recipient freeze, dispatch, and provider capacity.
 Local-command receipts retain `provider_effect: "none"` and
 `application_email: "unavailable"`. The separate test receipt reports only the
 hosted sandbox provider result it actually reads back.

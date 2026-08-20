@@ -18,7 +18,7 @@ export function preflightAudienceEvidence(
   const expression =
     body.recipientExpression === null
       ? null
-      : recipientExpression(body.recipientExpression);
+      : preflightRecipientExpression(body.recipientExpression);
   if ((audienceKind === "all_contacts") !== (expression === null)) invalid();
   const counts = object(body.counts);
   const excluded = count(counts.excluded);
@@ -31,7 +31,9 @@ export function preflightAudienceEvidence(
     communication_purpose_id: nullableText(body.communicationPurposeId, 500),
     audience_kind: audienceKind,
     recipient_expression: expression,
-    source_provenance: array(body.sourceProvenance, 200).map(source),
+    source_provenance: array(body.sourceProvenance, 200).map(
+      preflightAudienceSource,
+    ),
     counts: {
       matched,
       excluded,
@@ -42,7 +44,9 @@ export function preflightAudienceEvidence(
   };
 }
 
-function recipientExpression(value: unknown): PreflightRecipientExpression {
+export function preflightRecipientExpression(
+  value: unknown,
+): PreflightRecipientExpression {
   const body = object(value);
   const include = array(body.include, 20).map(reference);
   const exclude = array(body.exclude, 20).map(reference);
@@ -72,7 +76,9 @@ function referenceKey(value: PreflightRecipientReference): string {
     : `import_batch:${value.contact_import_batch_id}`;
 }
 
-function source(value: unknown): PreflightAudienceSource {
+export function preflightAudienceSource(
+  value: unknown,
+): PreflightAudienceSource {
   const body = object(value);
   if (body.kind === "collection") {
     if (

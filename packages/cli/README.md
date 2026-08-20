@@ -12,6 +12,13 @@ npx @fonte-is/cli auth exec -- npm run local:core-bootstrap
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment sandbox --draft-id <uuid> --revision 1 --idempotency-key <key>
 npx @fonte-is/cli broadcast test status --workspace my-workspace --environment sandbox --test-id <uuid> --watch
 npx @fonte-is/cli broadcast preflight --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --postal-address "1 Synthetic Way"
+npx @fonte-is/cli broadcast audience options --workspace my-workspace --environment production
+npx @fonte-is/cli broadcast draft create --workspace my-workspace --environment production --idempotency-key <uuid> --title "Product update" --subject "August update" --body "<p>Hello</p>" --sender-profile-id <id> --communication-purpose-id <uuid> --all-contacts
+npx @fonte-is/cli broadcast audience preview --workspace my-workspace --environment production --draft-id <uuid>
+npx @fonte-is/cli broadcast test send --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
+npx @fonte-is/cli broadcast authorize --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
+npx @fonte-is/cli broadcast status --workspace my-workspace --environment production --broadcast-id <uuid> --watch
+npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
 npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
 npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli remove
@@ -76,15 +83,13 @@ arbitrary recipients, production email, and transactional application email
 remain unavailable; production capability requires the verified-domain journey.
 
 The operator commands are thin browser-authorized Core clients and do not
-require a Next.js project. V1 implements fixed sandbox-canary queue/readback
-plus Core-owned broadcast preflight and read-only Resend segment preview plus
-explicit fingerprint-bound copy. Preflight sends only an exact persisted draft
-version and postal address; it accepts no autosave content and creates no send
-authority or effect. The deployed preflight route currently returns
-`oauth_client_route_denied` for the configured CLI OAuth client, so a
-publishable package is not production broadcast CLI authority. The deployed
-Resend Bridge routes do admit that client. All unexposed broadcast and Bridge
-declarations return the same
-`unsupported_authority` receipt without authenticating or making a request.
+require a Next.js project. V1 implements the fixed sandbox canary, the bounded
+production draft/audience/test/preflight/authorization/control/result journey,
+and Resend preview plus explicit fingerprint-bound copy. The CLI selects
+audiences only by Core IDs, never filenames, and never computes eligibility.
+Preflight observes one exact persisted draft revision. Authorization reuses
+Core's existing authority and immutable recipient freeze. Lost mutation
+responses remain unknown until explicit readback. Unexposed declarations return
+`unsupported_authority` before OAuth or network access.
 See [OPERATOR_CONTRACT.md](./OPERATOR_CONTRACT.md) for the exact command,
 authority, receipt, and future MCP boundary.

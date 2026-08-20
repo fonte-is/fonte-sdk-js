@@ -2,6 +2,7 @@ import type { CoreRequester } from "./operator-core-request.js";
 import { CoreOperatorError } from "./operator-core-request.js";
 import { broadcastPreflight } from "./operator-preflight-json.js";
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+import type { AudienceReuseOverrideInput } from "./operator-production-types.js";
 
 export interface BroadcastPreflightInput {
   readonly workspace: string;
@@ -9,6 +10,7 @@ export interface BroadcastPreflightInput {
   readonly draftId: string;
   readonly expectedVersion: number;
   readonly postalAddress: string;
+  readonly audienceReuseOverride?: AudienceReuseOverrideInput | null;
 }
 
 export async function requestBroadcastPreflight(
@@ -22,6 +24,9 @@ export async function requestBroadcastPreflight(
       body: {
         expectedVersion: input.expectedVersion,
         postalAddress: input.postalAddress,
+        ...(input.audienceReuseOverride
+          ? { audienceReuseOverride: input.audienceReuseOverride }
+          : {}),
       },
       lostResponseEffect: "none",
     },
@@ -50,9 +55,19 @@ function validate(input: BroadcastPreflightInput): void {
     input.expectedVersion < 1 ||
     typeof input.postalAddress !== "string" ||
     !input.postalAddress.trim() ||
-    input.postalAddress.length > 2_000
+    input.postalAddress.length > 2_000 ||
+    !validReuseOverride(input.audienceReuseOverride ?? null)
   )
     throw new CoreOperatorError("broadcast_preflight_invalid", null, "none");
+}
+
+function validReuseOverride(value: AudienceReuseOverrideInput | null): boolean {
+  return (
+    value === null ||
+    (value.version === "audience_reuse_override.v1" &&
+      value.acknowledged === true &&
+      /^sha256:[0-9a-f]{64}$/.test(value.audienceIdentity))
+  );
 }
 
 function invalidReceipt(): never {

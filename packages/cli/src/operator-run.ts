@@ -5,6 +5,11 @@ import {
   createCoreOperatorClient,
   CoreOperatorError,
 } from "./operator-client.js";
+import {
+  executeProductionCommand,
+  isProductionCommand,
+  productionReceiptDescriptor,
+} from "./operator-production-run.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
@@ -61,6 +66,9 @@ async function execute(
   client: ReturnType<typeof createCoreOperatorClient>,
   sleep: (milliseconds: number) => Promise<void>,
 ): Promise<OperatorResult> {
+  if (isProductionCommand(command)) {
+    return executeProductionCommand(command, client, sleep);
+  }
   if (command.kind === "broadcast_test_send") {
     return client.sendSandboxTest({
       workspace: command.workspace,
@@ -84,6 +92,7 @@ async function execute(
       draftId: command.draftId,
       expectedVersion: command.expectedVersion,
       postalAddress: command.postalAddress,
+      audienceReuseOverride: command.audienceReuseOverride,
     });
   }
   if (command.kind === "bridge_resend_preview") {
@@ -118,6 +127,16 @@ function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
 ): OperatorReceipt {
+  const production = productionReceiptDescriptor(command, result);
+  if (production) {
+    return currentReceipt(
+      command,
+      result,
+      production.outcome,
+      production.reason,
+      production.coreEffect,
+    );
+  }
   if (result.kind === "broadcast_preflight") {
     return currentReceipt(
       command,
@@ -149,6 +168,9 @@ function successReceipt(
       result.import_receipt.created ? "copied" : "none",
     );
   }
+  if (result.kind !== "sandbox_test") {
+    throw new TypeError("operator_receipt_unmappable");
+  }
   return currentReceipt(
     command,
     result,
@@ -167,7 +189,7 @@ function currentReceipt(
   result: OperatorResult,
   outcome: "queued" | "terminal" | "completed" | "blocked",
   reason: string,
-  coreEffect: "none" | "queued" | "copied",
+  coreEffect: "none" | "created" | "queued" | "controlled" | "copied",
 ): OperatorReceipt {
   return {
     schema_version: "fonte.cli.operator_receipt.v1",
@@ -202,8 +224,12 @@ function currentAuthority(
     contract_id:
       command.kind === "broadcast_preflight"
         ? "fonte.core.broadcast_preflight.v1"
-        : command.kind.startsWith("bridge_resend_")
-          ? "fonte.core.resend_bridge.v1"
-          : "fonte.core.sandbox_canary.v1",
+        : command.kind.startsWith("broadcast_") &&
+            command.kind !== "broadcast_test_send" &&
+            command.kind !== "broadcast_test_status"
+          ? "fonte.core.production_broadcast.v1"
+          : command.kind.startsWith("bridge_resend_")
+            ? "fonte.core.resend_bridge.v1"
+            : "fonte.core.sandbox_canary.v1",
   };
 }

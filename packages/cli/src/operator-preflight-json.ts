@@ -1,4 +1,5 @@
 import { preflightAudienceEvidence } from "./operator-preflight-audience-json.js";
+import { audienceReuseEvidence } from "./operator-preflight-reuse-json.js";
 import type {
   BroadcastPreflightCheck,
   BroadcastPreflightResult,
@@ -18,6 +19,7 @@ export function broadcastPreflight(value: unknown): BroadcastPreflightResult {
     authorization: check(checksBody.authorization, authorizationEvidence),
     sender: check(checksBody.sender, senderEvidence),
     audience: check(checksBody.audience, preflightAudienceEvidence),
+    audience_reuse: check(checksBody.audienceReuse, audienceReuseEvidence),
     billing: check(checksBody.billing, billingEvidence),
     safety_feedback: check(checksBody.safetyFeedback, safetyEvidence),
     provider_capacity: check(checksBody.providerCapacity, capacityEvidence),

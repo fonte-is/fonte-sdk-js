@@ -79,6 +79,16 @@ export interface BroadcastPreflightResult {
       readonly sender_id: string;
     }>;
     readonly audience: BroadcastPreflightCheck<PreflightAudienceEvidence>;
+    readonly audience_reuse: BroadcastPreflightCheck<{
+      readonly identity: {
+        readonly version: "audience_reuse_identity.v1";
+        readonly digest: string;
+      };
+      readonly prior_authorization_count: number | null;
+      readonly latest_authorized_at: string | null;
+      readonly override_required: boolean | null;
+      readonly override_accepted: boolean;
+    }>;
     readonly billing: BroadcastPreflightCheck<{
       readonly billing_required: boolean;
       readonly eligible_recipient_count: number;

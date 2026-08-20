@@ -31,6 +31,7 @@ test("preflight grammar requires the exact persisted-draft inputs", () => {
       draftId,
       expectedVersion: 3,
       postalAddress,
+      audienceReuseOverride: null,
     },
   });
   for (const invalid of [
@@ -122,13 +123,13 @@ test("human output lists every current and future typed blocker", async () => {
   assertSanitized(result.stdout);
 });
 
-test("production authority declarations other than preflight remain unsupported", async () => {
+test("unexposed production authority declarations remain unsupported", async () => {
   for (const operation of [
-    "authorize",
     "prepare",
     "send",
     "reconcile",
-    "pause",
+    "watch",
+    "duplicate",
   ]) {
     let calls = 0;
     const result = await runProgram(
@@ -208,6 +209,16 @@ function readyReceipt(extra = {}) {
       }),
       sender: ready({ senderId: "sender_synthetic_preflight" }),
       audience: ready(audienceEvidence()),
+      audienceReuse: ready({
+        identity: {
+          version: "audience_reuse_identity.v1",
+          digest: `sha256:${"a".repeat(64)}`,
+        },
+        priorAuthorizationCount: 0,
+        latestAuthorizedAt: null,
+        overrideRequired: false,
+        overrideAccepted: false,
+      }),
       billing: ready({
         billingRequired: false,
         eligibleRecipientCount: 6,

@@ -1,3 +1,4 @@
+import { renderProductionOperatorHuman } from "./operator-production-render.js";
 import type { OperatorReceipt } from "./operator-types.js";
 
 export function renderOperatorJson(receipt: OperatorReceipt): string {
@@ -8,33 +9,11 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   if (receipt.outcome === "unsupported_authority") {
     return "Fonte operation unavailable: unsupported_authority.\nCore effect: none.\n";
   }
-  if (receipt.result?.kind === "broadcast_preflight") {
-    return renderPreflight(receipt.result);
+  if (receipt.outcome === "blocked" && receipt.result === null) {
+    return renderBlocked(receipt);
   }
-  if (receipt.outcome === "blocked") {
-    if (receipt.reason === "resend_bridge_unavailable") {
-      return [
-        "Fonte Resend Bridge could not continue.",
-        "Core returned 503: Resend Bridge credential custody is unavailable.",
-        `Reason: ${receipt.reason}.`,
-        `Core effect: ${receipt.core_effect}.`,
-        "",
-      ].join("\n");
-    }
-    return [
-      receipt.command.startsWith("bridge_resend_")
-        ? "Fonte Resend Bridge could not continue."
-        : receipt.command === "broadcast_preflight"
-          ? "Fonte broadcast preflight could not be observed."
-          : "Fonte sandbox test could not continue.",
-      ...(receipt.command === "broadcast_preflight"
-        ? ["Readiness: unknown."]
-        : []),
-      `Reason: ${receipt.reason}.`,
-      `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
+  const production = renderProductionOperatorHuman(receipt);
+  if (production !== null) return production;
   const result = receipt.result!;
   if (result.kind === "resend_bridge_preview") {
     return [
@@ -60,6 +39,9 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       "",
     ].join("\n");
   }
+  if (result.kind !== "sandbox_test") {
+    throw new TypeError("operator_receipt_unrenderable");
+  }
   return [
     `Fonte sandbox test: ${result.status}.`,
     `Accepted/refused/unknown: ${counts(result)}.`,
@@ -69,20 +51,30 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   ].join("\n");
 }
 
-function renderPreflight(
-  result: Extract<
-    NonNullable<OperatorReceipt["result"]>,
-    { readonly kind: "broadcast_preflight" }
-  >,
-): string {
+function renderBlocked(receipt: OperatorReceipt): string {
+  if (receipt.reason === "resend_bridge_unavailable") {
+    return [
+      "Fonte Resend Bridge could not continue.",
+      "Core returned 503: Resend Bridge credential custody is unavailable.",
+      `Reason: ${receipt.reason}.`,
+      `Core effect: ${receipt.core_effect}.`,
+      "",
+    ].join("\n");
+  }
   return [
-    `Fonte broadcast preflight: ${result.ready ? "ready" : "blocked"}.`,
-    `Draft version requested/confirmed: ${result.requested_draft_version}/${result.confirmed_draft_version ?? "unknown"}.`,
-    result.blockers.length === 0
-      ? "Blockers: none."
-      : `Blockers (${result.blockers.length}):`,
-    ...result.blockers.map(({ authority, code }) => `- ${authority}: ${code}`),
-    "Core effect: none.",
+    receipt.command.startsWith("bridge_resend_")
+      ? "Fonte Resend Bridge could not continue."
+      : receipt.command === "broadcast_preflight"
+        ? "Fonte broadcast preflight could not be observed."
+        : receipt.command === "broadcast_test_send" ||
+            receipt.command === "broadcast_test_status"
+          ? "Fonte sandbox test could not continue."
+          : "Fonte production broadcast operation could not continue.",
+    ...(receipt.command === "broadcast_preflight"
+      ? ["Readiness: unknown."]
+      : []),
+    `Reason: ${receipt.reason}.`,
+    `Core effect: ${receipt.core_effect}.`,
     "",
   ].join("\n");
 }
