@@ -16,6 +16,7 @@ const result = await runProgram(process.argv.slice(2), {
   randomUUID,
   runner: systemRunner,
   authExec: {
+    configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
     authorize: (config, signal) => authorizeWithBrowser(config, { signal }),
     spawn: spawnAuthorizedConsumer,

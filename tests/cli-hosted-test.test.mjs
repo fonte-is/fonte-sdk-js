@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   HOSTED_CONFIG_URL,
+  loadHostedConfig,
   parseHostedConfig,
 } from "../packages/cli/dist/hosted-config.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
@@ -37,6 +38,31 @@ test("hosted configuration is exact and HTTPS-bound", () => {
   );
   assert.throws(
     () => parseHostedConfig({ ...config, extra: true }),
+    HostedTestBlockedError,
+  );
+});
+
+test("local exec discovery is loopback-only and may target loopback Core", async () => {
+  const local = { ...config, coreApiBaseUrl: "http://127.0.0.1:3010" };
+  assert.deepEqual(
+    await loadHostedConfig(
+      async () => json(local),
+      "http://127.0.0.1:3000/.well-known/fonte-cli.json",
+    ),
+    local,
+  );
+  await assert.rejects(
+    loadHostedConfig(
+      async () => json(local),
+      "http://localhost:3000/.well-known/fonte-cli.json",
+    ),
+    HostedTestBlockedError,
+  );
+  await assert.rejects(
+    loadHostedConfig(
+      async () => json(local),
+      "https://example.test/.well-known/fonte-cli.json",
+    ),
     HostedTestBlockedError,
   );
 });

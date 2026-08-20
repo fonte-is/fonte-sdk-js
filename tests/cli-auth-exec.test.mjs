@@ -126,14 +126,20 @@ test("browser authorization cancellation and callback timeout fail closed", asyn
 
 test("authorized orchestration performs only hosted discovery and a direct child handoff", async () => {
   const calls = [];
+  const requestedUrls = [];
   let requests = 0;
   await runAuthorizedConsumer("node", ["local-bootstrap.mjs"], {
-    fetch: async () => {
+    configUrl: "http://127.0.0.1:3000/.well-known/fonte-cli.json",
+    fetch: async (input) => {
       requests += 1;
-      return json(config);
+      requestedUrls.push(String(input));
+      return json({ ...config, coreApiBaseUrl: "http://127.0.0.1:3010" });
     },
     authorize: async (received) => {
-      assert.deepEqual(received, config);
+      assert.deepEqual(received, {
+        ...config,
+        coreApiBaseUrl: "http://127.0.0.1:3010",
+      });
       return bearer;
     },
     spawn: async (command, args, receivedBearer) => {
@@ -142,6 +148,9 @@ test("authorized orchestration performs only hosted discovery and a direct child
   });
 
   assert.equal(requests, 1);
+  assert.deepEqual(requestedUrls, [
+    "http://127.0.0.1:3000/.well-known/fonte-cli.json",
+  ]);
   assert.deepEqual(calls, [
     {
       command: "node",

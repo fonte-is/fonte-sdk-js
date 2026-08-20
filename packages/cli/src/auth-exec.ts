@@ -8,7 +8,10 @@ export async function runAuthorizedConsumer(
   dependencies: AuthorizedConsumerDependencies,
 ): Promise<void> {
   assertActive(dependencies.signal);
-  const config = await loadHostedConfig(dependencies.fetch as typeof fetch);
+  const config = await loadHostedConfig(
+    dependencies.fetch as typeof fetch,
+    dependencies.configUrl,
+  );
   assertActive(dependencies.signal);
   const bearer = await dependencies.authorize(config, dependencies.signal);
   if (!bearer.trim()) {

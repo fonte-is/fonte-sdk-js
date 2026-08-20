@@ -29,6 +29,7 @@ export interface ProgramDependencies {
 }
 
 export interface AuthorizedConsumerDependencies {
+  readonly configUrl?: string;
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
   authorize(config: HostedConfig, signal?: AbortSignal): Promise<string>;
   spawn(

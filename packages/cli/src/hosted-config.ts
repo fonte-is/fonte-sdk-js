@@ -13,10 +13,12 @@ export interface HostedConfig {
 
 export async function loadHostedConfig(
   fetcher: typeof fetch,
+  configUrl = HOSTED_CONFIG_URL,
 ): Promise<HostedConfig> {
+  const localDiscovery = localDiscoveryUrl(configUrl);
   let response: Response;
   try {
-    response = await fetcher(HOSTED_CONFIG_URL, {
+    response = await fetcher(configUrl, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -26,10 +28,13 @@ export async function loadHostedConfig(
   if (!response.ok)
     throw new HostedTestBlockedError("hosted_configuration_unavailable");
   const value: unknown = await response.json().catch(() => null);
-  return parseHostedConfig(value);
+  return parseHostedConfig(value, localDiscovery);
 }
 
-export function parseHostedConfig(value: unknown): HostedConfig {
+export function parseHostedConfig(
+  value: unknown,
+  allowLoopbackCore = false,
+): HostedConfig {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return invalid();
   const record = value as Record<string, unknown>;
@@ -55,19 +60,22 @@ export function parseHostedConfig(value: unknown): HostedConfig {
     return invalid();
   return {
     schema: record.schema,
-    authorizationServer: secureUrl(record.authorizationServer),
+    authorizationServer: secureUrl(record.authorizationServer, false),
     clientId: record.clientId,
-    coreApiBaseUrl: secureUrl(record.coreApiBaseUrl),
+    coreApiBaseUrl: secureUrl(record.coreApiBaseUrl, allowLoopbackCore),
     redirectUri: record.redirectUri,
     scopes: ["email"],
   };
 }
 
-function secureUrl(value: unknown): string {
+function secureUrl(value: unknown, allowLoopbackHttp: boolean): string {
   if (typeof value !== "string") return invalid();
   const url = new URL(value);
+  const loopbackHttp = allowLoopbackHttp
+    && url.protocol === "http:"
+    && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
   if (
-    url.protocol !== "https:" ||
+    (url.protocol !== "https:" && !loopbackHttp) ||
     url.username ||
     url.password ||
     url.search ||
@@ -75,6 +83,26 @@ function secureUrl(value: unknown): string {
   )
     return invalid();
   return url.toString().replace(/\/$/, "");
+}
+
+function localDiscoveryUrl(value: string): boolean {
+  if (value === HOSTED_CONFIG_URL) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return invalid();
+  }
+  if (
+    url.protocol !== "http:"
+    || url.hostname !== "127.0.0.1"
+    || url.pathname !== "/.well-known/fonte-cli.json"
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+  ) return invalid();
+  return true;
 }
 
 function invalid(): never {
