@@ -1,5 +1,6 @@
 import type { ParsedArguments } from "./types.js";
 import { CliUsageError } from "./errors.js";
+import { parseOperatorArguments } from "./operator-arguments.js";
 
 /** Implement exactly the invocation grammar in CONTRACT.md. */
 export function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -11,6 +12,15 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   }
   const command = argv[0];
   if (command === "auth") return parseAuthExecArguments(argv.slice(1));
+  if (command === "broadcast" || command === "bridge") {
+    const operator = parseOperatorArguments(argv);
+    return {
+      command: "operator",
+      apply: false,
+      json: operator.json,
+      operator: operator.command,
+    };
+  }
   if (
     command !== "init" &&
     command !== "doctor" &&

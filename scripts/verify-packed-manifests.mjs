@@ -49,7 +49,7 @@ for (const name of packageOrder) {
   for (const entry of entries) {
     assert.match(
       entry,
-      /^package\/(package\.json|README\.md|dist\/)/,
+      /^package\/(package\.json|README\.md|OPERATOR_CONTRACT\.md|dist\/)/,
       `${manifest.name} packed unexpected file ${entry}`,
     );
     assert.ok(

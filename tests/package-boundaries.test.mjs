@@ -52,11 +52,16 @@ test("dependency edges point only from framework bindings to Core", async () => 
   assert.deepEqual(cli.peerDependencies ?? {}, {});
 });
 
-test("the CLI package has one stable binary and no library surface", async () => {
+test("the CLI package has one stable binary and one operator client surface", async () => {
   const cli = await readJson("packages/cli/package.json");
   assert.deepEqual(cli.bin, { fonte: "./dist/main.js" });
   assert.equal(cli.main, undefined);
-  assert.deepEqual(cli.exports, {});
+  assert.deepEqual(cli.exports, {
+    "./operator-client": {
+      types: "./dist/operator-client.d.ts",
+      import: "./dist/operator-client.js",
+    },
+  });
 });
 
 test("server entry points are Node-only conditional exports", async () => {

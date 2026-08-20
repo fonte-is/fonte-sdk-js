@@ -9,8 +9,12 @@ import { systemRunner } from "./runner.js";
 
 const cancellation = new AbortController();
 const cancel = () => cancellation.abort();
-process.once("SIGINT", cancel);
-process.once("SIGTERM", cancel);
+const authExecInvocation =
+  process.argv[2] === "auth" && process.argv[3] === "exec";
+if (authExecInvocation) {
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+}
 const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
@@ -22,6 +26,13 @@ const result = await runProgram(process.argv.slice(2), {
     spawn: spawnAuthorizedConsumer,
     signal: cancellation.signal,
   },
+  operator: {
+    configUrl: process.env.FONTE_CLI_CONFIG_URL,
+    fetch: globalThis.fetch,
+    authorize: authorizeWithBrowser,
+    sleep: (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  },
   hosted: {
     fetch: globalThis.fetch,
     authorize: authorizeWithBrowser,
@@ -29,8 +40,10 @@ const result = await runProgram(process.argv.slice(2), {
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   },
 }).finally(() => {
-  process.removeListener("SIGINT", cancel);
-  process.removeListener("SIGTERM", cancel);
+  if (authExecInvocation) {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
+  }
 });
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);

@@ -1,5 +1,12 @@
+import type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
+
 export type CommandName = "init" | "doctor" | "remove" | "test";
-export type ParsedCommand = CommandName | "auth-exec" | "help" | "version";
+export type ParsedCommand =
+  | CommandName
+  | "auth-exec"
+  | "operator"
+  | "help"
+  | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
@@ -8,6 +15,7 @@ export interface ParsedArguments {
   workspaceSlug?: string;
   consumerCommand?: string;
   consumerArguments?: readonly string[];
+  operator?: OperatorCommand;
 }
 
 export type BlockReason =
@@ -143,4 +151,4 @@ export interface HostedTestReceipt {
   token_persisted: false;
 }
 
-export type AnyCliReceipt = CliReceipt | HostedTestReceipt;
+export type AnyCliReceipt = CliReceipt | HostedTestReceipt | OperatorReceipt;

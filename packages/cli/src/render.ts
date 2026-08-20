@@ -1,12 +1,19 @@
 import { blockerGuidance } from "./blocker-guidance.js";
 import { hostedBlockerGuidance } from "./hosted-blocker-guidance.js";
 import type { AnyCliReceipt, HostedTestReceipt } from "./types.js";
+import { renderOperatorHuman, renderOperatorJson } from "./operator-render.js";
 
 export function renderJson(receipt: AnyCliReceipt): string {
+  if (receipt.schema_version === "fonte.cli.operator_receipt.v1") {
+    return renderOperatorJson(receipt);
+  }
   return `${JSON.stringify(receipt)}\n`;
 }
 
 export function renderHuman(receipt: AnyCliReceipt): string {
+  if (receipt.schema_version === "fonte.cli.operator_receipt.v1") {
+    return renderOperatorHuman(receipt);
+  }
   if (receipt.schema_version === "fonte.cli.test_receipt.v1")
     return renderTest(receipt);
   if (receipt.outcome === "planned") {

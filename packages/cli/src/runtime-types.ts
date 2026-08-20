@@ -1,5 +1,6 @@
 import type { AnyCliReceipt } from "./types.js";
 import type { HostedConfig } from "./hosted-config.js";
+import type { OperatorDependencies } from "./operator-run.js";
 
 export interface ProjectProfile {
   root: string;
@@ -25,6 +26,7 @@ export interface ProgramDependencies {
   randomUUID(): string;
   runner: CommandRunner;
   authExec?: AuthorizedConsumerDependencies;
+  operator?: OperatorDependencies;
   hosted?: HostedTestDependencies;
 }
 

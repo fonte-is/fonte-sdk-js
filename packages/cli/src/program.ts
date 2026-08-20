@@ -23,6 +23,7 @@ import { blockedReceipt, plannedReceipt } from "./receipts.js";
 import { renderHuman, renderJson } from "./render.js";
 import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
+import { runOperatorCommand } from "./operator-run.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
 export async function runProgram(
@@ -46,6 +47,14 @@ export async function runProgram(
   }
   if (parsed.command === "auth-exec") {
     return executeAuthExec(parsed, dependencies);
+  }
+  if (parsed.command === "operator") {
+    if (!dependencies.operator) return executionFailure();
+    const receipt = await runOperatorCommand(
+      parsed.operator!,
+      dependencies.operator,
+    );
+    return receiptResult(receipt, parsed.json, receiptExitCode(receipt));
   }
   const request = { ...parsed, command: parsed.command };
   try {
@@ -101,6 +110,12 @@ function authorizationFailure(): CommandResult {
 }
 
 function receiptExitCode(receipt: AnyCliReceipt): 0 | 3 {
+  if (receipt.schema_version === "fonte.cli.operator_receipt.v1") {
+    return receipt.outcome === "blocked" ||
+      receipt.outcome === "unsupported_authority"
+      ? 3
+      : 0;
+  }
   if (receipt.schema_version !== "fonte.cli.test_receipt.v1") return 0;
   return receipt.outcome === "terminal" &&
     receipt.provider_submission === "accepted"

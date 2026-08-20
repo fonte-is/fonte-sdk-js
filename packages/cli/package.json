@@ -13,13 +13,19 @@
     "url": "https://github.com/fonte-is/fonte-sdk-js/issues"
   },
   "type": "module",
-  "exports": {},
+  "exports": {
+    "./operator-client": {
+      "types": "./dist/operator-client.d.ts",
+      "import": "./dist/operator-client.js"
+    }
+  },
   "bin": {
     "fonte": "./dist/main.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "OPERATOR_CONTRACT.md"
   ],
   "engines": {
     "node": ">=20.9.0"

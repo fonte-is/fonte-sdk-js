@@ -58,6 +58,8 @@ export const USAGE_TEXT = [
   "  fonte doctor [--json]",
   "  fonte test --workspace <slug> [--json]",
   "  fonte auth exec -- <command> [args...]",
+  "  fonte broadcast <command> ... [--json]",
+  "  fonte bridge <command> ... [--json]",
   "  fonte remove [--yes] [--json]",
   "  fonte --help",
   "  fonte --version",
@@ -72,6 +74,8 @@ export const HELP_TEXT = [
   "init and remove print a plan unless --yes is supplied.",
   "test opens Fonte in your browser and requests one sandbox provider proof.",
   "auth exec opens Fonte in your browser and runs one bearer-bound child.",
+  "broadcast test uses Core's fixed sandbox canary authority.",
+  "Unsupported broadcast and Bridge declarations have no Core effect.",
   "Production and transactional application email remain locked.",
   "",
 ].join("\n");

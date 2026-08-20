@@ -21,7 +21,11 @@ V0 supports only:
 - local preparation, verification, and removal;
 - one browser-authorized, directly spawned local consumer process; and
 - one browser-authorized sandbox provider proof to the signed-in account's
-  verified email address.
+  verified email address;
+- one thin operator-client surface for current Core fixed sandbox canary queue
+  and readback; and
+- stable unsupported-authority receipts for the missing contracts frozen in
+  `OPERATOR_CONTRACT.md`.
 
 V0 does not create an account, arbitrary recipient, sender, domain, contact,
 payment, production broadcast, or transactional application-email request.
@@ -38,6 +42,8 @@ fonte init [--yes] [--json]
 fonte doctor [--json]
 fonte test --workspace <slug> [--json]
 fonte auth exec -- <command> [args...]
+fonte broadcast <command> ... [--json]
+fonte bridge <command> ... [--json]
 fonte remove [--yes] [--json]
 fonte --help
 fonte --version

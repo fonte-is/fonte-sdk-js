@@ -9,6 +9,8 @@ npx @fonte-is/cli init --yes
 npx @fonte-is/cli doctor
 npx @fonte-is/cli test --workspace my-workspace
 npx @fonte-is/cli auth exec -- npm run local:core-bootstrap
+npx @fonte-is/cli broadcast test send --workspace my-workspace --environment sandbox --draft-id <uuid> --revision 1 --idempotency-key <key>
+npx @fonte-is/cli broadcast test status --workspace my-workspace --environment sandbox --test-id <uuid> --watch
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
@@ -69,3 +71,10 @@ acceptance, refusal, or an unknown provider result from inbox delivery. Only an
 accepted email contributes one included sandbox usage unit. Account creation,
 arbitrary recipients, production email, and transactional application email
 remain unavailable; production capability requires the verified-domain journey.
+
+The operator commands are thin browser-authorized Core clients and do not
+require a Next.js project. V1 implements only fixed sandbox-canary queue and
+readback. All unexposed broadcast and Bridge declarations return the same
+`unsupported_authority` receipt without authenticating or making a request.
+See [OPERATOR_CONTRACT.md](./OPERATOR_CONTRACT.md) for the exact command,
+authority, receipt, and future MCP boundary.
