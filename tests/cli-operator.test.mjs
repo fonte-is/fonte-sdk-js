@@ -76,11 +76,11 @@ test("every absent broadcast and Bridge declaration is generically unsupported",
     ["broadcast", "resume"],
     ["broadcast", "cancel"],
     ["broadcast", "duplicate"],
-    ["bridge", "observe", "synthetic_provider"],
+    ["bridge", "observe", "kit"],
     ["bridge", "status"],
     ["bridge", "diff"],
     ["bridge", "placement-plan"],
-    ["bridge", "copy", "--json"],
+    ["bridge", "copy", "kit", "--json"],
     ["bridge", "reconcile"],
   ]) {
     let calls = 0;

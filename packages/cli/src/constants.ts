@@ -75,7 +75,8 @@ export const HELP_TEXT = [
   "test opens Fonte in your browser and requests one sandbox provider proof.",
   "auth exec opens Fonte in your browser and runs one bearer-bound child.",
   "broadcast test uses Core's fixed sandbox canary authority.",
-  "Unsupported broadcast and Bridge declarations have no Core effect.",
+  "bridge observe/copy resend use Core's admitted Resend Bridge authority.",
+  "All other broadcast and Bridge declarations have no Core effect.",
   "Production and transactional application email remain locked.",
   "",
 ].join("\n");

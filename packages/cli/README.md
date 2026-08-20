@@ -11,6 +11,8 @@ npx @fonte-is/cli test --workspace my-workspace
 npx @fonte-is/cli auth exec -- npm run local:core-bootstrap
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment sandbox --draft-id <uuid> --revision 1 --idempotency-key <key>
 npx @fonte-is/cli broadcast test status --workspace my-workspace --environment sandbox --test-id <uuid> --watch
+npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
+npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
@@ -73,8 +75,9 @@ arbitrary recipients, production email, and transactional application email
 remain unavailable; production capability requires the verified-domain journey.
 
 The operator commands are thin browser-authorized Core clients and do not
-require a Next.js project. V1 implements only fixed sandbox-canary queue and
-readback. All unexposed broadcast and Bridge declarations return the same
+require a Next.js project. V1 implements fixed sandbox-canary queue/readback
+and Core-owned read-only Resend segment preview plus explicit fingerprint-bound
+copy. All unexposed broadcast and Bridge declarations return the same
 `unsupported_authority` receipt without authenticating or making a request.
 See [OPERATOR_CONTRACT.md](./OPERATOR_CONTRACT.md) for the exact command,
 authority, receipt, and future MCP boundary.

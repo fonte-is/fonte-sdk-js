@@ -1,7 +1,26 @@
-import { coreError, queuedSandboxTest, sandboxTest } from "./operator-json.js";
-import type { SandboxTestResult } from "./operator-types.js";
+import {
+  queuedSandboxTest,
+  resendBridgeCopy,
+  resendBridgePreview,
+  sandboxTest,
+} from "./operator-json.js";
+import {
+  createCoreRequester,
+  CoreOperatorError,
+} from "./operator-core-request.js";
+import type {
+  ResendBridgeCopyResult,
+  ResendBridgePreviewResult,
+  SandboxTestResult,
+} from "./operator-types.js";
 
-export type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
+export type {
+  OperatorCommand,
+  OperatorReceipt,
+  ResendBridgeCopyResult,
+  ResendBridgePreviewResult,
+} from "./operator-types.js";
+export { CoreOperatorError } from "./operator-core-request.js";
 
 export interface CoreOperatorClientOptions {
   readonly coreApiBaseUrl: string;
@@ -12,6 +31,12 @@ export interface CoreOperatorClientOptions {
 export interface CoreOperatorClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
+  previewResendSegment(
+    input: ResendBridgePreviewInput,
+  ): Promise<ResendBridgePreviewResult>;
+  copyResendSegment(
+    input: ResendBridgeCopyInput,
+  ): Promise<ResendBridgeCopyResult>;
 }
 
 export interface SandboxTestSendInput {
@@ -26,26 +51,21 @@ export interface SandboxTestReadInput {
   readonly testId: string;
 }
 
-export class CoreOperatorError extends Error {
-  constructor(
-    readonly reason: string,
-    readonly statusCode: number | null,
-    readonly coreEffect: "none" | "unknown",
-  ) {
-    super(reason);
-    this.name = "CoreOperatorError";
-  }
+export interface ResendBridgePreviewInput {
+  readonly workspace: string;
+  readonly environment: "sandbox" | "production";
+  readonly segmentId: string;
+}
+
+export interface ResendBridgeCopyInput extends ResendBridgePreviewInput {
+  readonly expectedObservationFingerprint: string;
+  readonly idempotencyKey: string;
 }
 
 export function createCoreOperatorClient(
   options: CoreOperatorClientOptions,
 ): CoreOperatorClient {
-  const baseUrl = validatedBaseUrl(options.coreApiBaseUrl);
-  const bearer = options.bearer.trim();
-  if (!bearer || /\s/.test(bearer)) {
-    throw new CoreOperatorError("authorization_token_missing", null, "none");
-  }
-  const request = requester(baseUrl, bearer, options.fetch);
+  const request = createCoreRequester(options);
   return {
     async sendSandboxTest(input) {
       const response = await request(
@@ -57,6 +77,7 @@ export function createCoreOperatorClient(
             draftVersion: input.revision,
             idempotencyKey: input.idempotencyKey,
           },
+          lostResponseEffect: "unknown",
         },
       );
       return parseCurrent(queuedSandboxTest, response, "unknown");
@@ -69,54 +90,103 @@ export function createCoreOperatorClient(
         ),
       );
     },
+    async previewResendSegment(input) {
+      const result = parseCurrent(
+        resendBridgePreview,
+        await request(resendPath(input, "preview"), {
+          body: {},
+          lostResponseEffect: "none",
+        }),
+      );
+      return matchingObservation(result, input, "none");
+    },
+    async copyResendSegment(input) {
+      const expectedObservationFingerprint = bridgeFingerprint(
+        input.expectedObservationFingerprint,
+      );
+      const idempotencyKey = bridgeIdempotencyKey(input.idempotencyKey);
+      const result = parseCurrent(
+        resendBridgeCopy,
+        await request(resendPath(input, "copy"), {
+          body: {
+            expectedObservationFingerprint,
+            idempotencyKey,
+          },
+          idempotencyKey,
+          lostResponseEffect: "unknown",
+        }),
+        "unknown",
+      );
+      const matched = matchingObservation(result, input, "unknown");
+      if (matched.observation_fingerprint !== expectedObservationFingerprint) {
+        invalidReceipt("unknown");
+      }
+      return matched;
+    },
   };
 }
 
-interface MutationOptions {
-  readonly idempotencyKey: string;
-  readonly body: Record<string, unknown>;
+function resendPath(
+  input: ResendBridgePreviewInput,
+  operation: "preview" | "copy",
+): string {
+  if (input.environment !== "sandbox" && input.environment !== "production")
+    invalidRequest();
+  const segmentId = providerSegmentId(input.segmentId);
+  return `/v1/workspaces/${segment(input.workspace)}/bridge/resend/segments/${segment(segmentId)}/${operation}?environment=${input.environment}`;
 }
 
-function requester(
-  baseUrl: string,
-  bearer: string,
-  fetcher: typeof fetch,
-): (path: string, options?: MutationOptions) => Promise<unknown> {
-  return async (path, options) => {
-    let response: Response;
-    try {
-      response = await fetcher(`${baseUrl}${path}`, {
-        method: options ? "POST" : "GET",
-        headers: {
-          accept: "application/json",
-          authorization: `Bearer ${bearer}`,
-          ...(options
-            ? {
-                "content-type": "application/json",
-                "idempotency-key": options.idempotencyKey,
-              }
-            : {}),
-        },
-        ...(options ? { body: JSON.stringify(options.body) } : {}),
-        signal: AbortSignal.timeout(15_000),
-      });
-    } catch {
-      throw new CoreOperatorError(
-        "core_api_unavailable",
-        null,
-        options ? "unknown" : "none",
-      );
-    }
-    const body: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new CoreOperatorError(
-        coreError(body, response.status),
-        response.status,
-        options && response.status >= 500 ? "unknown" : "none",
-      );
-    }
-    return body;
-  };
+function providerSegmentId(value: string): string {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > 500 ||
+    value.includes("/") ||
+    /\p{Cc}/u.test(value)
+  )
+    invalidRequest();
+  return value;
+}
+
+function bridgeFingerprint(value: string): string {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value))
+    invalidRequest();
+  return value;
+}
+
+function bridgeIdempotencyKey(value: string): string {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value !== value.trim() ||
+    value.length > 100 ||
+    /\p{Cc}/u.test(value)
+  )
+    invalidRequest();
+  return value;
+}
+
+function invalidRequest(): never {
+  throw new CoreOperatorError("resend_bridge_request_invalid", null, "none");
+}
+
+function matchingObservation<
+  T extends { readonly segment: { readonly id: string } },
+>(
+  result: T,
+  input: ResendBridgePreviewInput,
+  coreEffect: "none" | "unknown",
+): T {
+  if (result.segment.id !== input.segmentId) invalidReceipt(coreEffect);
+  return result;
+}
+
+function invalidReceipt(coreEffect: "none" | "unknown"): never {
+  throw new CoreOperatorError(
+    "core_operator_receipt_invalid",
+    null,
+    coreEffect,
+  );
 }
 
 function parseCurrent<T>(
@@ -133,23 +203,6 @@ function parseCurrent<T>(
       coreEffect,
     );
   }
-}
-
-function validatedBaseUrl(value: string): string {
-  const url = new URL(value);
-  const loopback =
-    url.protocol === "http:" &&
-    (url.hostname === "127.0.0.1" || url.hostname === "localhost");
-  if (
-    (url.protocol !== "https:" && !loopback) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new CoreOperatorError("core_api_base_url_invalid", null, "none");
-  }
-  return url.toString().replace(/\/$/, "");
 }
 
 function segment(value: string): string {
