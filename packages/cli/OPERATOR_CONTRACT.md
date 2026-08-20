@@ -3,13 +3,16 @@
 ## Implemented slice
 
 V1 exposes the current fixed sandbox broadcast test queue/readback and the
-Core-owned Resend Bridge segment preview/copy routes:
+Core-owned broadcast preflight and Resend Bridge routes:
 
 ```text
 fonte broadcast test send --workspace <slug> --environment sandbox \
   --draft-id <uuid> --revision <n> --idempotency-key <key> [--json]
 fonte broadcast test status --workspace <slug> --environment sandbox \
   --test-id <uuid> [--watch] [--json]
+fonte broadcast preflight --workspace <slug> \
+  --environment <sandbox|production> --draft-id <uuid> \
+  --expected-version <n> --postal-address <address> [--json]
 fonte bridge observe resend --workspace <slug> \
   --environment <sandbox|production> --segment-id <provider-id> [--json]
 fonte bridge copy resend --workspace <slug> \
@@ -26,8 +29,26 @@ and accepted-usage counts; it never contains the recipient address, provider
 message fields, message body, bearer, cookie, contact, or provider payload.
 
 The exported `@fonte-is/cli/operator-client` boundary accepts an in-memory
-bearer and exposes only these four current Core operations. It has no database,
+bearer and exposes only these five Core operations. It has no database,
 provider adapter, credential-storage, or authority-synthesis capability.
+
+`broadcast preflight` sends exactly `{ expectedVersion, postalAddress }` to
+Core's observation-only preflight route. Both values are explicit: the CLI
+never infers a draft version and never accepts subject, body, audience, or
+autosave content. The postal address must be non-empty and at most 2,000
+characters. Output remains bound to Core's workspace, environment, draft ID,
+requested version, confirmed persisted version, observation time, ready flag,
+complete blocker list, and typed checks for draft, rendering, authorization,
+sender, audience, billing, safety feedback, and persisted SES capacity.
+Unavailable evidence remains `null`; the CLI never substitutes zero.
+
+Blocker authority and code values are bounded lower-case identifiers rather
+than a closed SDK enum. This preserves Core's typed blocker list while allowing
+the FON-12 reuse-protection composition to add a blocker without creating a
+second policy engine in the CLI. Human output lists every blocker. A lost or
+invalid response reports unknown readiness and never claims a passed
+preflight. Preflight creates no authorization, reservation, snapshot, outbox,
+send, schedule, or draft mutation.
 
 `bridge observe resend` maps only to Core's read-only Resend segment preview.
 It sends `{}` and prints a sanitized observation receipt: connection and
@@ -47,6 +68,14 @@ implicit copy after preview.
 
 ## Current Core bedrock
 
+The FON-10 preflight contract exists only in local Core candidate
+`65d9a85c1a9ae8a53890fc57e837351a34bd7a66`; it is not admitted or deployed.
+The CLI command therefore cannot operate against production yet. That Core
+route also intentionally rejects the current CLI OAuth client under the frozen
+candidate. The CLI surfaces `oauth_client_route_denied` and does not bypass
+workspace authorization. Admission must compose FON-10 with FON-12 and the
+required exact OAuth route policy before release.
+
 The admitted Resend Bridge route currently calls workspace authorization
 without allowing the configured CLI OAuth client ID. A bearer issued through
 the sanctioned CLI browser flow therefore receives Core's exact
@@ -62,8 +91,8 @@ custody blocker; it never accepts, stores, or provisions a Resend credential.
 ## Generic unsupported authority
 
 Current Core does not expose the required operator authority for draft
-create/update, audience attach/preview, preflight, exact production
-authorization, idempotent pause/resume/cancel, or provenance-preserving
+create/update, audience attach/preview, production prepare/authorization/send,
+reconciliation, idempotent pause/resume/cancel, or provenance-preserving
 duplication. All those broadcast declarations return the same
 `unsupported_authority` receipt before OAuth, file access, or network access.
 

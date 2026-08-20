@@ -1,4 +1,5 @@
 import { CliUsageError } from "./errors.js";
+import { parsePreflightArguments } from "./operator-preflight-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
 const missingBroadcast = new Set([
@@ -6,6 +7,9 @@ const missingBroadcast = new Set([
   "audience",
   "preflight",
   "authorize",
+  "prepare",
+  "send",
+  "reconcile",
   "status",
   "watch",
   "pause",
@@ -28,6 +32,9 @@ export function parseOperatorArguments(
   if (argv[0] === "broadcast" && argv[1] === "test") {
     if (argv[2] === "send") return testSend(argv.slice(3));
     if (argv[2] === "status") return testStatus(argv.slice(3));
+  }
+  if (argv[0] === "broadcast" && argv[1] === "preflight") {
+    return parsePreflightArguments(argv.slice(2));
   }
   if (argv[0] === "bridge" && argv[2] === "resend") {
     if (argv[1] === "observe") return resendPreview(argv.slice(3));

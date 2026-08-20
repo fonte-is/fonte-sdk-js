@@ -8,6 +8,9 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   if (receipt.outcome === "unsupported_authority") {
     return "Fonte operation unavailable: unsupported_authority.\nCore effect: none.\n";
   }
+  if (receipt.result?.kind === "broadcast_preflight") {
+    return renderPreflight(receipt.result);
+  }
   if (receipt.outcome === "blocked") {
     if (receipt.reason === "resend_bridge_unavailable") {
       return [
@@ -21,7 +24,12 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
     return [
       receipt.command.startsWith("bridge_resend_")
         ? "Fonte Resend Bridge could not continue."
-        : "Fonte sandbox test could not continue.",
+        : receipt.command === "broadcast_preflight"
+          ? "Fonte broadcast preflight could not be observed."
+          : "Fonte sandbox test could not continue.",
+      ...(receipt.command === "broadcast_preflight"
+        ? ["Readiness: unknown."]
+        : []),
       `Reason: ${receipt.reason}.`,
       `Core effect: ${receipt.core_effect}.`,
       "",
@@ -57,6 +65,24 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
     `Accepted/refused/unknown: ${counts(result)}.`,
     `Accepted email usage: ${result.accepted_email_usage_quantity ?? "pending"}.`,
     "Recipient: signed-in account's verified email (address withheld).",
+    "",
+  ].join("\n");
+}
+
+function renderPreflight(
+  result: Extract<
+    NonNullable<OperatorReceipt["result"]>,
+    { readonly kind: "broadcast_preflight" }
+  >,
+): string {
+  return [
+    `Fonte broadcast preflight: ${result.ready ? "ready" : "blocked"}.`,
+    `Draft version requested/confirmed: ${result.requested_draft_version}/${result.confirmed_draft_version ?? "unknown"}.`,
+    result.blockers.length === 0
+      ? "Blockers: none."
+      : `Blockers (${result.blockers.length}):`,
+    ...result.blockers.map(({ authority, code }) => `- ${authority}: ${code}`),
+    "Core effect: none.",
     "",
   ].join("\n");
 }

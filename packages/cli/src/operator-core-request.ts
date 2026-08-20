@@ -6,11 +6,16 @@ export interface CoreRequestOptions {
   readonly fetch: typeof fetch;
 }
 
-interface PostOptions {
+export interface CorePostOptions {
   readonly idempotencyKey?: string;
   readonly body: Record<string, unknown>;
   readonly lostResponseEffect: "none" | "unknown";
 }
+
+export type CoreRequester = (
+  path: string,
+  post?: CorePostOptions,
+) => Promise<unknown>;
 
 export class CoreOperatorError extends Error {
   constructor(
@@ -25,7 +30,7 @@ export class CoreOperatorError extends Error {
 
 export function createCoreRequester(
   options: CoreRequestOptions,
-): (path: string, post?: PostOptions) => Promise<unknown> {
+): CoreRequester {
   const baseUrl = validatedBaseUrl(options.coreApiBaseUrl);
   const bearer = options.bearer.trim();
   if (!bearer || /\s/.test(bearer)) {
@@ -72,7 +77,7 @@ export function createCoreRequester(
 }
 
 function failureEffect(
-  post: PostOptions | undefined,
+  post: CorePostOptions | undefined,
   status: number,
   reason: string,
 ): "none" | "unknown" {

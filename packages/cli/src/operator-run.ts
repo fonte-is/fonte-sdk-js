@@ -77,6 +77,15 @@ async function execute(
       });
     return command.watch ? poll(read, sleep) : read();
   }
+  if (command.kind === "broadcast_preflight") {
+    return client.preflightBroadcast({
+      workspace: command.workspace,
+      environment: command.environment,
+      draftId: command.draftId,
+      expectedVersion: command.expectedVersion,
+      postalAddress: command.postalAddress,
+    });
+  }
   if (command.kind === "bridge_resend_preview") {
     return client.previewResendSegment({
       workspace: command.workspace,
@@ -109,6 +118,17 @@ function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
 ): OperatorReceipt {
+  if (result.kind === "broadcast_preflight") {
+    return currentReceipt(
+      command,
+      result,
+      result.ready ? "completed" : "blocked",
+      result.ready
+        ? "broadcast_preflight_ready"
+        : "broadcast_preflight_blocked",
+      "none",
+    );
+  }
   if (result.kind === "resend_bridge_preview") {
     return currentReceipt(
       command,
@@ -145,7 +165,7 @@ function successReceipt(
 function currentReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
-  outcome: "queued" | "terminal" | "completed",
+  outcome: "queued" | "terminal" | "completed" | "blocked",
   reason: string,
   coreEffect: "none" | "queued" | "copied",
 ): OperatorReceipt {
@@ -179,8 +199,11 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind.startsWith("bridge_resend_")
-      ? "fonte.core.resend_bridge.v1"
-      : "fonte.core.sandbox_canary.v1",
+    contract_id:
+      command.kind === "broadcast_preflight"
+        ? "fonte.core.broadcast_preflight.v1"
+        : command.kind.startsWith("bridge_resend_")
+          ? "fonte.core.resend_bridge.v1"
+          : "fonte.core.sandbox_canary.v1",
   };
 }

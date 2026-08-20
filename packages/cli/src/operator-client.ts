@@ -8,6 +8,11 @@ import {
   createCoreRequester,
   CoreOperatorError,
 } from "./operator-core-request.js";
+import {
+  requestBroadcastPreflight,
+  type BroadcastPreflightInput,
+} from "./operator-preflight-client.js";
+import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
 import type {
   ResendBridgeCopyResult,
   ResendBridgePreviewResult,
@@ -20,6 +25,8 @@ export type {
   ResendBridgeCopyResult,
   ResendBridgePreviewResult,
 } from "./operator-types.js";
+export type { BroadcastPreflightInput } from "./operator-preflight-client.js";
+export type { BroadcastPreflightResult } from "./operator-preflight-types.js";
 export { CoreOperatorError } from "./operator-core-request.js";
 
 export interface CoreOperatorClientOptions {
@@ -31,6 +38,9 @@ export interface CoreOperatorClientOptions {
 export interface CoreOperatorClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
+  preflightBroadcast(
+    input: BroadcastPreflightInput,
+  ): Promise<BroadcastPreflightResult>;
   previewResendSegment(
     input: ResendBridgePreviewInput,
   ): Promise<ResendBridgePreviewResult>;
@@ -89,6 +99,9 @@ export function createCoreOperatorClient(
           `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries/${segment(input.testId)}?environment=sandbox`,
         ),
       );
+    },
+    async preflightBroadcast(input) {
+      return requestBroadcastPreflight(request, input);
     },
     async previewResendSegment(input) {
       const result = parseCurrent(

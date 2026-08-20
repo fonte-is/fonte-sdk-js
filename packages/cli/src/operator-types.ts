@@ -1,3 +1,5 @@
+import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+
 export type OperatorCommand =
   | {
       readonly kind: "broadcast_test_send";
@@ -11,6 +13,14 @@ export type OperatorCommand =
       readonly workspace: string;
       readonly testId: string;
       readonly watch: boolean;
+    }
+  | {
+      readonly kind: "broadcast_preflight";
+      readonly workspace: string;
+      readonly environment: "sandbox" | "production";
+      readonly draftId: string;
+      readonly expectedVersion: number;
+      readonly postalAddress: string;
     }
   | {
       readonly kind: "bridge_resend_preview";
@@ -98,7 +108,10 @@ export interface ResendBridgeCopyResult extends Omit<
 }
 
 export type OperatorResult =
-  SandboxTestResult | ResendBridgePreviewResult | ResendBridgeCopyResult;
+  | SandboxTestResult
+  | BroadcastPreflightResult
+  | ResendBridgePreviewResult
+  | ResendBridgeCopyResult;
 
 export interface OperatorReceipt {
   readonly schema_version: "fonte.cli.operator_receipt.v1";
@@ -111,6 +124,7 @@ export interface OperatorReceipt {
     readonly status: "current" | "missing";
     readonly contract_id:
       | "fonte.core.sandbox_canary.v1"
+      | "fonte.core.broadcast_preflight.v1"
       | "fonte.core.resend_bridge.v1"
       | "unavailable";
   };
