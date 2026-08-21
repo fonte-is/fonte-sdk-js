@@ -104,6 +104,9 @@ Core's provider-audience boundary also supports this CLI-only operator journey:
 fonte bridge collections resend|kit --workspace <slug> \
   --environment <sandbox|production> --connection-id <uuid>
 
+fonte bridge import status --workspace <slug> \
+  --environment <sandbox|production> --contact-import-batch-id <uuid>
+
 fonte bridge reconcile --workspace <slug> \
   --environment <sandbox|production> \
   (--source-provider <resend|kit> --source-connection-id <uuid> \
@@ -122,6 +125,12 @@ an authoritative, observation-only Core operation. Its CLI receipt contains
 only source/exclusion provenance, freshness/coverage, unavailable-input reasons,
 aggregate source/excluded/protected/unknown/final counts, and the exact
 observation fingerprint; contact rows and provider payloads are discarded.
+
+Contact-import status projects only a terminal completed batch UUID and Core's
+canonical identity-set SHA-256. Supply those exact two values as
+`--source-import-batch-id` and `--source-identity-set-sha256`; the CLI never
+hashes contacts or infers identity from a file or count. Pending, failed,
+incomplete, unavailable, or malformed readback remains blocked with no hash.
 
 The source is either the unchanged provider collection reference or one exact
 Core-owned immutable import-batch UUID plus its canonical identity-set SHA-256;

@@ -4,11 +4,14 @@ import {
   type CoreRequester,
 } from "./operator-core-request.js";
 import {
+  contactImportStatus,
   providerAudienceFreeze,
   providerAudienceReconciliation,
   providerCollections,
 } from "./operator-provider-audience-json.js";
 import type {
+  ContactImportStatusInput,
+  ContactImportStatusResult,
   ProviderAudienceFreezeInput,
   ProviderAudienceFreezeResult,
   ProviderAudienceReconcileInput,
@@ -22,6 +25,9 @@ import type {
 } from "./operator-provider-audience-types.js";
 
 export interface ProviderAudienceClient {
+  readContactImportStatus(
+    input: ContactImportStatusInput,
+  ): Promise<ContactImportStatusResult>;
   listProviderCollections(
     input: ProviderCollectionListInput,
   ): Promise<ProviderCollectionListResult>;
@@ -37,6 +43,27 @@ export function createProviderAudienceClient(
   request: CoreRequester,
 ): ProviderAudienceClient {
   return {
+    async readContactImportStatus(input) {
+      const result = parseCoreReceipt(
+        contactImportStatus,
+        await request("/v1/broadcast-email/contact-imports", {
+          body: {
+            workspaceSlug: input.workspace,
+            environment: input.environment,
+            contactImportBatchId: input.contactImportBatchId,
+          },
+          lostResponseEffect: "none",
+        }),
+      );
+      if (
+        result.environment !== input.environment ||
+        result.contact_import_batch_id !==
+          input.contactImportBatchId.toLowerCase()
+      ) {
+        invalidReceipt("none");
+      }
+      return result;
+    },
     async listProviderCollections(input) {
       const result = parseCoreReceipt(
         providerCollections,

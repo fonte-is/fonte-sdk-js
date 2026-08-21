@@ -39,6 +39,7 @@ export function isProductionCommand(
     command.kind !== "broadcast_preflight" &&
     command.kind !== "bridge_resend_preview" &&
     command.kind !== "bridge_resend_copy" &&
+    command.kind !== "bridge_contact_import_status" &&
     command.kind !== "bridge_provider_collections" &&
     command.kind !== "bridge_provider_reconcile" &&
     command.kind !== "bridge_provider_freeze"

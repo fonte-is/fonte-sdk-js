@@ -240,10 +240,12 @@ function currentAuthority(
             command.kind !== "broadcast_test_send" &&
             command.kind !== "broadcast_test_status"
           ? "fonte.core.production_broadcast.v1"
-          : command.kind.startsWith("bridge_resend_")
-            ? "fonte.core.resend_bridge.v1"
-            : command.kind.startsWith("bridge_provider_")
-              ? "fonte.core.provider_audience.v1"
-              : "fonte.core.sandbox_canary.v1",
+          : command.kind === "bridge_contact_import_status"
+            ? "fonte.core.contact_import.v1"
+            : command.kind.startsWith("bridge_resend_")
+              ? "fonte.core.resend_bridge.v1"
+              : command.kind.startsWith("bridge_provider_")
+                ? "fonte.core.provider_audience.v1"
+                : "fonte.core.sandbox_canary.v1",
   };
 }

@@ -9,6 +9,7 @@ import {
   uuid,
 } from "./operator-json.js";
 import type {
+  ContactImportStatusResult,
   ProviderAudienceCountsResult,
   ProviderAudienceFreezeResult,
   ProviderAudienceProvider,
@@ -24,6 +25,25 @@ type Collections = ProviderCollectionListResult;
 type Reconciliation = ProviderAudienceReconciliationResult;
 type Freeze = ProviderAudienceFreezeResult;
 type Unavailable = Reconciliation["unavailable_inputs"][number];
+
+export function contactImportStatus(value: unknown): ContactImportStatusResult {
+  const body = object(value);
+  uuid(body.tenantId);
+  const environment = body.environment;
+  if (
+    (environment !== "sandbox" && environment !== "production") ||
+    body.status !== "completed"
+  ) {
+    invalid();
+  }
+  return {
+    kind: "contact_import_status",
+    environment,
+    status: "completed",
+    contact_import_batch_id: uuid(body.contactImportBatchId),
+    identity_set_sha256: sha256(body.identitySetSha256),
+  };
+}
 
 export function providerCollections(value: unknown): Collections {
   const body = object(value);

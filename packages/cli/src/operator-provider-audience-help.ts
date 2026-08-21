@@ -8,6 +8,18 @@ export interface ProviderAudienceHelpEntry {
 export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
   [
     {
+      command: ["bridge", "import", "status"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--contact-import-batch-id <uuid>",
+        ],
+      ],
+      detail:
+        "Reads Core's completed Contact-import identity-set SHA-256 for exact Bridge reconciliation.",
+      json: true,
+    },
+    {
       command: ["bridge", "collections", "resend"],
       usage: [
         [

@@ -1,5 +1,6 @@
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
 import type {
+  ContactImportStatusResult,
   ProviderAudienceFreezeResult,
   ProviderAudienceOperatorCommand,
   ProviderAudienceReconciliationResult,
@@ -196,6 +197,7 @@ export interface ResendBridgeCopyResult extends Omit<
 
 export type OperatorResult =
   | SandboxTestResult
+  | ContactImportStatusResult
   | BroadcastPreflightResult
   | ProductionDraftResult
   | ProductionAudienceOptionsResult
@@ -224,6 +226,7 @@ export interface OperatorReceipt {
       | "fonte.core.broadcast_preflight.v1"
       | "fonte.core.production_broadcast.v1"
       | "fonte.core.resend_bridge.v1"
+      | "fonte.core.contact_import.v1"
       | "fonte.core.provider_audience.v1"
       | "unavailable";
   };

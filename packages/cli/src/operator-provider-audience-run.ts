@@ -1,5 +1,6 @@
 import type { CoreOperatorClient } from "./operator-client.js";
 import type {
+  ContactImportStatusResult,
   ProviderAudienceFreezeResult,
   ProviderAudienceReconciliationResult,
   ProviderCollectionListResult,
@@ -7,6 +8,7 @@ import type {
 import type { OperatorCommand, OperatorResult } from "./operator-types.js";
 
 type ProviderAudienceResult =
+  | ContactImportStatusResult
   | ProviderCollectionListResult
   | ProviderAudienceReconciliationResult
   | ProviderAudienceFreezeResult;
@@ -15,6 +17,9 @@ export function executeProviderAudienceCommand(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   client: CoreOperatorClient,
 ): Promise<ProviderAudienceResult> | null {
+  if (command.kind === "bridge_contact_import_status") {
+    return client.readContactImportStatus(command);
+  }
   if (command.kind === "bridge_provider_collections") {
     return client.listProviderCollections(command);
   }
@@ -32,6 +37,13 @@ export function providerAudienceReceiptDescriptor(result: OperatorResult): {
   readonly reason: string;
   readonly coreEffect: "none" | "created";
 } | null {
+  if (result.kind === "contact_import_status") {
+    return {
+      outcome: "completed",
+      reason: "contact_import_status_completed",
+      coreEffect: "none",
+    };
+  }
   if (result.kind === "provider_collections") {
     return {
       outcome: "completed",

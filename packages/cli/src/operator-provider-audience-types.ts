@@ -46,6 +46,12 @@ export interface ProviderCollectionListInput {
   readonly connectionId: string;
 }
 
+export interface ContactImportStatusInput {
+  readonly workspace: string;
+  readonly environment: "sandbox" | "production";
+  readonly contactImportBatchId: string;
+}
+
 export interface ProviderAudienceReconcileInput {
   readonly workspace: string;
   readonly environment: "sandbox" | "production";
@@ -60,12 +66,23 @@ export interface ProviderAudienceFreezeInput extends ProviderAudienceReconcileIn
 
 export type ProviderAudienceOperatorCommand =
   | ({
+      readonly kind: "bridge_contact_import_status";
+    } & ContactImportStatusInput)
+  | ({
       readonly kind: "bridge_provider_collections";
     } & ProviderCollectionListInput)
   | ({
       readonly kind: "bridge_provider_reconcile";
     } & ProviderAudienceReconcileInput)
   | ({ readonly kind: "bridge_provider_freeze" } & ProviderAudienceFreezeInput);
+
+export interface ContactImportStatusResult {
+  readonly kind: "contact_import_status";
+  readonly environment: "sandbox" | "production";
+  readonly status: "completed";
+  readonly contact_import_batch_id: string;
+  readonly identity_set_sha256: string;
+}
 
 export interface ProviderCollectionListResult {
   readonly kind: "provider_collections";

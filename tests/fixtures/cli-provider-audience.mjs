@@ -17,6 +17,38 @@ export const batchId = "10000000-0000-4000-8000-000000000503";
 export const fingerprint = "a".repeat(64);
 export const identitySetSha256 = "b".repeat(64);
 
+export function contactImportStatusArguments(extra) {
+  return [
+    "bridge",
+    "import",
+    "status",
+    "--workspace",
+    "northstar",
+    "--environment",
+    "sandbox",
+    "--contact-import-batch-id",
+    batchId,
+    ...(extra ? [extra] : []),
+  ];
+}
+
+export function contactImportStatusReceipt(overrides = {}) {
+  return {
+    tenantId: "10000000-0000-4000-8000-000000000504",
+    environment: "sandbox",
+    contactImportBatchId: batchId,
+    identitySetSha256,
+    status: "completed",
+    rowReadback: [
+      {
+        contactId: "10000000-0000-4000-8000-000000000599",
+        sourcePayload: { email: "hidden@example.test" },
+      },
+    ],
+    ...overrides,
+  };
+}
+
 export function collectionArguments(provider, extra) {
   return [
     "bridge",

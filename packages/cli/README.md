@@ -23,6 +23,7 @@ npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment s
 npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli bridge collections resend --workspace my-workspace --environment sandbox --connection-id <uuid>
 npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
+npx @fonte-is/cli bridge import status --workspace my-workspace --environment sandbox --contact-import-batch-id <uuid>
 npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-import-batch-id <uuid> --source-identity-set-sha256 <64-lower-hex> --max-age-seconds 300 --exclude-provider resend --exclude-connection-id <uuid> --exclude-collection-id <provider-id> --exclude-display-name "Protected"
 npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli remove
@@ -91,7 +92,9 @@ require a Next.js project. V1 implements the fixed sandbox canary, the bounded
 production draft/audience/test/preflight/authorization/control/result journey,
 Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
 collection discovery, reconciliation, and explicit fingerprint-bound audience
-freeze. Reconciliation output contains only provenance and aggregate counts;
+freeze. Contact-import status returns Core's exact completed batch UUID and
+identity-set SHA-256 for frozen-source reconciliation. Reconciliation output
+contains only provenance and aggregate counts;
 contact rows are never rendered. The CLI selects
 audiences only by Core IDs, never filenames, and never computes eligibility.
 Preflight observes one exact persisted draft revision. Authorization reuses

@@ -40,10 +40,30 @@ export function parseProviderAudienceArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments | null {
   if (argv[0] !== "bridge") return null;
+  if (argv[1] === "import" && argv[2] === "status") {
+    return importStatus(argv.slice(3));
+  }
   if (argv[1] === "collections") return collections(argv.slice(2));
   if (argv[1] === "reconcile") return reconcile(argv.slice(2));
   if (argv[1] === "freeze") return freeze(argv.slice(2));
   return null;
+}
+
+function importStatus(argv: readonly string[]): ParsedOperatorArguments {
+  const options = parseProductionOptions(argv, [
+    "--workspace",
+    "--environment",
+    "--contact-import-batch-id",
+  ]);
+  return operatorArguments(options, {
+    kind: "bridge_contact_import_status",
+    workspace: workspace(options),
+    environment: environment(options),
+    contactImportBatchId: uuid(
+      required(options, "--contact-import-batch-id"),
+      "--contact-import-batch-id",
+    ),
+  });
 }
 
 function collections(argv: readonly string[]): ParsedOperatorArguments {

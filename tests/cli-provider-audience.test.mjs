@@ -8,6 +8,8 @@ import {
   baseDependencies,
   batchId,
   collectionArguments,
+  contactImportStatusArguments,
+  contactImportStatusReceipt,
   config,
   configUrl,
   coreUrl,
@@ -19,6 +21,7 @@ import {
   frozenAudienceReference,
   freezeArguments,
   freezeReceipt,
+  identitySetSha256,
   json,
   reconcileArguments,
   reconciliationReceipt,
@@ -28,6 +31,12 @@ import {
 } from "./fixtures/cli-provider-audience.mjs";
 
 test("provider audience grammar keeps source, exclusions, fingerprint, and help explicit", async () => {
+  assert.deepEqual(parseArguments(contactImportStatusArguments()).operator, {
+    kind: "bridge_contact_import_status",
+    workspace: "northstar",
+    environment: "sandbox",
+    contactImportBatchId: batchId,
+  });
   assert.deepEqual(
     parseArguments(collectionArguments("resend", "--json")).operator,
     {
@@ -60,6 +69,7 @@ test("provider audience grammar keeps source, exclusions, fingerprint, and help 
     ),
   );
   for (const argv of [
+    ["bridge", "import", "status", "--help"],
     ["bridge", "collections", "kit", "--help"],
     ["bridge", "reconcile", "--help"],
     ["bridge", "freeze", "--help"],
@@ -70,6 +80,90 @@ test("provider audience grammar keeps source, exclusions, fingerprint, and help 
     );
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /Core/);
+  }
+});
+
+test("completed Contact import status supplies the exact frozen reconcile identity", async () => {
+  const statusRequests = [];
+  const status = await runProgram(
+    contactImportStatusArguments("--json"),
+    dependencies(statusRequests, () => json(contactImportStatusReceipt())),
+  );
+  assert.equal(status.exitCode, 0);
+  assert.equal(
+    statusRequests[1].url,
+    `${coreUrl}/v1/broadcast-email/contact-imports`,
+  );
+  assert.deepEqual(JSON.parse(statusRequests[1].init.body), {
+    workspaceSlug: "northstar",
+    environment: "sandbox",
+    contactImportBatchId: batchId,
+  });
+  const statusReceipt = JSON.parse(status.stdout);
+  assert.deepEqual(statusReceipt.result, {
+    kind: "contact_import_status",
+    environment: "sandbox",
+    status: "completed",
+    contact_import_batch_id: batchId,
+    identity_set_sha256: identitySetSha256,
+  });
+  assert.equal(
+    statusReceipt.authority.contract_id,
+    "fonte.core.contact_import.v1",
+  );
+  assertSanitized(status.stdout);
+
+  const reconcileRequests = [];
+  const reconcile = await runProgram(
+    [
+      "bridge",
+      "reconcile",
+      "--workspace",
+      "northstar",
+      "--environment",
+      "sandbox",
+      "--source-import-batch-id",
+      statusReceipt.result.contact_import_batch_id,
+      "--source-identity-set-sha256",
+      statusReceipt.result.identity_set_sha256,
+      "--json",
+    ],
+    dependencies(reconcileRequests, () =>
+      json(frozenAudienceReconciliationReceipt(0)),
+    ),
+  );
+  assert.equal(reconcile.exitCode, 0);
+  assert.deepEqual(JSON.parse(reconcileRequests[1].init.body).source, {
+    kind: "fonte_audience",
+    contactImportBatchId: batchId,
+    identitySetSha256,
+  });
+
+  const human = await runProgram(
+    contactImportStatusArguments(),
+    dependencies([], () => json(contactImportStatusReceipt())),
+  );
+  assert.equal(human.exitCode, 0);
+  assert.match(human.stdout, new RegExp(batchId));
+  assert.match(human.stdout, new RegExp(identitySetSha256));
+  assertSanitized(human.stdout);
+});
+
+test("nonterminal or incomplete Contact import status never emits a guessed hash", async () => {
+  for (const receipt of [
+    contactImportStatusReceipt({ status: "pending", identitySetSha256: null }),
+    contactImportStatusReceipt({ identitySetSha256: undefined }),
+  ]) {
+    const result = await runProgram(
+      contactImportStatusArguments("--json"),
+      dependencies([], () => json(receipt)),
+    );
+    assert.equal(result.exitCode, 3);
+    assert.equal(result.receipt.reason, "core_operator_receipt_invalid");
+    assert.equal(result.receipt.core_effect, "none");
+    assert.equal(result.receipt.result, null);
+    assert.equal(result.stdout.includes(identitySetSha256), false);
+    assertSanitized(result.stdout);
   }
 });
 

@@ -19,6 +19,15 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   const production = renderProductionOperatorHuman(receipt);
   if (production !== null) return production;
   const result = receipt.result!;
+  if (result.kind === "contact_import_status") {
+    return [
+      "Fonte Contact import: completed.",
+      `Contact import batch: ${result.contact_import_batch_id}.`,
+      `Identity set SHA-256: ${result.identity_set_sha256}.`,
+      "Core effect: none.",
+      "",
+    ].join("\n");
+  }
   if (result.kind === "resend_bridge_preview") {
     return [
       `Fonte Resend Bridge preview: ${result.pagination.status}.`,

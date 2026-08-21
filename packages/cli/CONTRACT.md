@@ -27,8 +27,9 @@ V0 supports only:
 - one thin CLI-only production broadcast journey over Core-owned draft,
   audience, verified-account test, preflight, authorization, control, and
   result authority; and
-- one thin Bridge collection, provider-audience reconciliation, and explicit
-  fingerprint-bound freeze journey over Core-owned authority; and
+- one thin Bridge collection, completed Contact-import identity read,
+  provider-audience reconciliation, and explicit fingerprint-bound freeze
+  journey over Core-owned authority; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
