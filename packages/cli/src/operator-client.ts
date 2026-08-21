@@ -7,7 +7,12 @@ import {
 import {
   createCoreRequester,
   CoreOperatorError,
+  parseCoreReceipt,
 } from "./operator-core-request.js";
+import {
+  createProviderAudienceClient,
+  type ProviderAudienceClient,
+} from "./operator-provider-audience-client.js";
 import {
   requestBroadcastPreflight,
   type BroadcastPreflightInput,
@@ -31,6 +36,16 @@ export type {
 } from "./operator-types.js";
 export type { BroadcastPreflightInput } from "./operator-preflight-client.js";
 export type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+export type {
+  ProviderAudienceCountsResult,
+  ProviderAudienceFreezeInput,
+  ProviderAudienceFreezeResult,
+  ProviderAudienceReconcileInput,
+  ProviderAudienceReconciliationResult,
+  ProviderCollectionListInput,
+  ProviderCollectionListResult,
+  ProviderCollectionReferenceInput,
+} from "./operator-provider-audience-types.js";
 export type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
@@ -59,7 +74,8 @@ export interface CoreOperatorClientOptions {
   readonly fetch: typeof fetch;
 }
 
-export interface CoreOperatorClient extends ProductionOperatorClient {
+export interface CoreOperatorClient
+  extends ProductionOperatorClient, ProviderAudienceClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -102,6 +118,7 @@ export function createCoreOperatorClient(
   const request = createCoreRequester(options);
   return {
     ...createProductionOperatorClient(request),
+    ...createProviderAudienceClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,
@@ -115,10 +132,10 @@ export function createCoreOperatorClient(
           lostResponseEffect: "unknown",
         },
       );
-      return parseCurrent(queuedSandboxTest, response, "unknown");
+      return parseCoreReceipt(queuedSandboxTest, response, "unknown");
     },
     async readSandboxTest(input) {
-      return parseCurrent(
+      return parseCoreReceipt(
         sandboxTest,
         await request(
           `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries/${segment(input.testId)}?environment=sandbox`,
@@ -129,7 +146,7 @@ export function createCoreOperatorClient(
       return requestBroadcastPreflight(request, input);
     },
     async previewResendSegment(input) {
-      const result = parseCurrent(
+      const result = parseCoreReceipt(
         resendBridgePreview,
         await request(resendPath(input, "preview"), {
           body: {},
@@ -143,7 +160,7 @@ export function createCoreOperatorClient(
         input.expectedObservationFingerprint,
       );
       const idempotencyKey = bridgeIdempotencyKey(input.idempotencyKey);
-      const result = parseCurrent(
+      const result = parseCoreReceipt(
         resendBridgeCopy,
         await request(resendPath(input, "copy"), {
           body: {
@@ -225,22 +242,6 @@ function invalidReceipt(coreEffect: "none" | "unknown"): never {
     null,
     coreEffect,
   );
-}
-
-function parseCurrent<T>(
-  parser: (value: unknown) => T,
-  value: unknown,
-  coreEffect: "none" | "unknown" = "none",
-): T {
-  try {
-    return parser(value);
-  } catch {
-    throw new CoreOperatorError(
-      "core_operator_receipt_invalid",
-      null,
-      coreEffect,
-    );
-  }
 }
 
 function segment(value: string): string {

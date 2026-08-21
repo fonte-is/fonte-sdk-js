@@ -78,7 +78,6 @@ test("every absent broadcast and Bridge declaration is generically unsupported",
     ["bridge", "diff"],
     ["bridge", "placement-plan"],
     ["bridge", "copy", "kit", "--json"],
-    ["bridge", "reconcile"],
   ]) {
     let calls = 0;
     const result = await runProgram(

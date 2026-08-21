@@ -1,3 +1,4 @@
+import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
 interface HelpEntry {
   readonly command: readonly string[];
   readonly usage: readonly (readonly string[])[];
@@ -175,6 +176,7 @@ const entries: readonly HelpEntry[] = [
     detail: "Copies one fingerprint-bound Resend observation through Core.",
     json: true,
   },
+  ...providerAudienceHelpEntries,
   ...(["prepare", "send", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({
       command: ["broadcast", operation],
@@ -184,15 +186,13 @@ const entries: readonly HelpEntry[] = [
       json: true,
     }),
   ),
-  ...(["status", "diff", "placement-plan", "reconcile"] as const).map(
-    (operation) => ({
-      command: ["bridge", operation],
-      usage: [[]],
-      detail:
-        "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
-      json: true,
-    }),
-  ),
+  ...(["status", "diff", "placement-plan"] as const).map((operation) => ({
+    command: ["bridge", operation],
+    usage: [[]],
+    detail:
+      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
+    json: true,
+  })),
   {
     command: ["bridge", "observe", "kit"],
     usage: [[]],

@@ -76,6 +76,22 @@ export function createCoreRequester(
   };
 }
 
+export function parseCoreReceipt<T>(
+  parser: (value: unknown) => T,
+  value: unknown,
+  coreEffect: "none" | "unknown" = "none",
+): T {
+  try {
+    return parser(value);
+  } catch {
+    throw new CoreOperatorError(
+      "core_operator_receipt_invalid",
+      null,
+      coreEffect,
+    );
+  }
+}
+
 function failureEffect(
   post: CorePostOptions | undefined,
   status: number,

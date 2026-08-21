@@ -155,7 +155,7 @@ export function coreError(value: unknown, status: number): string {
   return `core_request_failed_${status}`;
 }
 
-function object(value: unknown): Record<string, unknown> {
+export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
   return value as Record<string, unknown>;
 }
@@ -178,7 +178,7 @@ function text(value: unknown): string {
   return safeText(value, 500);
 }
 
-function safeText(value: unknown, maximum: number): string {
+export function safeText(value: unknown, maximum: number): string {
   if (
     typeof value !== "string" ||
     !value.trim() ||
@@ -189,18 +189,18 @@ function safeText(value: unknown, maximum: number): string {
   return value;
 }
 
-function uuid(value: unknown): string {
+export function uuid(value: unknown): string {
   const result = safeText(value, 36);
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(result)) invalid();
   return result;
 }
 
-function sha256(value: unknown): string {
+export function sha256(value: unknown): string {
   if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) invalid();
   return value;
 }
 
-function instant(value: unknown): string {
+export function instant(value: unknown): string {
   const result = safeText(value, 50);
   const parsed = new Date(result);
   if (!Number.isFinite(parsed.valueOf()) || parsed.toISOString() !== result)
@@ -208,17 +208,17 @@ function instant(value: unknown): string {
   return result;
 }
 
-function boolean(value: unknown): boolean {
+export function boolean(value: unknown): boolean {
   if (typeof value !== "boolean") invalid();
   return value;
 }
 
-function count(value: unknown): number {
+export function count(value: unknown): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) invalid();
   return Number(value);
 }
 
-function nullableCount(value: unknown): number | null {
+export function nullableCount(value: unknown): number | null {
   return value === null ? null : count(value);
 }
 

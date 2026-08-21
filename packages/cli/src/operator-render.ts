@@ -1,4 +1,8 @@
 import { renderProductionOperatorHuman } from "./operator-production-render.js";
+import type {
+  ProviderAudienceReconciliationResult,
+  ProviderCollectionReferenceResult,
+} from "./operator-provider-audience-types.js";
 import type { OperatorReceipt } from "./operator-types.js";
 
 export function renderOperatorJson(receipt: OperatorReceipt): string {
@@ -39,6 +43,36 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       "",
     ].join("\n");
   }
+  if (result.kind === "provider_collections") {
+    return [
+      "Fonte Bridge collections: complete.",
+      `Provider/connection: ${result.provider}/${result.connection_id}.`,
+      `Observed: ${result.observed_at}; coverage: ${result.completeness}.`,
+      `Collections (${result.collections.length}):`,
+      ...(result.collections.length === 0
+        ? ["- none"]
+        : result.collections.map(
+            (item) => `- ${item.display_name} (${item.collection_id})`,
+          )),
+      "Core effect: none.",
+      "",
+    ].join("\n");
+  }
+  if (result.kind === "provider_audience_reconciliation") {
+    return renderProviderAudienceReconciliation(result);
+  }
+  if (result.kind === "provider_audience_freeze") {
+    return [
+      `Fonte Bridge audience freeze: ${result.created ? "created" : "idempotent"}.`,
+      `Frozen audience: ${result.frozen_audience_id}.`,
+      `Label: ${result.label}.`,
+      `Source/excluded/protected/unknown/final: ${audienceCounts(result.counts)}.`,
+      `Fingerprint: ${result.observation_fingerprint}.`,
+      `Recipient import batch: ${result.contact_import_batch_id}.`,
+      `Core effect: ${receipt.core_effect}.`,
+      "",
+    ].join("\n");
+  }
   if (result.kind !== "sandbox_test") {
     throw new TypeError("operator_receipt_unrenderable");
   }
@@ -61,9 +95,18 @@ function renderBlocked(receipt: OperatorReceipt): string {
       "",
     ].join("\n");
   }
+  if (receipt.reason === "provider_collection_discovery_unavailable") {
+    return [
+      "Fonte Bridge collection discovery could not continue.",
+      "Core returned 503: provider collection discovery or credential custody is unavailable.",
+      `Reason: ${receipt.reason}.`,
+      "Core effect: none.",
+      "",
+    ].join("\n");
+  }
   return [
-    receipt.command.startsWith("bridge_resend_")
-      ? "Fonte Resend Bridge could not continue."
+    receipt.command.startsWith("bridge_")
+      ? "Fonte Bridge operation could not continue."
       : receipt.command === "broadcast_preflight"
         ? "Fonte broadcast preflight could not be observed."
         : receipt.command === "broadcast_test_send" ||
@@ -77,6 +120,59 @@ function renderBlocked(receipt: OperatorReceipt): string {
     `Core effect: ${receipt.core_effect}.`,
     "",
   ].join("\n");
+}
+
+function renderProviderAudienceReconciliation(
+  result: ProviderAudienceReconciliationResult,
+): string {
+  return [
+    `Fonte Bridge audience reconciliation: ${result.ready ? "ready" : "unavailable"}.`,
+    `Source: ${result.source ? referenceLabel(result.source.reference) : "unavailable"}.`,
+    `Exclusions (${result.exclusions.length}):`,
+    ...(result.exclusions.length === 0
+      ? ["- none"]
+      : result.exclusions.map(
+          (item) =>
+            `- ${item.index}: ${referenceLabel(item.reference)}; overlap ${item.overlap_count ?? "unknown"}.`,
+        )),
+    ...(result.counts
+      ? [
+          `Source/excluded/protected/unknown/final: ${audienceCounts(result.counts)}.`,
+        ]
+      : ["Counts: unavailable."]),
+    `Fingerprint: ${result.observation_fingerprint ?? "unavailable"}.`,
+    ...(result.unavailable_inputs.length === 0
+      ? []
+      : [
+          "Unavailable inputs:",
+          ...result.unavailable_inputs.map(
+            (item) =>
+              `- ${item.role}${item.index === null ? "" : ` ${item.index}`}: ${item.reason}; ${referenceLabel(item.reference)}.`,
+          ),
+        ]),
+    "Core effect: none.",
+    "",
+  ].join("\n");
+}
+
+function referenceLabel(value: ProviderCollectionReferenceResult): string {
+  return `${value.provider}/${value.connection_id}/${value.collection_type}/${value.display_name} (${value.collection_id})`;
+}
+
+function audienceCounts(value: {
+  readonly source: number;
+  readonly exclusion_union: number;
+  readonly protected: number;
+  readonly unknown: number;
+  readonly final: number;
+}): string {
+  return [
+    value.source,
+    value.exclusion_union,
+    value.protected,
+    value.unknown,
+    value.final,
+  ].join("/");
 }
 
 function counts(result: NonNullable<OperatorReceipt["result"]>): string {

@@ -78,6 +78,7 @@ export const HELP_TEXT = [
   "broadcast test help distinguishes the sandbox canary from production tests.",
   "broadcast production commands consume Core's draft, audience, test, preflight, authorization, control, and result authority.",
   "bridge observe/copy resend use Core's admitted Resend Bridge authority.",
+  "bridge collections/reconcile/freeze use Core's provider-audience authority.",
   "All other broadcast and Bridge declarations have no Core effect.",
   "Transactional application email remains locked.",
   "",

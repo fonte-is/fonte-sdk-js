@@ -93,10 +93,41 @@ evidence. Legacy missing audience evidence remains null, never zero.
 
 ## Other implemented commands
 
-The fixed sandbox canary and Resend Bridge commands remain unchanged. Sandbox
-test status and production test status use different admitted Core routes.
-Resend preview remains observation-only; copy remains a separate
-fingerprint-bound action. Neither Bridge command mutates provider state.
+The fixed sandbox canary and Resend Bridge copy commands remain unchanged.
+Sandbox test status and production test status use different admitted Core
+routes. Resend preview remains observation-only; copy remains a separate
+fingerprint-bound action. Neither command mutates provider state.
+
+Core's provider-audience boundary also supports this CLI-only operator journey:
+
+```text
+fonte bridge collections resend|kit --workspace <slug> \
+  --environment <sandbox|production> --connection-id <uuid>
+
+fonte bridge reconcile --workspace <slug> \
+  --environment <sandbox|production> \
+  --source-provider <resend|kit> --source-connection-id <uuid> \
+  --source-collection-id <id> --source-display-name <name> \
+  --max-age-seconds <1..86400> \
+  [--exclude-provider <resend|kit> --exclude-connection-id <uuid> \
+   --exclude-collection-id <id> --exclude-display-name <name>]...
+
+fonte bridge freeze <the exact reconcile source, exclusions, and max-age flags> \
+  --fingerprint <64-lower-hex> --idempotency-key <key>
+```
+
+Collection discovery is a read through Core's credential custody. Reconcile is
+an authoritative, observation-only Core operation. Its CLI receipt contains
+only source/exclusion provenance, freshness/coverage, unavailable-input reasons,
+aggregate source/excluded/protected/unknown/final counts, and the exact
+observation fingerprint; contact rows and provider payloads are discarded.
+
+Freeze is a separate explicit mutation. It repeats the exact provider source
+and exclusions, requires the reconciliation fingerprint and an idempotency key,
+and returns Core's immutable frozen-audience/import-batch reference. A lost
+freeze response is `core_effect: unknown`; the CLI never infers success or
+reconciles eligibility itself. None of these commands deletes or mutates a
+provider collection.
 
 All other broadcast or Bridge declarations return `unsupported_authority`
 before OAuth or network access. There is no generic HTTP command, provider

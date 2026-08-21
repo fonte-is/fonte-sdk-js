@@ -1,5 +1,11 @@
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
 import type {
+  ProviderAudienceFreezeResult,
+  ProviderAudienceOperatorCommand,
+  ProviderAudienceReconciliationResult,
+  ProviderCollectionListResult,
+} from "./operator-provider-audience-types.js";
+import type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
   ProductionAudienceOptionsResult,
@@ -116,6 +122,7 @@ export type OperatorCommand =
       readonly observationFingerprint: string;
       readonly idempotencyKey: string;
     }
+  | ProviderAudienceOperatorCommand
   | { readonly kind: "unsupported" };
 
 export interface ParsedOperatorArguments {
@@ -198,7 +205,10 @@ export type OperatorResult =
   | ProductionBroadcastProgressResult
   | ProductionBroadcastResult
   | ResendBridgePreviewResult
-  | ResendBridgeCopyResult;
+  | ResendBridgeCopyResult
+  | ProviderCollectionListResult
+  | ProviderAudienceReconciliationResult
+  | ProviderAudienceFreezeResult;
 
 export interface OperatorReceipt {
   readonly schema_version: "fonte.cli.operator_receipt.v1";
@@ -214,6 +224,7 @@ export interface OperatorReceipt {
       | "fonte.core.broadcast_preflight.v1"
       | "fonte.core.production_broadcast.v1"
       | "fonte.core.resend_bridge.v1"
+      | "fonte.core.provider_audience.v1"
       | "unavailable";
   };
   readonly core_effect:

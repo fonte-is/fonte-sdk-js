@@ -6,6 +6,10 @@ import {
   CoreOperatorError,
 } from "./operator-client.js";
 import {
+  executeProviderAudienceCommand,
+  providerAudienceReceiptDescriptor,
+} from "./operator-provider-audience-run.js";
+import {
   executeProductionCommand,
   isProductionCommand,
   productionReceiptDescriptor,
@@ -16,14 +20,12 @@ import type {
   OperatorResult,
   SandboxTestResult,
 } from "./operator-types.js";
-
 export interface OperatorDependencies {
   readonly configUrl?: string;
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
   authorize(config: HostedConfig): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
 }
-
 export async function runOperatorCommand(
   command: OperatorCommand,
   dependencies: OperatorDependencies,
@@ -60,7 +62,6 @@ export async function runOperatorCommand(
     };
   }
 }
-
 async function execute(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   client: ReturnType<typeof createCoreOperatorClient>,
@@ -102,15 +103,19 @@ async function execute(
       segmentId: command.segmentId,
     });
   }
-  return client.copyResendSegment({
-    workspace: command.workspace,
-    environment: command.environment,
-    segmentId: command.segmentId,
-    expectedObservationFingerprint: command.observationFingerprint,
-    idempotencyKey: command.idempotencyKey,
-  });
+  if (command.kind === "bridge_resend_copy") {
+    return client.copyResendSegment({
+      workspace: command.workspace,
+      environment: command.environment,
+      segmentId: command.segmentId,
+      expectedObservationFingerprint: command.observationFingerprint,
+      idempotencyKey: command.idempotencyKey,
+    });
+  }
+  const providerAudience = executeProviderAudienceCommand(command, client);
+  if (providerAudience) return providerAudience;
+  throw new TypeError("operator_command_unmappable");
 }
-
 async function poll(
   read: () => Promise<SandboxTestResult>,
   sleep: (milliseconds: number) => Promise<void>,
@@ -122,7 +127,6 @@ async function poll(
   }
   throw new CoreOperatorError("core_readback_timeout", null, "none");
 }
-
 function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
@@ -168,6 +172,16 @@ function successReceipt(
       result.import_receipt.created ? "copied" : "none",
     );
   }
+  const providerAudience = providerAudienceReceiptDescriptor(result);
+  if (providerAudience) {
+    return currentReceipt(
+      command,
+      result,
+      providerAudience.outcome,
+      providerAudience.reason,
+      providerAudience.coreEffect,
+    );
+  }
   if (result.kind !== "sandbox_test") {
     throw new TypeError("operator_receipt_unmappable");
   }
@@ -183,7 +197,6 @@ function successReceipt(
     result.status === "queued" ? "queued" : "none",
   );
 }
-
 function currentReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
@@ -215,7 +228,6 @@ function unsupportedReceipt(): OperatorReceipt {
     result: null,
   };
 }
-
 function currentAuthority(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
 ): OperatorReceipt["authority"] {
@@ -230,6 +242,8 @@ function currentAuthority(
           ? "fonte.core.production_broadcast.v1"
           : command.kind.startsWith("bridge_resend_")
             ? "fonte.core.resend_bridge.v1"
-            : "fonte.core.sandbox_canary.v1",
+            : command.kind.startsWith("bridge_provider_")
+              ? "fonte.core.provider_audience.v1"
+              : "fonte.core.sandbox_canary.v1",
   };
 }

@@ -21,6 +21,9 @@ npx @fonte-is/cli broadcast status --workspace my-workspace --environment produc
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
 npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
 npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
+npx @fonte-is/cli bridge collections resend --workspace my-workspace --environment sandbox --connection-id <uuid>
+npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
+npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
@@ -85,7 +88,10 @@ remain unavailable; production capability requires the verified-domain journey.
 The operator commands are thin browser-authorized Core clients and do not
 require a Next.js project. V1 implements the fixed sandbox canary, the bounded
 production draft/audience/test/preflight/authorization/control/result journey,
-and Resend preview plus explicit fingerprint-bound copy. The CLI selects
+Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
+collection discovery, reconciliation, and explicit fingerprint-bound audience
+freeze. Reconciliation output contains only provenance and aggregate counts;
+contact rows are never rendered. The CLI selects
 audiences only by Core IDs, never filenames, and never computes eligibility.
 Preflight observes one exact persisted draft revision. Authorization reuses
 Core's existing authority and immutable recipient freeze. Lost mutation

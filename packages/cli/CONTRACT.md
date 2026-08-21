@@ -27,6 +27,8 @@ V0 supports only:
 - one thin CLI-only production broadcast journey over Core-owned draft,
   audience, verified-account test, preflight, authorization, control, and
   result authority; and
+- one thin Bridge collection, provider-audience reconciliation, and explicit
+  fingerprint-bound freeze journey over Core-owned authority; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
@@ -61,7 +63,8 @@ argument. `--help` is either the only argument or the final argument of a
 current public command with no other command options; it prints that command's
 admitted syntax and authority. In particular, broadcast-test help distinguishes
 the fixed sandbox canary syntax from the verified-account production-test
-syntax, and Bridge help names the admitted Resend observation and copy routes.
+syntax, and Bridge help names the admitted Resend copy and provider-audience
+routes.
 There is no terminal prompt. `test` opens the system browser for an existing
 signed-in human to approve the registered public CLI client. The workspace slug
 is explicit, lowercase, and remains subject to server-side Fonte workspace
