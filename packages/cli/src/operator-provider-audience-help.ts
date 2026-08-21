@@ -41,6 +41,14 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
           "[--exclude-provider <resend|kit> --exclude-connection-id <uuid>",
           " --exclude-collection-id <id> --exclude-display-name <name>]...",
         ],
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--source-import-batch-id <uuid>",
+          "--source-identity-set-sha256 <sha256>",
+          "[--max-age-seconds <1..86400>",
+          " --exclude-provider <resend|kit> --exclude-connection-id <uuid>",
+          " --exclude-collection-id <id> --exclude-display-name <name>]...",
+        ],
       ],
       detail:
         "Reads Core's exact protected/excluded/unknown/final reconciliation without exposing contacts.",

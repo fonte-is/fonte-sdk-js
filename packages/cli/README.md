@@ -23,6 +23,7 @@ npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment s
 npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli bridge collections resend --workspace my-workspace --environment sandbox --connection-id <uuid>
 npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
+npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-import-batch-id <uuid> --source-identity-set-sha256 <64-lower-hex> --max-age-seconds 300 --exclude-provider resend --exclude-connection-id <uuid> --exclude-collection-id <provider-id> --exclude-display-name "Protected"
 npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes

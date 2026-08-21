@@ -15,6 +15,7 @@ export const sourceConnection = "10000000-0000-4000-8000-000000000501";
 export const exclusionConnection = "10000000-0000-4000-8000-000000000502";
 export const batchId = "10000000-0000-4000-8000-000000000503";
 export const fingerprint = "a".repeat(64);
+export const identitySetSha256 = "b".repeat(64);
 
 export function collectionArguments(provider, extra) {
   return [
@@ -70,6 +71,38 @@ export function freezeArguments() {
   ];
 }
 
+export function frozenAudienceArguments(
+  operation = "reconcile",
+  exclusions = 24,
+) {
+  return [
+    "bridge",
+    operation,
+    "--workspace",
+    "northstar",
+    "--environment",
+    "sandbox",
+    "--source-import-batch-id",
+    batchId,
+    "--source-identity-set-sha256",
+    identitySetSha256,
+    ...(exclusions > 0 ? ["--max-age-seconds", "300"] : []),
+    ...Array.from({ length: exclusions }, (_, index) => [
+      "--exclude-provider",
+      "resend",
+      "--exclude-connection-id",
+      exclusionConnection,
+      "--exclude-collection-id",
+      `protected-${String(index + 1).padStart(2, "0")}`,
+      "--exclude-display-name",
+      `Protected ${index + 1}`,
+    ]).flat(),
+    ...(operation === "freeze"
+      ? ["--fingerprint", fingerprint, "--idempotency-key", "freeze-once-5"]
+      : []),
+  ];
+}
+
 export function sourceReference() {
   return reference(
     "resend",
@@ -82,6 +115,52 @@ export function sourceReference() {
 
 export function exclusionReference() {
   return reference("kit", exclusionConnection, "tag", "42", "Suppressed");
+}
+
+export function frozenAudienceReference() {
+  return {
+    kind: "fonte_audience",
+    contactImportBatchId: batchId,
+    identitySetSha256,
+  };
+}
+
+export function protectedReference(index) {
+  return reference(
+    "resend",
+    exclusionConnection,
+    "segment",
+    `protected-${String(index + 1).padStart(2, "0")}`,
+    `Protected ${index + 1}`,
+  );
+}
+
+export function frozenAudienceReconciliationReceipt(exclusions = 24) {
+  return {
+    workspaceId: "10000000-0000-4000-8000-000000000504",
+    environment: "sandbox",
+    ready: true,
+    observationFingerprint: fingerprint,
+    source: {
+      reference: frozenAudienceReference(),
+      observedAt: "2026-08-21T09:55:00.000Z",
+      contactsObserved: 30,
+      coverage: { status: "complete", pagesObserved: 1 },
+    },
+    exclusions: Array.from({ length: exclusions }, (_, index) => ({
+      ...summary(protectedReference(index), 0, index),
+      overlapCount: 0,
+    })),
+    unavailableInputs: [],
+    counts: {
+      source: 30,
+      exclusionUnion: 0,
+      protected: 1,
+      unknown: 1,
+      final: 28,
+    },
+    contacts: [],
+  };
 }
 
 export function reconciliationReceipt() {

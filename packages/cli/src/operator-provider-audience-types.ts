@@ -4,6 +4,26 @@ export type ProviderCollectionReferenceInput =
   | ProviderCollectionReference<"resend", "segment">
   | ProviderCollectionReference<"kit", "tag">;
 
+export interface FonteAudienceReferenceInput {
+  readonly kind: "fonte_audience";
+  readonly contactImportBatchId: string;
+  readonly identitySetSha256: string;
+  readonly provider?: never;
+  readonly connectionId?: never;
+  readonly collectionType?: never;
+  readonly collectionId?: never;
+  readonly displayName?: never;
+  readonly observationRequirements?: never;
+}
+
+export type ProviderAudienceSourceInput =
+  | (ProviderCollectionReferenceInput & {
+      readonly kind?: never;
+      readonly contactImportBatchId?: never;
+      readonly identitySetSha256?: never;
+    })
+  | FonteAudienceReferenceInput;
+
 interface ProviderCollectionReference<
   Provider extends ProviderAudienceProvider,
   CollectionType extends "segment" | "tag",
@@ -29,7 +49,7 @@ export interface ProviderCollectionListInput {
 export interface ProviderAudienceReconcileInput {
   readonly workspace: string;
   readonly environment: "sandbox" | "production";
-  readonly source: ProviderCollectionReferenceInput;
+  readonly source: ProviderAudienceSourceInput;
   readonly exclusions: readonly ProviderCollectionReferenceInput[];
 }
 
@@ -83,6 +103,20 @@ export interface ProviderObservationSummaryResult {
   };
 }
 
+export interface FonteAudienceSummaryResult {
+  readonly reference: FonteAudienceReferenceResult;
+  readonly contacts_observed: number;
+}
+
+export interface FonteAudienceReferenceResult {
+  readonly kind: "fonte_audience";
+  readonly contact_import_batch_id: string;
+  readonly identity_set_sha256: string;
+}
+
+export type ProviderAudienceSourceReferenceResult =
+  ProviderCollectionReferenceResult | FonteAudienceReferenceResult;
+
 export interface ProviderAudienceCountsResult {
   readonly source: number;
   readonly exclusion_union: number;
@@ -96,7 +130,8 @@ export interface ProviderAudienceReconciliationResult {
   readonly environment: "sandbox" | "production";
   readonly ready: boolean;
   readonly observation_fingerprint: string | null;
-  readonly source: ProviderObservationSummaryResult | null;
+  readonly source:
+    ProviderObservationSummaryResult | FonteAudienceSummaryResult | null;
   readonly exclusions: readonly (ProviderObservationSummaryResult & {
     readonly index: number;
     readonly overlap_count: number | null;
@@ -104,14 +139,16 @@ export interface ProviderAudienceReconciliationResult {
   readonly unavailable_inputs: readonly {
     readonly role: "source" | "exclusion";
     readonly index: number | null;
-    readonly reference: ProviderCollectionReferenceResult;
+    readonly reference: ProviderAudienceSourceReferenceResult;
     readonly reason:
       | "connection_unavailable"
       | "collection_missing"
       | "provider_unavailable"
       | "provider_response_invalid"
       | "observation_incomplete"
-      | "observation_stale";
+      | "observation_stale"
+      | "fonte_audience_unavailable"
+      | "fonte_audience_identity_mismatch";
     readonly observed_at: string | null;
   }[];
   readonly counts: ProviderAudienceCountsResult | null;

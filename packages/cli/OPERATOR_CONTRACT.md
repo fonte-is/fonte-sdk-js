@@ -106,8 +106,9 @@ fonte bridge collections resend|kit --workspace <slug> \
 
 fonte bridge reconcile --workspace <slug> \
   --environment <sandbox|production> \
-  --source-provider <resend|kit> --source-connection-id <uuid> \
-  --source-collection-id <id> --source-display-name <name> \
+  (--source-provider <resend|kit> --source-connection-id <uuid> \
+   --source-collection-id <id> --source-display-name <name> | \
+   --source-import-batch-id <uuid> --source-identity-set-sha256 <sha256>) \
   --max-age-seconds <1..86400> \
   [--exclude-provider <resend|kit> --exclude-connection-id <uuid> \
    --exclude-collection-id <id> --exclude-display-name <name>]...
@@ -122,8 +123,13 @@ only source/exclusion provenance, freshness/coverage, unavailable-input reasons,
 aggregate source/excluded/protected/unknown/final counts, and the exact
 observation fingerprint; contact rows and provider payloads are discarded.
 
-Freeze is a separate explicit mutation. It repeats the exact provider source
-and exclusions, requires the reconciliation fingerprint and an idempotency key,
+The source is either the unchanged provider collection reference or one exact
+Core-owned immutable import-batch UUID plus its canonical identity-set SHA-256;
+the forms cannot be combined. Up to 24 provider exclusions are forwarded in
+the operator's exact order without name matching or omission.
+
+Freeze is a separate explicit mutation. It repeats the exact source and
+exclusions, requires the reconciliation fingerprint and an idempotency key,
 and returns Core's immutable frozen-audience/import-batch reference. A lost
 freeze response is `core_effect: unknown`; the CLI never infers success or
 reconciles eligibility itself. None of these commands deletes or mutates a

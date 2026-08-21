@@ -15,7 +15,9 @@ import type {
   ProviderAudienceReconciliationResult,
   ProviderCollectionListResult,
   ProviderCollectionReferenceResult,
+  ProviderAudienceSourceReferenceResult,
   ProviderObservationSummaryResult,
+  FonteAudienceSummaryResult,
 } from "./operator-provider-audience-types.js";
 
 type Collections = ProviderCollectionListResult;
@@ -57,7 +59,7 @@ export function providerAudienceReconciliation(value: unknown): Reconciliation {
     body.observationFingerprint === null
       ? null
       : sha256(body.observationFingerprint);
-  const source = body.source === null ? null : summary(body.source);
+  const source = body.source === null ? null : sourceSummary(body.source);
   if (
     !Array.isArray(body.exclusions) ||
     !Array.isArray(body.unavailableInputs)
@@ -147,6 +149,25 @@ function summary(value: unknown): ProviderObservationSummaryResult {
   };
 }
 
+function sourceSummary(
+  value: unknown,
+): ProviderObservationSummaryResult | FonteAudienceSummaryResult {
+  const body = object(value);
+  const sourceReference = audienceSourceReference(body.reference);
+  if ("kind" in sourceReference) {
+    const coverage = object(body.coverage);
+    if (coverage.status !== "complete" || count(coverage.pagesObserved) !== 1) {
+      invalid();
+    }
+    instant(body.observedAt);
+    return {
+      reference: sourceReference,
+      contacts_observed: count(body.contactsObserved),
+    };
+  }
+  return summary(value);
+}
+
 function reference(value: unknown): ProviderCollectionReferenceResult {
   const body = object(value);
   const selected = provider(body.provider);
@@ -182,9 +203,24 @@ function unavailable(value: unknown): Unavailable {
   return {
     role,
     index,
-    reference: reference(body.reference),
+    reference:
+      role === "source"
+        ? audienceSourceReference(body.reference)
+        : reference(body.reference),
     reason,
     observed_at: body.observedAt === null ? null : instant(body.observedAt),
+  };
+}
+
+function audienceSourceReference(
+  value: unknown,
+): ProviderAudienceSourceReferenceResult {
+  const body = object(value);
+  if (body.kind !== "fonte_audience") return reference(value);
+  return {
+    kind: "fonte_audience",
+    contact_import_batch_id: uuid(body.contactImportBatchId),
+    identity_set_sha256: sha256(body.identitySetSha256),
   };
 }
 
@@ -237,6 +273,8 @@ function unavailableReason(value: unknown): value is Unavailable["reason"] {
     "provider_response_invalid",
     "observation_incomplete",
     "observation_stale",
+    "fonte_audience_unavailable",
+    "fonte_audience_identity_mismatch",
   ].includes(String(value));
 }
 

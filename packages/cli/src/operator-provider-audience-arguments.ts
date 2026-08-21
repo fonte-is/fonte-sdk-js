@@ -11,6 +11,8 @@ import {
   type ProductionOptions,
 } from "./operator-production-options.js";
 import type {
+  FonteAudienceReferenceInput,
+  ProviderAudienceSourceInput,
   ProviderAudienceProvider,
   ProviderCollectionReferenceInput,
 } from "./operator-provider-audience-types.js";
@@ -22,6 +24,10 @@ const referenceNames = [
   "--source-collection-id",
   "--source-display-name",
   "--max-age-seconds",
+] as const;
+const fonteSourceNames = [
+  "--source-import-batch-id",
+  "--source-identity-set-sha256",
 ] as const;
 const exclusionNames = [
   "--exclude-provider",
@@ -94,12 +100,28 @@ function audienceOptions(
 ): ProductionOptions {
   return parseProductionOptions(
     argv,
-    ["--workspace", "--environment", ...referenceNames, ...extraNames],
+    [
+      "--workspace",
+      "--environment",
+      ...referenceNames,
+      ...fonteSourceNames,
+      ...extraNames,
+    ],
     exclusionNames,
   );
 }
 
-function source(options: ProductionOptions): ProviderCollectionReferenceInput {
+function source(options: ProductionOptions): ProviderAudienceSourceInput {
+  const providerValues = referenceNames
+    .slice(0, 4)
+    .map((name) => options.values.get(name));
+  const fonteValues = fonteSourceNames.map((name) => options.values.get(name));
+  const providerSelected = providerValues.some((value) => value !== undefined);
+  const fonteSelected = fonteValues.some((value) => value !== undefined);
+  if (providerSelected === fonteSelected) {
+    invalidProductionArguments("invalid_field", "--source");
+  }
+  if (fonteSelected) return fonteSource(options);
   return reference(
     required(options, "--source-provider"),
     required(options, "--source-connection-id"),
@@ -110,12 +132,27 @@ function source(options: ProductionOptions): ProviderCollectionReferenceInput {
   );
 }
 
+function fonteSource(options: ProductionOptions): FonteAudienceReferenceInput {
+  const hash = required(options, "--source-identity-set-sha256");
+  if (!/^[a-f0-9]{64}$/.test(hash)) {
+    invalidProductionArguments("invalid_field", "--source-identity-set-sha256");
+  }
+  return {
+    kind: "fonte_audience",
+    contactImportBatchId: uuid(
+      required(options, "--source-import-batch-id"),
+      "--source-import-batch-id",
+    ),
+    identitySetSha256: hash,
+  };
+}
+
 function exclusions(
   options: ProductionOptions,
 ): readonly ProviderCollectionReferenceInput[] {
   const values = exclusionNames.map((name) => options.repeated.get(name) ?? []);
   const size = values[0]!.length;
-  if (values.some((items) => items.length !== size) || size > 20) {
+  if (values.some((items) => items.length !== size) || size > 24) {
     invalidProductionArguments("invalid_field", "--exclude-provider");
   }
   return Array.from({ length: size }, (_, index) =>

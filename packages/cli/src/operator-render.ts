@@ -1,7 +1,7 @@
 import { renderProductionOperatorHuman } from "./operator-production-render.js";
 import type {
+  ProviderAudienceSourceReferenceResult,
   ProviderAudienceReconciliationResult,
-  ProviderCollectionReferenceResult,
 } from "./operator-provider-audience-types.js";
 import type { OperatorReceipt } from "./operator-types.js";
 
@@ -155,7 +155,10 @@ function renderProviderAudienceReconciliation(
   ].join("\n");
 }
 
-function referenceLabel(value: ProviderCollectionReferenceResult): string {
+function referenceLabel(value: ProviderAudienceSourceReferenceResult): string {
+  if ("kind" in value) {
+    return `Fonte audience ${value.contact_import_batch_id} (${value.identity_set_sha256})`;
+  }
   return `${value.provider}/${value.connection_id}/${value.collection_type}/${value.display_name} (${value.collection_id})`;
 }
 

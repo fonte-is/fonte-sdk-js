@@ -13,6 +13,8 @@ import type {
   ProviderAudienceFreezeResult,
   ProviderAudienceReconcileInput,
   ProviderAudienceReconciliationResult,
+  ProviderAudienceSourceInput,
+  ProviderAudienceSourceReferenceResult,
   ProviderCollectionListInput,
   ProviderCollectionListResult,
   ProviderCollectionReferenceInput,
@@ -110,7 +112,10 @@ function matches(
   result: ProviderAudienceReconciliationResult,
   input: ProviderAudienceReconcileInput,
 ): boolean {
-  if (result.source && !sameReference(result.source.reference, input.source)) {
+  if (
+    result.source &&
+    !sameSourceReference(result.source.reference, input.source)
+  ) {
     return false;
   }
   for (const exclusion of result.exclusions) {
@@ -123,7 +128,7 @@ function matches(
       unavailable.role === "source"
         ? input.source
         : input.exclusions[unavailable.index!];
-    if (!expected || !sameReference(unavailable.reference, expected))
+    if (!expected || !sameSourceReference(unavailable.reference, expected))
       return false;
   }
   if (
@@ -148,6 +153,22 @@ function matches(
       new Set(result.exclusions.map((value) => value.index)).size ===
         input.exclusions.length)
   );
+}
+
+function sameSourceReference(
+  actual: ProviderAudienceSourceReferenceResult,
+  expected: ProviderAudienceSourceInput,
+): boolean {
+  if ("kind" in actual || expected.kind === "fonte_audience") {
+    return (
+      "kind" in actual &&
+      actual.kind === "fonte_audience" &&
+      expected.kind === "fonte_audience" &&
+      actual.contact_import_batch_id === expected.contactImportBatchId &&
+      actual.identity_set_sha256 === expected.identitySetSha256
+    );
+  }
+  return sameReference(actual, expected);
 }
 
 function sameReference(

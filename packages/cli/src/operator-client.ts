@@ -37,11 +37,13 @@ export type {
 export type { BroadcastPreflightInput } from "./operator-preflight-client.js";
 export type { BroadcastPreflightResult } from "./operator-preflight-types.js";
 export type {
+  FonteAudienceReferenceInput,
   ProviderAudienceCountsResult,
   ProviderAudienceFreezeInput,
   ProviderAudienceFreezeResult,
   ProviderAudienceReconcileInput,
   ProviderAudienceReconciliationResult,
+  ProviderAudienceSourceInput,
   ProviderCollectionListInput,
   ProviderCollectionListResult,
   ProviderCollectionReferenceInput,

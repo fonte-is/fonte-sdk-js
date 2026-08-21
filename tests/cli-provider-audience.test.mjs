@@ -14,6 +14,9 @@ import {
   dependencies,
   exclusionReference,
   fingerprint,
+  frozenAudienceArguments,
+  frozenAudienceReconciliationReceipt,
+  frozenAudienceReference,
   freezeArguments,
   freezeReceipt,
   json,
@@ -21,6 +24,7 @@ import {
   reconciliationReceipt,
   sourceConnection,
   sourceReference,
+  protectedReference,
 } from "./fixtures/cli-provider-audience.mjs";
 
 test("provider audience grammar keeps source, exclusions, fingerprint, and help explicit", async () => {
@@ -131,6 +135,76 @@ test("reconcile sends exact references and emits only authoritative aggregates",
   });
   assert.equal(receipt.result.observation_fingerprint, fingerprint);
   assertSanitized(result.stdout);
+});
+
+test("frozen Fonte source carries all 24 explicit exclusions without local evaluation", async () => {
+  const requests = [];
+  const parsed = parseArguments(frozenAudienceArguments()).operator;
+  assert.equal(parsed.kind, "bridge_provider_reconcile");
+  assert.deepEqual(parsed.source, frozenAudienceReference());
+  assert.deepEqual(
+    parsed.exclusions,
+    Array.from({ length: 24 }, (_, index) => protectedReference(index)),
+  );
+
+  const result = await runProgram(
+    [...frozenAudienceArguments(), "--json"],
+    dependencies(requests, () => json(frozenAudienceReconciliationReceipt())),
+  );
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    source: frozenAudienceReference(),
+    exclusions: Array.from({ length: 24 }, (_, index) =>
+      protectedReference(index),
+    ),
+  });
+  const receipt = JSON.parse(result.stdout);
+  assert.deepEqual(receipt.result.source, {
+    reference: {
+      kind: "fonte_audience",
+      contact_import_batch_id: batchId,
+      identity_set_sha256: "b".repeat(64),
+    },
+    contacts_observed: 30,
+  });
+  assert.equal(receipt.result.exclusions.length, 24);
+  assert.equal("contacts" in receipt.result, false);
+  assertSanitized(result.stdout);
+
+  const freezeRequests = [];
+  const frozen = await runProgram(
+    [...frozenAudienceArguments("freeze"), "--json"],
+    dependencies(freezeRequests, () => json(freezeReceipt(), 201)),
+  );
+  assert.equal(frozen.exitCode, 0);
+  assert.deepEqual(JSON.parse(freezeRequests[1].init.body), {
+    source: frozenAudienceReference(),
+    exclusions: Array.from({ length: 24 }, (_, index) =>
+      protectedReference(index),
+    ),
+    expectedObservationFingerprint: fingerprint,
+    idempotencyKey: "freeze-once-5",
+  });
+  assert.equal(JSON.parse(frozen.stdout).result.frozen_audience_id, batchId);
+  assertSanitized(frozen.stdout);
+});
+
+test("frozen Fonte source is exact and mutually exclusive with provider source", () => {
+  assert.throws(() =>
+    parseArguments([
+      ...frozenAudienceArguments("reconcile", 0),
+      "--source-provider",
+      "resend",
+    ]),
+  );
+  assert.throws(() =>
+    parseArguments(
+      frozenAudienceArguments("reconcile", 0).filter(
+        (value) => value !== "b".repeat(64),
+      ),
+    ),
+  );
+  assert.throws(() => parseArguments(frozenAudienceArguments("reconcile", 25)));
 });
 
 test("unavailable inputs remain a no-effect blocked reconciliation", async () => {
