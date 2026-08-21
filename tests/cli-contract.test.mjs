@@ -26,7 +26,7 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fonte-is/cli");
-  assert.equal(manifest.version, "0.1.2");
+  assert.equal(manifest.version, "0.1.3");
   assert.deepEqual(manifest.bin, { fonte: "./dist/main.js" });
   assert.deepEqual(manifest.dependencies, { "openid-client": "6.8.5" });
   assert.deepEqual(manifest.exports, {
