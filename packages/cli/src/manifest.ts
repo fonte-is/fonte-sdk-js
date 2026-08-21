@@ -21,6 +21,7 @@ const uuidV4 =
 const sha256 = /^[0-9a-f]{64}$/;
 const compatibleCliVersions = new Set<LocalManifest["cli_version"]>([
   "0.1.0",
+  "0.1.1",
   CLI_VERSION,
 ]);
 

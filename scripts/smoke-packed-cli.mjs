@@ -47,12 +47,17 @@ try {
   const localManifest = JSON.parse(await readFile(localManifestPath, "utf8"));
   assert.equal(localManifest.cli_version, cliVersion);
   assert.equal(receipt(cli, fixture, ["doctor", "--json"]).outcome, "verified");
-  localManifest.cli_version = "0.1.0";
-  await writeFile(
-    localManifestPath,
-    `${JSON.stringify(localManifest, null, 2)}\n`,
-  );
-  assert.equal(receipt(cli, fixture, ["doctor", "--json"]).outcome, "verified");
+  for (const compatibleVersion of ["0.1.0", "0.1.1"]) {
+    localManifest.cli_version = compatibleVersion;
+    await writeFile(
+      localManifestPath,
+      `${JSON.stringify(localManifest, null, 2)}\n`,
+    );
+    assert.equal(
+      receipt(cli, fixture, ["doctor", "--json"]).outcome,
+      "verified",
+    );
+  }
   assert.equal(
     receipt(cli, fixture, ["remove", "--yes", "--json"]).outcome,
     "removed",
@@ -82,7 +87,10 @@ try {
     JSON.stringify({
       ok: true,
       lifecycle: ["version", "init", "doctor", "remove"],
-      manifestVersions: { created: cliVersion, compatible: ["0.1.0"] },
+      manifestVersions: {
+        created: cliVersion,
+        compatible: ["0.1.0", "0.1.1"],
+      },
       nodeFloor: "20.9.0",
     }),
   );
