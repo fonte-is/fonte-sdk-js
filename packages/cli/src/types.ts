@@ -8,10 +8,28 @@ export interface ParsedArguments {
   command: ParsedCommand;
   apply: boolean;
   json: boolean;
+  helpText?: string;
   workspaceSlug?: string;
   consumerCommand?: string;
   consumerArguments?: readonly string[];
   operator?: OperatorCommand;
+}
+
+export interface InvalidInvocationReceipt {
+  readonly schema_version: "fonte.cli.invalid_invocation.v1";
+  readonly command: "invalid_invocation";
+  readonly outcome: "invalid_invocation";
+  readonly reason: "invalid_invocation";
+  readonly detail: {
+    readonly code: string;
+    readonly kind:
+      "missing_field" | "invalid_field" | "duplicate_field" | "unknown_field";
+    readonly field: string;
+  };
+  readonly next_action: {
+    readonly kind: "run_command";
+    readonly command: string;
+  };
 }
 
 export type BlockReason =
@@ -147,4 +165,5 @@ export interface HostedTestReceipt {
   token_persisted: false;
 }
 
-export type AnyCliReceipt = CliReceipt | HostedTestReceipt | OperatorReceipt;
+export type AnyCliReceipt =
+  CliReceipt | HostedTestReceipt | OperatorReceipt | InvalidInvocationReceipt;

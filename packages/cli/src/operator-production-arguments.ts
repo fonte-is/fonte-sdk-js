@@ -53,7 +53,7 @@ function draftRead(argv: readonly string[]): ParsedOperatorArguments {
   return operatorArguments(options, {
     kind: "broadcast_draft_read",
     workspace: workspace(options),
-    draftId: uuid(required(options, "--draft-id")),
+    draftId: uuid(required(options, "--draft-id"), "--draft-id"),
   });
 }
 
@@ -70,7 +70,7 @@ function audiencePreview(argv: readonly string[]): ParsedOperatorArguments {
   return operatorArguments(options, {
     kind: "broadcast_audience_preview",
     workspace: workspace(options),
-    draftId: uuid(required(options, "--draft-id")),
+    draftId: uuid(required(options, "--draft-id"), "--draft-id"),
   });
 }
 
@@ -84,9 +84,13 @@ function productionTestSend(argv: readonly string[]): ParsedOperatorArguments {
   return operatorArguments(options, {
     kind: "broadcast_production_test_send",
     workspace: workspace(options),
-    draftId: uuid(required(options, "--draft-id")),
-    revision: positiveInteger(required(options, "--revision")),
-    postalAddress: content(required(options, "--postal-address"), 2_000),
+    draftId: uuid(required(options, "--draft-id"), "--draft-id"),
+    revision: positiveInteger(required(options, "--revision"), "--revision"),
+    postalAddress: content(
+      required(options, "--postal-address"),
+      2_000,
+      "--postal-address",
+    ),
     idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
   });
 }
@@ -103,8 +107,8 @@ function productionTestStatus(
   return operatorArguments(options, {
     kind: "broadcast_production_test_status",
     workspace: workspace(options),
-    draftId: uuid(required(options, "--draft-id")),
-    testId: uuid(required(options, "--test-id")),
+    draftId: uuid(required(options, "--draft-id"), "--draft-id"),
+    testId: uuid(required(options, "--test-id"), "--test-id"),
     watch: options.flags.has("--watch"),
   });
 }
@@ -120,9 +124,13 @@ function authorize(argv: readonly string[]): ParsedOperatorArguments {
   return operatorArguments(options, {
     kind: "broadcast_authorize",
     workspace: workspace(options),
-    draftId: uuid(required(options, "--draft-id")),
-    revision: positiveInteger(required(options, "--revision")),
-    postalAddress: content(required(options, "--postal-address"), 2_000),
+    draftId: uuid(required(options, "--draft-id"), "--draft-id"),
+    revision: positiveInteger(required(options, "--revision"), "--revision"),
+    postalAddress: content(
+      required(options, "--postal-address"),
+      2_000,
+      "--postal-address",
+    ),
     idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
     audienceReuseOverride: reuseOverride(options),
   });
@@ -133,7 +141,7 @@ function progress(argv: readonly string[]): ParsedOperatorArguments {
   return operatorArguments(options, {
     kind: "broadcast_progress",
     workspace: workspace(options),
-    broadcastId: uuid(required(options, "--broadcast-id")),
+    broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
     watch: options.flags.has("--watch"),
   });
 }
@@ -146,7 +154,7 @@ function control(
   return operatorArguments(options, {
     kind: "broadcast_control",
     workspace: workspace(options),
-    broadcastId: uuid(required(options, "--broadcast-id")),
+    broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
     operation: name === "cancel" ? "cancel_remaining" : name,
   });
 }
@@ -156,6 +164,6 @@ function result(argv: readonly string[]): ParsedOperatorArguments {
   return operatorArguments(options, {
     kind: "broadcast_result",
     workspace: workspace(options),
-    broadcastId: uuid(required(options, "--broadcast-id")),
+    broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
   });
 }

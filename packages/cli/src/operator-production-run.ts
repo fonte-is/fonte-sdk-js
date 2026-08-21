@@ -121,11 +121,11 @@ export function productionReceiptDescriptor(
     return {
       outcome:
         result.status === "terminal"
-          ? "terminal"
+          ? terminalTestOutcome(result)
           : result.status === "unknown"
             ? "blocked"
             : "completed",
-      reason: `production_test_${result.status}`,
+      reason: terminalTestReason(result),
       coreEffect: "none",
     };
   }
@@ -144,6 +144,31 @@ export function productionReceiptDescriptor(
     };
   }
   return null;
+}
+
+function terminalTestOutcome(
+  result: Extract<OperatorResult, { readonly kind: "production_test" }>,
+): "terminal" | "blocked" {
+  return result.accepted_count === result.submitted_count &&
+    result.refused_count === 0 &&
+    result.unknown_count === 0
+    ? "terminal"
+    : "blocked";
+}
+
+function terminalTestReason(
+  result: Extract<OperatorResult, { readonly kind: "production_test" }>,
+): string {
+  if (result.status !== "terminal") return `production_test_${result.status}`;
+  if (result.refused_count > 0 && result.unknown_count > 0) {
+    return "production_test_terminal_mixed";
+  }
+  if (result.refused_count > 0) return "production_test_terminal_refused";
+  if (result.unknown_count > 0) return "production_test_terminal_unknown";
+  if (result.accepted_count === result.submitted_count) {
+    return "production_test_terminal_accepted";
+  }
+  return "production_test_terminal_incomplete";
 }
 
 async function pollTest(

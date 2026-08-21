@@ -44,15 +44,23 @@ export function parseProductionOptions(
   for (let index = 0; index < argv.length; index += 1) {
     const name = argv[index]!;
     if (allowedFlags.has(name)) {
-      if (flags.has(name)) invalidProductionArguments();
+      if (flags.has(name)) {
+        invalidProductionArguments("duplicate_field", name);
+      }
       flags.add(name);
       continue;
     }
-    if ((!allowed.has(name) && !repeatable.has(name)) || values.has(name)) {
-      invalidProductionArguments();
+    if (!allowed.has(name) && !repeatable.has(name)) {
+      invalidProductionArguments("unknown_field", name);
+    }
+    if (values.has(name)) {
+      invalidProductionArguments("duplicate_field", name);
     }
     const value = argv[index + 1];
-    if (!value || value.includes("\0")) invalidProductionArguments();
+    if (!value || value.startsWith("--")) {
+      invalidProductionArguments("missing_field", name);
+    }
+    if (value.includes("\0")) invalidProductionArguments("invalid_field", name);
     if (repeatable.has(name)) {
       repeated.set(name, [...(repeated.get(name) ?? []), value]);
     } else {
@@ -80,13 +88,13 @@ export function isProduction(argv: readonly string[]): boolean {
 
 export function requireProduction(options: ProductionOptions): void {
   if (required(options, "--environment") !== "production") {
-    invalidProductionArguments();
+    invalidProductionArguments("invalid_field", "--environment");
   }
 }
 
 export function required(options: ProductionOptions, name: string): string {
   const value = options.values.get(name);
-  if (!value?.trim()) invalidProductionArguments();
+  if (!value?.trim()) invalidProductionArguments("missing_field", name);
   return value;
 }
 
@@ -96,7 +104,7 @@ export function optionalText(
   maximum: number,
 ): string | null {
   const value = options.values.get(name);
-  return value === undefined ? null : boundedText(value, maximum);
+  return value === undefined ? null : boundedText(value, maximum, name);
 }
 
 export function workspace(options: ProductionOptions): string {
@@ -107,47 +115,64 @@ export function workspace(options: ProductionOptions): string {
     value.includes("--") ||
     !/^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/.test(value)
   )
-    invalidProductionArguments();
+    invalidProductionArguments("invalid_field", "--workspace");
   return value;
 }
 
-export function uuid(value: string): string {
-  if (!UUID.test(value)) invalidProductionArguments();
+export function uuid(value: string, field = "value"): string {
+  if (!UUID.test(value)) invalidProductionArguments("invalid_field", field);
   return value.toLowerCase();
 }
 
-export function versionedUuid(value: string): string {
-  if (!VERSIONED_UUID.test(value)) invalidProductionArguments();
+export function versionedUuid(value: string, field = "value"): string {
+  if (!VERSIONED_UUID.test(value)) {
+    invalidProductionArguments("invalid_field", field);
+  }
   return value.toLowerCase();
 }
 
-export function positiveInteger(value: string): number {
-  if (!/^[1-9]\d*$/.test(value)) invalidProductionArguments();
+export function positiveInteger(value: string, field = "value"): number {
+  if (!/^[1-9]\d*$/.test(value)) {
+    invalidProductionArguments("invalid_field", field);
+  }
   const result = Number(value);
-  if (!Number.isSafeInteger(result)) invalidProductionArguments();
+  if (!Number.isSafeInteger(result)) {
+    invalidProductionArguments("invalid_field", field);
+  }
   return result;
 }
 
-export function boundedText(value: string, maximum: number): string {
+export function boundedText(
+  value: string,
+  maximum: number,
+  field = "value",
+): string {
   if (
     value !== value.trim() ||
     value.length > maximum ||
     /[\u0000-\u001f\u007f]/u.test(value)
   )
-    invalidProductionArguments();
+    invalidProductionArguments("invalid_field", field);
   return value;
 }
 
-export function content(value: string, maximum: number): string {
+export function content(
+  value: string,
+  maximum: number,
+  field = "value",
+): string {
   if (!value.trim() || value.length > maximum || value.includes("\0")) {
-    invalidProductionArguments();
+    invalidProductionArguments("invalid_field", field);
   }
   return value;
 }
 
-export function idempotencyKey(value: string): string {
+export function idempotencyKey(
+  value: string,
+  field = "--idempotency-key",
+): string {
   if (value !== value.trim() || value.length > 200 || /\p{Cc}/u.test(value)) {
-    invalidProductionArguments();
+    invalidProductionArguments("invalid_field", field);
   }
   return value;
 }
@@ -157,7 +182,9 @@ export function reuseOverride(
 ): AudienceReuseOverrideInput | null {
   const value = options.values.get("--acknowledge-audience-reuse");
   if (value === undefined) return null;
-  if (!/^sha256:[0-9a-f]{64}$/.test(value)) invalidProductionArguments();
+  if (!/^sha256:[0-9a-f]{64}$/.test(value)) {
+    invalidProductionArguments("invalid_field", "--acknowledge-audience-reuse");
+  }
   return {
     version: "audience_reuse_override.v1",
     audienceIdentity: value,
@@ -165,6 +192,13 @@ export function reuseOverride(
   };
 }
 
-export function invalidProductionArguments(): never {
-  throw new CliUsageError("invalid_operator_arguments");
+export function invalidProductionArguments(
+  kind:
+    | "missing_field"
+    | "invalid_field"
+    | "duplicate_field"
+    | "unknown_field" = "invalid_field",
+  field = "invocation",
+): never {
+  throw new CliUsageError("invalid_operator_arguments", { kind, field });
 }

@@ -124,6 +124,67 @@ test("program renders help, version, and invalid invocation exactly", async () =
   });
 });
 
+test("invalid JSON calls keep a structured receipt and production help exposes recovery", async () => {
+  const dependencies = {
+    cwd: root,
+    randomUUID: () => "10000000-0000-4000-8000-000000000009",
+    runner: { run: async () => 1 },
+  };
+  const invalid = await runProgram(
+    ["broadcast", "draft", "create", "--json"],
+    dependencies,
+  );
+  assert.equal(invalid.exitCode, 2);
+  assert.equal(invalid.stderr, "");
+  assert.deepEqual(JSON.parse(invalid.stdout), {
+    schema_version: "fonte.cli.invalid_invocation.v1",
+    command: "invalid_invocation",
+    outcome: "invalid_invocation",
+    reason: "invalid_invocation",
+    detail: {
+      code: "invalid_operator_arguments",
+      kind: "missing_field",
+      field: "--environment",
+    },
+    next_action: {
+      kind: "run_command",
+      command: "fonte broadcast draft create --help",
+    },
+  });
+  for (const [argv, expected] of [
+    [["broadcast", "draft", "--help"], "broadcast draft create --help"],
+    [["broadcast", "audience", "preview", "--help"], "--draft-id <uuid>"],
+    [["broadcast", "test", "--help"], "broadcast test status --help"],
+    [["broadcast", "preflight", "--help"], "--expected-version <n>"],
+    [["broadcast", "authorize", "--help"], "--idempotency-key <key>"],
+    [["broadcast", "status", "--help"], "[--watch]"],
+    [["broadcast", "pause", "--help"], "state-idempotent"],
+    [["broadcast", "resume", "--help"], "state-idempotent"],
+    [["broadcast", "cancel", "--help"], "state-idempotent"],
+    [["broadcast", "result", "--help"], "frozen audience provenance"],
+  ]) {
+    const result = await runProgram(argv, dependencies);
+    assert.equal(result.exitCode, 0);
+    assert.match(
+      result.stdout,
+      new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+  }
+  const contract = await readFile(
+    path.join(root, "packages/cli/OPERATOR_CONTRACT.md"),
+    "utf8",
+  );
+  assert.match(
+    contract,
+    /Core intentionally denies CLI OAuth `PUT` and `PATCH`/,
+  );
+  assert.match(contract, /replacement\n+draft with a new UUID idempotency key/);
+  assert.match(
+    contract,
+    /authoritative audience\n+preview, verified-account test, and exact-revision preflight/,
+  );
+});
+
 test("plan sealing uses recursively canonical compact JSON", () => {
   assert.equal(
     canonicalJson({ z: "Ź", a: [{ y: 2, x: true }] }),

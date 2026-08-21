@@ -16,6 +16,15 @@ export function renderHuman(receipt: AnyCliReceipt): string {
   }
   if (receipt.schema_version === "fonte.cli.test_receipt.v1")
     return renderTest(receipt);
+  if (receipt.schema_version === "fonte.cli.invalid_invocation.v1") {
+    return [
+      "Fonte invocation is invalid.",
+      `Reason: ${receipt.reason}.`,
+      `Field: ${receipt.detail.field}.`,
+      `Next: ${receipt.next_action.command}.`,
+      "",
+    ].join("\n");
+  }
   if (receipt.outcome === "planned") {
     const changes = receipt.operations.filter(
       ({ result }) => result === "planned",

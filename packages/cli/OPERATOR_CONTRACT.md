@@ -62,6 +62,14 @@ The body is Core's current persisted HTML/body field and is never inferred from
 a template or browser state. Optional `--preheader` and `--reply-to` are passed
 as entered.
 
+## Replacement-draft recovery
+
+Core intentionally denies CLI OAuth `PUT` and `PATCH` draft mutations. If title,
+subject, body, sender, purpose, or audience inputs change, create a replacement
+draft with a new UUID idempotency key. Restart Core's authoritative audience
+preview, verified-account test, and exact-revision preflight for that new draft;
+do not reuse a prior draft's readback as evidence for changed material.
+
 Audience selection is either `--all-contacts` or a recipient expression with
 one or more explicit `--include-collection` / `--include-import-batch` UUIDs and
 optional matching exclude flags. Each side is bounded to 20 unique references.

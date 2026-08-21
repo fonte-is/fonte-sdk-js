@@ -17,6 +17,7 @@ import { readManifest } from "./manifest.js";
 import { applyInit, applyRemove } from "./mutations.js";
 import { runHostedTest, testBlockedReceipt } from "./hosted-test.js";
 import { HostedTestBlockedError } from "./hosted-errors.js";
+import { invalidInvocationReceipt } from "./invalid-invocation.js";
 import { assertManagedPathSafe } from "./paths.js";
 import { detectProject } from "./project.js";
 import { blockedReceipt, plannedReceipt } from "./receipts.js";
@@ -35,12 +36,15 @@ export async function runProgram(
     parsed = parseArguments(argv);
   } catch (error) {
     if (error instanceof CliUsageError) {
+      if (argv.includes("--json")) {
+        return receiptResult(invalidInvocationReceipt(error, argv), true, 2);
+      }
       return { exitCode: 2, stdout: "", stderr: USAGE_TEXT };
     }
     return executionFailure();
   }
   if (parsed.command === "help") {
-    return { exitCode: 0, stdout: HELP_TEXT, stderr: "" };
+    return { exitCode: 0, stdout: parsed.helpText ?? HELP_TEXT, stderr: "" };
   }
   if (parsed.command === "version") {
     return { exitCode: 0, stdout: VERSION_TEXT, stderr: "" };
@@ -110,7 +114,11 @@ function authorizationFailure(): CommandResult {
 }
 
 function receiptExitCode(receipt: AnyCliReceipt): 0 | 3 {
+  if (receipt.schema_version === "fonte.cli.invalid_invocation.v1") return 3;
   if (receipt.schema_version === "fonte.cli.operator_receipt.v1") {
+    if (receipt.result?.kind === "production_test") {
+      return receipt.reason === "production_test_terminal_accepted" ? 0 : 3;
+    }
     return receipt.outcome === "blocked" ||
       receipt.outcome === "unsupported_authority"
       ? 3
@@ -168,7 +176,7 @@ async function manifestExists(root: string): Promise<boolean> {
 function receiptResult(
   receipt: AnyCliReceipt,
   json: boolean,
-  exitCode: 0 | 3 = 0,
+  exitCode: 0 | 2 | 3 = 0,
 ): CommandResult {
   return {
     exitCode,

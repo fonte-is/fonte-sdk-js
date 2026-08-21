@@ -15,6 +15,8 @@ import {
   draftId,
   hostedConfig,
   purposeId,
+  testId,
+  testReadback,
   workspace,
 } from "./fixtures/cli-production-broadcast-responses.mjs";
 import { openFakeCore } from "./fixtures/cli-production-broadcast-server.mjs";
@@ -108,6 +110,48 @@ test("one isolated fake-Core journey exercises every production operator route w
     fake.state.requests.some(({ path }) => path.includes("email-sandbox")),
     false,
   );
+});
+
+test("a refused terminal production test is blocked with a stable exit reason", async () => {
+  const refused = {
+    ...testReadback("terminal"),
+    acceptedCount: 0,
+    refusedCount: 1,
+    unknownCount: 0,
+    billing: { acceptedUsageQuantity: 0 },
+  };
+  const result = await runProgram(
+    [
+      "broadcast",
+      "test",
+      "status",
+      "--workspace",
+      workspace,
+      "--environment",
+      "production",
+      "--draft-id",
+      draftId,
+      "--test-id",
+      testId,
+      "--json",
+    ],
+    dependencies({
+      configUrl: "http://127.0.0.1:43111/.well-known/fonte-cli.json",
+      fetch: async (input) =>
+        String(input).includes(".well-known/fonte-cli.json")
+          ? json(hostedConfig("http://127.0.0.1:43112"))
+          : json(refused),
+    }),
+  );
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(result.stderr, "");
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "production_test_terminal_refused");
+  assert.equal(receipt.result.accepted_count, 0);
+  assert.equal(receipt.result.refused_count, 1);
+  assert.equal(receipt.result.unknown_count, 0);
 });
 
 async function runJourney(configUrl) {
