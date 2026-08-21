@@ -56,11 +56,16 @@ fonte --version
 ```
 
 Flags may appear in either order after a command. Duplicate, unknown, or
-command-incompatible flags are usage errors. `--help` and `--version` must be
-the only argument. There is no terminal prompt. `test` opens the system browser
-for an existing signed-in human to approve the registered public CLI client.
-The workspace slug is explicit, lowercase, and remains subject to server-side
-Fonte workspace membership.
+command-incompatible flags are usage errors. `--version` must be the only
+argument. `--help` is either the only argument or the final argument of a
+current public command with no other command options; it prints that command's
+admitted syntax and authority. In particular, broadcast-test help distinguishes
+the fixed sandbox canary syntax from the verified-account production-test
+syntax, and Bridge help names the admitted Resend observation and copy routes.
+There is no terminal prompt. `test` opens the system browser for an existing
+signed-in human to approve the registered public CLI client. The workspace slug
+is explicit, lowercase, and remains subject to server-side Fonte workspace
+membership.
 
 `auth exec` is the reusable local authority seam. It performs the same hosted
 browser OAuth Authorization Code flow with mandatory S256 PKCE, then directly
@@ -125,10 +130,18 @@ stdout. Human mode writes only the literal rendering selected by the receipt.
 Diagnostics do not expose absolute paths, environment values, or command
 output containing secrets.
 
-Help, version, usage-error, and unexpected-error bytes are the exact exported
-constants in `constants.ts`. Usage errors always write `USAGE_TEXT` to stderr,
-write nothing to stdout, and exit 2, even when `--json` appeared in the invalid
-input. Unexpected failures write `EXECUTION_ERROR_TEXT` to stderr, write
+The root help, version, human usage-error, and unexpected-error bytes are the
+exact exported constants in `constants.ts`; command help is derived from the
+admitted parser surface. A human usage error writes `USAGE_TEXT` to stderr,
+writes nothing to stdout, and exits 2. An invalid invocation that includes
+`--json` instead writes exactly one `fonte.cli.invalid_invocation.v1` receipt
+plus a trailing newline to stdout, writes nothing to stderr, and exits 2. Its
+top-level fields are `schema_version`, `command`, `outcome`, `reason`,
+`detail`, and `next_action`; `detail` supplies stable error code, kind, and a
+bounded field label, while `next_action` supplies the matching parser-help
+command. Unknown positional values, paths, and token-like input are never
+echoed in `detail.field`; only known admitted flags (or fixed labels) may be
+named. Unexpected failures write `EXECUTION_ERROR_TEXT` to stderr, write
 nothing to stdout, and exit 1.
 
 ## Fixed paths and content

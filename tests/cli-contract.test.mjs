@@ -124,7 +124,7 @@ test("program renders help, version, and invalid invocation exactly", async () =
   });
 });
 
-test("invalid JSON calls keep a structured receipt and production help exposes recovery", async () => {
+test("invalid JSON calls stay private and every current command help matches its authority", async () => {
   const dependencies = {
     cwd: root,
     randomUUID: () => "10000000-0000-4000-8000-000000000009",
@@ -151,10 +151,34 @@ test("invalid JSON calls keep a structured receipt and production help exposes r
       command: "fonte broadcast draft create --help",
     },
   });
+  for (const argv of [
+    ["test", "untrusted-secret-token", "--json"],
+    ["broadcast", "draft", "create", "/private/credential", "--json"],
+    ["bridge", "observe", "resend", "token-like-value", "--json"],
+  ]) {
+    const result = await runProgram(argv, dependencies);
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(result.exitCode, 2);
+    assert.equal(receipt.detail.field, "invocation");
+    assert.equal(result.stdout.includes(argv.at(-2)), false);
+  }
   for (const [argv, expected] of [
+    [["init", "--help"], "[--yes] [--json]"],
+    [["doctor", "--help"], "Usage: fonte doctor [--json]"],
+    [["test", "--help"], "hosted sandbox proof"],
+    [["auth", "--help"], "fonte auth exec --help"],
+    [["auth", "exec", "--help"], "bearer-bound child"],
+    [["remove", "--help"], "Fonte-owned local installation state"],
+    [["broadcast", "--help"], "Fonte broadcast commands"],
     [["broadcast", "draft", "--help"], "broadcast draft create --help"],
-    [["broadcast", "audience", "preview", "--help"], "--draft-id <uuid>"],
-    [["broadcast", "test", "--help"], "broadcast test status --help"],
+    [["broadcast", "audience", "--help"], "broadcast audience options --help"],
+    [["broadcast", "test", "--help"], "broadcast test send --help"],
+    [["broadcast", "draft", "create", "--help"], "--title <title>"],
+    [["broadcast", "draft", "read", "--help"], "--draft-id <uuid>"],
+    [["broadcast", "audience", "options", "--help"], "audience source IDs"],
+    [["broadcast", "audience", "preview", "--help"], "eligible counts"],
+    [["broadcast", "test", "send", "--help"], "--environment sandbox"],
+    [["broadcast", "test", "status", "--help"], "--environment production"],
     [["broadcast", "preflight", "--help"], "--expected-version <n>"],
     [["broadcast", "authorize", "--help"], "--idempotency-key <key>"],
     [["broadcast", "status", "--help"], "[--watch]"],
@@ -162,6 +186,13 @@ test("invalid JSON calls keep a structured receipt and production help exposes r
     [["broadcast", "resume", "--help"], "state-idempotent"],
     [["broadcast", "cancel", "--help"], "state-idempotent"],
     [["broadcast", "result", "--help"], "frozen audience provenance"],
+    [["bridge", "observe", "resend", "--help"], "Resend segment"],
+    [["bridge", "copy", "resend", "--help"], "fingerprint-bound"],
+    [["bridge", "--help"], "bridge observe resend --help"],
+    [["bridge", "observe", "--help"], "bridge observe kit --help"],
+    [["bridge", "copy", "--help"], "bridge copy kit --help"],
+    [["broadcast", "prepare", "--help"], "unsupported_authority"],
+    [["bridge", "status", "--help"], "unsupported_authority"],
   ]) {
     const result = await runProgram(argv, dependencies);
     assert.equal(result.exitCode, 0);
@@ -170,17 +201,36 @@ test("invalid JSON calls keep a structured receipt and production help exposes r
       new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     );
   }
+  const productionTestHelp = await runProgram(
+    ["broadcast", "test", "send", "--help"],
+    dependencies,
+  );
+  assert.match(productionTestHelp.stdout, /--environment sandbox/);
+  assert.match(productionTestHelp.stdout, /--environment production/);
+  assert.match(productionTestHelp.stdout, /--postal-address <address>/);
   const contract = await readFile(
+    path.join(root, "packages/cli/CONTRACT.md"),
+    "utf8",
+  );
+  assert.match(contract, /fonte\.cli\.invalid_invocation\.v1/);
+  assert.match(
+    contract,
+    /Unknown positional values, paths, and token-like input/,
+  );
+  const operatorContract = await readFile(
     path.join(root, "packages/cli/OPERATOR_CONTRACT.md"),
     "utf8",
   );
   assert.match(
-    contract,
+    operatorContract,
     /Core intentionally denies CLI OAuth `PUT` and `PATCH`/,
   );
-  assert.match(contract, /replacement\n+draft with a new UUID idempotency key/);
   assert.match(
-    contract,
+    operatorContract,
+    /replacement\n+draft with a new UUID idempotency key/,
+  );
+  assert.match(
+    operatorContract,
     /authoritative audience\n+preview, verified-account test, and exact-revision preflight/,
   );
 });
