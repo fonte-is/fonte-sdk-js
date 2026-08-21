@@ -1,4 +1,4 @@
-export const CLI_VERSION = "0.1.3";
+export const CLI_VERSION = "0.1.4";
 export const SDK_PACKAGE = "@fonte-is/nextjs";
 export const SDK_VERSION = "0.1.0";
 export const ADAPTER_ID = "next_app_router";
@@ -78,6 +78,7 @@ export const HELP_TEXT = [
   "broadcast test help distinguishes the sandbox canary from production tests.",
   "broadcast production commands consume Core's draft, audience, test, preflight, authorization, control, and result authority.",
   "bridge observe/copy resend use Core's admitted Resend Bridge authority.",
+  "bridge connections list/connect/reconnect use native Resend or Kit OAuth through Core.",
   "bridge collections/reconcile/freeze use Core's provider-audience authority.",
   "All other broadcast and Bridge declarations have no Core effect.",
   "Transactional application email remains locked.",

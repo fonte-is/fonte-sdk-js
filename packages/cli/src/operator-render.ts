@@ -82,6 +82,38 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       "",
     ].join("\n");
   }
+  if (result.kind === "provider_connections") {
+    return [
+      `Fonte ${providerName(result.provider)} connections (${result.connections.length}):`,
+      ...(result.connections.length === 0
+        ? ["- none"]
+        : result.connections.map(
+            (connection) =>
+              `- ${connection.display_name} (${connection.connection_id}); version ${connection.credential_version}; ${connection.status}.`,
+          )),
+      "Core effect: none.",
+      "",
+    ].join("\n");
+  }
+  if (result.kind === "provider_connection_oauth") {
+    return [
+      `Fonte ${providerName(result.provider)} connection: ${result.status}.`,
+      `Reason: ${result.reason}.`,
+      ...(result.provider === "resend"
+        ? [
+            "Provider scope: full_access; Fonte uses it for read-only Bridge operations.",
+          ]
+        : []),
+      ...(result.authorization_url
+        ? [`Authorize in your browser: ${result.authorization_url}`]
+        : []),
+      ...(result.connection
+        ? [`Connection: ${result.connection.connection_id}.`]
+        : [`Connection: ${result.connection_id}.`]),
+      `Core effect: ${receipt.core_effect}.`,
+      "",
+    ].join("\n");
+  }
   if (result.kind !== "sandbox_test") {
     throw new TypeError("operator_receipt_unrenderable");
   }
@@ -92,6 +124,10 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
     "Recipient: signed-in account's verified email (address withheld).",
     "",
   ].join("\n");
+}
+
+function providerName(provider: "resend" | "kit"): "Resend" | "Kit" {
+  return provider === "resend" ? "Resend" : "Kit";
 }
 
 function renderBlocked(receipt: OperatorReceipt): string {

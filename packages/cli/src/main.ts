@@ -6,6 +6,7 @@ import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
 import { authorizeWithBrowser } from "./oauth.js";
 import { systemRunner } from "./runner.js";
+import { openBrowser } from "./browser.js";
 
 const cancellation = new AbortController();
 const cancel = () => cancellation.abort();
@@ -32,6 +33,7 @@ const result = await runProgram(process.argv.slice(2), {
     authorize: authorizeWithBrowser,
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    openUrl: openBrowser,
   },
   hosted: {
     fetch: globalThis.fetch,

@@ -30,6 +30,8 @@ V0 supports only:
 - one thin Bridge collection, completed Contact-import identity read,
   provider-audience reconciliation, and explicit fingerprint-bound freeze
   journey over Core-owned authority; and
+- one thin Resend/Kit native-OAuth connection list, connect, and reconnect
+  journey over Core-owned custody; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
@@ -249,16 +251,16 @@ Its fixed values are:
 
 ```text
 schema_version  fonte.local_installation.v1
-cli_version     0.1.3
+cli_version     0.1.4
 adapter_id      next_app_router
 adapter_version v1
 sdk_package     @fonte-is/nextjs
 sdk_version     0.1.0
 ```
 
-The 0.1.3 CLI writes `cli_version` 0.1.3 and continues to accept exact
-0.1.0-, 0.1.1-, and 0.1.2-created manifests. Any other or unknown CLI manifest
-version is invalid.
+The 0.1.4 CLI writes `cli_version` 0.1.4 and continues to accept exact
+0.1.0-, 0.1.1-, 0.1.2-, and 0.1.3-created manifests. Any other or unknown CLI
+manifest version is invalid.
 
 `managed_operations` excludes `local_manifest` and contains only operations
 actually owned by Fonte. A dependency already present at the exact version and

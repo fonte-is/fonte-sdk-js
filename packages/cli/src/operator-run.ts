@@ -10,6 +10,11 @@ import {
   providerAudienceReceiptDescriptor,
 } from "./operator-provider-audience-run.js";
 import {
+  executeProviderConnectionCommand,
+  isProviderConnectionCommand,
+  providerConnectionReceiptDescriptor,
+} from "./operator-provider-connection-run.js";
+import {
   executeProductionCommand,
   isProductionCommand,
   productionReceiptDescriptor,
@@ -25,10 +30,12 @@ export interface OperatorDependencies {
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
   authorize(config: HostedConfig): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
+  openUrl?(url: URL): Promise<boolean>;
 }
 export async function runOperatorCommand(
   command: OperatorCommand,
   dependencies: OperatorDependencies,
+  randomUUID: () => string,
 ): Promise<OperatorReceipt> {
   if (command.kind === "unsupported") return unsupportedReceipt();
   try {
@@ -42,7 +49,13 @@ export async function runOperatorCommand(
       bearer,
       fetch: dependencies.fetch as typeof fetch,
     });
-    const result = await execute(command, client, dependencies.sleep);
+    const result = await execute(
+      command,
+      client,
+      randomUUID,
+      dependencies.openUrl,
+      dependencies.sleep,
+    );
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
@@ -65,8 +78,19 @@ export async function runOperatorCommand(
 async function execute(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   client: ReturnType<typeof createCoreOperatorClient>,
+  randomUUID: () => string,
+  openUrl: ((url: URL) => Promise<boolean>) | undefined,
   sleep: (milliseconds: number) => Promise<void>,
 ): Promise<OperatorResult> {
+  if (isProviderConnectionCommand(command)) {
+    return executeProviderConnectionCommand(
+      command,
+      client,
+      randomUUID,
+      openUrl,
+      sleep,
+    );
+  }
   if (isProductionCommand(command)) {
     return executeProductionCommand(command, client, sleep);
   }
@@ -182,6 +206,16 @@ function successReceipt(
       providerAudience.coreEffect,
     );
   }
+  const providerConnection = providerConnectionReceiptDescriptor(result);
+  if (providerConnection) {
+    return currentReceipt(
+      command,
+      result,
+      providerConnection.outcome,
+      providerConnection.reason,
+      providerConnection.coreEffect,
+    );
+  }
   if (result.kind !== "sandbox_test") {
     throw new TypeError("operator_receipt_unmappable");
   }
@@ -202,7 +236,15 @@ function currentReceipt(
   result: OperatorResult,
   outcome: "queued" | "terminal" | "completed" | "blocked",
   reason: string,
-  coreEffect: "none" | "created" | "queued" | "controlled" | "copied",
+  coreEffect:
+    | "none"
+    | "created"
+    | "replaced"
+    | "attempted"
+    | "queued"
+    | "controlled"
+    | "copied"
+    | "unknown",
 ): OperatorReceipt {
   return {
     schema_version: "fonte.cli.operator_receipt.v1",
@@ -244,8 +286,10 @@ function currentAuthority(
             ? "fonte.core.contact_import.v1"
             : command.kind.startsWith("bridge_resend_")
               ? "fonte.core.resend_bridge.v1"
-              : command.kind.startsWith("bridge_provider_")
-                ? "fonte.core.provider_audience.v1"
-                : "fonte.core.sandbox_canary.v1",
+              : command.kind.startsWith("bridge_connection_")
+                ? "fonte.core.provider_connections.v1"
+                : command.kind.startsWith("bridge_provider_")
+                  ? "fonte.core.provider_audience.v1"
+                  : "fonte.core.sandbox_canary.v1",
   };
 }

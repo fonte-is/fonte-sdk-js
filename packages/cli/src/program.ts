@@ -57,6 +57,7 @@ export async function runProgram(
     const receipt = await runOperatorCommand(
       parsed.operator!,
       dependencies.operator,
+      dependencies.randomUUID,
     );
     return receiptResult(receipt, parsed.json, receiptExitCode(receipt));
   }

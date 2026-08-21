@@ -21,6 +21,9 @@ npx @fonte-is/cli broadcast status --workspace my-workspace --environment produc
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
 npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
 npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
+npx @fonte-is/cli bridge connections list resend --workspace my-workspace --environment production
+npx @fonte-is/cli bridge connections connect resend --workspace my-workspace --environment production --display-name "Primary Resend"
+npx @fonte-is/cli bridge connections connect kit --workspace my-workspace --environment production --display-name "Primary Kit"
 npx @fonte-is/cli bridge collections resend --workspace my-workspace --environment sandbox --connection-id <uuid>
 npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
 npx @fonte-is/cli bridge import status --workspace my-workspace --environment sandbox --contact-import-batch-id <uuid>
@@ -93,8 +96,13 @@ production draft/audience/test/preflight/authorization/control/result journey,
 Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
 collection discovery, reconciliation, and explicit fingerprint-bound audience
 freeze. Contact-import status returns Core's exact completed batch UUID and
-identity-set SHA-256 for frozen-source reconciliation. Reconciliation output
-contains only provenance and aggregate counts;
+identity-set SHA-256 for frozen-source reconciliation. Connection commands use
+Resend or Kit's native OAuth consent; provider tokens stay in Core's encrypted
+custody and never enter terminal input, command arguments, environment, files,
+logs, or CLI receipts. Resend requires
+`full_access` for these read-only Bridge operations. Kit OAuth remains
+unavailable until its exact application and scope configuration is admitted.
+Reconciliation output contains only provenance and aggregate counts;
 contact rows are never rendered. The CLI selects
 audiences only by Core IDs, never filenames, and never computes eligibility.
 Preflight observes one exact persisted draft revision. Authorization reuses

@@ -1,6 +1,7 @@
 import { CliUsageError } from "./errors.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
 import { parseProviderAudienceArguments } from "./operator-provider-audience-arguments.js";
+import { parseProviderConnectionArguments } from "./operator-provider-connection-arguments.js";
 import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
@@ -33,6 +34,8 @@ export function parseOperatorArguments(
 ): ParsedOperatorArguments {
   const production = parseProductionOperatorArguments(argv);
   if (production) return production;
+  const providerConnection = parseProviderConnectionArguments(argv);
+  if (providerConnection) return providerConnection;
   const providerAudience = parseProviderAudienceArguments(argv);
   if (providerAudience) return providerAudience;
   if (argv[0] === "broadcast" && argv[1] === "test") {

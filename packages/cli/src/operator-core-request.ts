@@ -100,7 +100,8 @@ function failureEffect(
   if (post?.lostResponseEffect !== "unknown" || status < 500) return "none";
   if (
     reason === "resend_bridge_unavailable" ||
-    reason === "resend_bridge_provider_unavailable"
+    reason === "resend_bridge_provider_unavailable" ||
+    reason === "provider_oauth_unavailable"
   ) {
     return "none";
   }

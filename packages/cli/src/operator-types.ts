@@ -7,6 +7,11 @@ import type {
   ProviderCollectionListResult,
 } from "./operator-provider-audience-types.js";
 import type {
+  ProviderConnectionListResult,
+  ProviderConnectionOAuthResult,
+  ProviderConnectionOperatorCommand,
+} from "./operator-provider-connection-types.js";
+import type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
   ProductionAudienceOptionsResult,
@@ -124,6 +129,7 @@ export type OperatorCommand =
       readonly idempotencyKey: string;
     }
   | ProviderAudienceOperatorCommand
+  | ProviderConnectionOperatorCommand
   | { readonly kind: "unsupported" };
 
 export interface ParsedOperatorArguments {
@@ -210,7 +216,9 @@ export type OperatorResult =
   | ResendBridgeCopyResult
   | ProviderCollectionListResult
   | ProviderAudienceReconciliationResult
-  | ProviderAudienceFreezeResult;
+  | ProviderAudienceFreezeResult
+  | ProviderConnectionListResult
+  | ProviderConnectionOAuthResult;
 
 export interface OperatorReceipt {
   readonly schema_version: "fonte.cli.operator_receipt.v1";
@@ -228,9 +236,17 @@ export interface OperatorReceipt {
       | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"
       | "fonte.core.provider_audience.v1"
+      | "fonte.core.provider_connections.v1"
       | "unavailable";
   };
   readonly core_effect:
-    "none" | "created" | "queued" | "controlled" | "copied" | "unknown";
+    | "none"
+    | "created"
+    | "replaced"
+    | "attempted"
+    | "queued"
+    | "controlled"
+    | "copied"
+    | "unknown";
   readonly result: OperatorResult | null;
 }

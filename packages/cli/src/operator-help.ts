@@ -176,6 +176,43 @@ const entries: readonly HelpEntry[] = [
     detail: "Copies one fingerprint-bound Resend observation through Core.",
     json: true,
   },
+  ...(["resend", "kit"] as const).flatMap((provider) => [
+    {
+      command: ["bridge", "connections", "list", provider],
+      usage: [["--workspace <slug> --environment <sandbox|production>"]],
+      detail: `Lists Core's sanitized ${provider} connection metadata.`,
+      json: true as const,
+    },
+    {
+      command: ["bridge", "connections", "connect", provider],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--display-name <name>",
+        ],
+      ],
+      detail:
+        provider === "resend"
+          ? "Starts native Resend OAuth and waits when the authorization page opens."
+          : "Kit OAuth is currently unavailable and fails closed until its application and scope authority exists.",
+      json: true as const,
+    },
+    {
+      command: ["bridge", "connections", "reconnect", provider],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--connection-id <uuid> --display-name <name>",
+          "--expected-credential-version <n>",
+        ],
+      ],
+      detail:
+        provider === "resend"
+          ? "Reauthorizes one existing connection through native Resend OAuth."
+          : "Kit OAuth is currently unavailable and fails closed until its application and scope authority exists.",
+      json: true as const,
+    },
+  ]),
   ...providerAudienceHelpEntries,
   ...(["prepare", "send", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({

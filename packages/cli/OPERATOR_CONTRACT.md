@@ -98,6 +98,31 @@ Sandbox test status and production test status use different admitted Core
 routes. Resend preview remains observation-only; copy remains a separate
 fingerprint-bound action. Neither command mutates provider state.
 
+Provider connections are established through Core-owned native OAuth:
+
+```text
+fonte bridge connections list resend|kit --workspace <slug> \
+  --environment <sandbox|production>
+
+fonte bridge connections connect resend|kit --workspace <slug> \
+  --environment <sandbox|production> --display-name <name>
+
+fonte bridge connections reconnect resend|kit --workspace <slug> \
+  --environment <sandbox|production> --connection-id <uuid> \
+  --display-name <name> --expected-credential-version <n>
+```
+
+Connect and reconnect start a short-lived Core attempt, open or return the
+provider authorization URL, and poll sanitized status after the browser opens.
+The user enters credentials only on Resend or Kit's consent page. Provider
+access and refresh tokens never enter CLI input, arguments, environment,
+output, logs, files, or receipts. Resend's provider grant is `full_access`
+because Resend requires it for non-send routes even though Fonte's Bridge use
+is read-only. A lost or unfinished completion remains unknown until Core
+readback. Kit keeps the same typed command surface but fails closed as
+`provider_oauth_unavailable` until its exact application and scope
+configuration is admitted.
+
 Core's provider-audience boundary also supports this CLI-only operator journey:
 
 ```text
@@ -146,5 +171,5 @@ provider collection.
 
 All other broadcast or Bridge declarations return `unsupported_authority`
 before OAuth or network access. There is no generic HTTP command, provider
-credential command, browser UI fallback, generic segment language, local
+credential input, browser UI fallback, generic segment language, local
 eligibility engine, automatic retry after an ambiguous mutation, or MCP layer.

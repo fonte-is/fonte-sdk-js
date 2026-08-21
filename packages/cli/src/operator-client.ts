@@ -14,6 +14,10 @@ import {
   type ProviderAudienceClient,
 } from "./operator-provider-audience-client.js";
 import {
+  createProviderConnectionClient,
+  type ProviderConnectionClient,
+} from "./operator-provider-connection-client.js";
+import {
   requestBroadcastPreflight,
   type BroadcastPreflightInput,
 } from "./operator-preflight-client.js";
@@ -51,6 +55,15 @@ export type {
   ProviderCollectionReferenceInput,
 } from "./operator-provider-audience-types.js";
 export type {
+  ProviderConnectionListInput,
+  ProviderConnectionListResult,
+  ProviderConnectionMetadataResult,
+  ProviderConnectionOAuthBeginInput,
+  ProviderConnectionOAuthReadInput,
+  ProviderConnectionOAuthResult,
+  ProviderConnectionProvider,
+} from "./operator-provider-connection-types.js";
+export type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
   ProductionAudienceOptionsResult,
@@ -79,7 +92,10 @@ export interface CoreOperatorClientOptions {
 }
 
 export interface CoreOperatorClient
-  extends ProductionOperatorClient, ProviderAudienceClient {
+  extends
+    ProductionOperatorClient,
+    ProviderAudienceClient,
+    ProviderConnectionClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -123,6 +139,7 @@ export function createCoreOperatorClient(
   return {
     ...createProductionOperatorClient(request),
     ...createProviderAudienceClient(request),
+    ...createProviderConnectionClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,

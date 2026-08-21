@@ -36,7 +36,11 @@ test("local manifest accepts compatible exact nonsecret schemas", () => {
     ...valid,
     cli_version: "0.1.3",
   });
-  assert.equal(parseManifest({ ...valid, cli_version: "0.1.4" }), null);
+  assert.deepEqual(parseManifest({ ...valid, cli_version: "0.1.4" }), {
+    ...valid,
+    cli_version: "0.1.4",
+  });
+  assert.equal(parseManifest({ ...valid, cli_version: "0.1.5" }), null);
   assert.equal(parseManifest({ ...valid, cli_version: "unknown" }), null);
   assert.equal(parseManifest({ ...valid, secret: "forbidden" }), null);
   assert.equal(
