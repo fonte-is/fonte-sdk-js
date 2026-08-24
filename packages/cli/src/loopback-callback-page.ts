@@ -20,56 +20,123 @@ const fonteMark = `<svg aria-hidden="true" viewBox="0 0 38 38" fill="none">
   <path d="M26.8463 14.3515C28.63 14.3515 30.0754 12.9043 30.0754 11.1189C30.0754 9.33343 28.63 7.88617 26.8463 7.88617C25.0626 7.88617 23.6172 9.33343 23.6172 11.1189C23.6172 12.9043 25.0626 14.3515 26.8463 14.3515Z" fill="currentColor"/>
 </svg>`;
 
+const fonteFavicon = fonteMark
+  .replace(
+    '<svg aria-hidden="true" viewBox="0 0 38 38" fill="none">',
+    '<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="translate(1 1) scale(1.631579)">',
+  )
+  .replace("</svg>", "</g></svg>")
+  .replaceAll('fill="currentColor"', 'fill="#007DF9"');
+
+const fonteFaviconHref = `data:image/svg+xml,${encodeURIComponent(fonteFavicon)}`;
+
+const statusIcons = {
+  success: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+    <path d="m7.25 12.25 3 3 6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`,
+  failure: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+    <path d="m8.5 8.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>`,
+} as const;
+
 const styles = `
   :root {
-    color-scheme: light;
-    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color-scheme: light dark;
+    font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: #ffffff;
-    color: #181d27;
+    color: #252921;
+    --canvas: #ffffff;
+    --text: #252921;
+    --text-secondary: #687066;
+    --brand: #006edb;
+    --success: #079455;
+    --failure: #d92d20;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      background: #141915;
+      color: #f2efe8;
+      --canvas: #141915;
+      --text: #f2efe8;
+      --text-secondary: #a8afa7;
+      --brand: #53a0ff;
+      --success: #47cd89;
+      --failure: #f97066;
+    }
   }
   * { box-sizing: border-box; }
   body {
     min-width: 320px;
     min-height: 100vh;
+    min-height: 100svh;
     margin: 0;
     display: flex;
     align-items: center;
-    padding: 48px 20px;
-    background: #ffffff;
+    padding: 48px 16px;
+    background: var(--canvas);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   main {
+    display: flex;
     width: 100%;
     max-width: 360px;
     margin: 0 auto;
-    display: flex;
     flex-direction: column;
-    align-items: center;
     gap: 32px;
   }
   .fonte-mark {
     width: 40px;
     height: 40px;
-    color: #1570ef;
+    align-self: center;
+    color: var(--brand);
   }
-  .message { text-align: center; }
+  .fonte-mark svg,
+  .status-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+  }
   h1 {
     margin: 0;
     font-size: 24px;
     font-weight: 500;
     letter-spacing: -0.02em;
-    line-height: 1.3;
+    line-height: 32px;
   }
   .description {
-    margin: 8px 0 0;
-    color: #535862;
-    font-size: 15px;
-    line-height: 1.5;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 24px;
   }
-  .detail {
-    margin: 12px 0 0;
-    color: #717680;
+  .status {
+    display: flex;
+    align-self: center;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+    color: var(--text);
     font-size: 14px;
-    line-height: 1.5;
+    font-weight: 500;
+    line-height: 20px;
+  }
+  .status-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    color: var(--success);
+  }
+  [data-outcome="failure"] .status-icon {
+    color: var(--failure);
   }
 `;
 
@@ -80,18 +147,24 @@ export function renderCallbackPage(outcome: CallbackPageOutcome): string {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#141915" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/svg+xml" sizes="any" href="${fonteFaviconHref}">
     <title>${copy.title} · Fonte</title>
     <style>${styles}</style>
   </head>
   <body data-outcome="${outcome}">
-    <main>
+    <main aria-labelledby="callback-title">
       <span class="fonte-mark">${fonteMark}</span>
-      <div class="message">
+      <header class="message">
         <h1 id="callback-title">${copy.title}</h1>
         <p class="description">${copy.description}</p>
-        <p class="detail">${copy.detail}</p>
-      </div>
+      </header>
+      <p class="status" role="${outcome === "failure" ? "alert" : "status"}" aria-live="polite">
+        <span class="status-icon">${statusIcons[outcome]}</span>
+        <span>${copy.detail}</span>
+      </p>
     </main>
   </body>
 </html>`;
