@@ -19,7 +19,7 @@ const initial = {
 };
 const settled = { ...initial, accepted: 35_093, pending: 0 };
 const additionalReleaseKeys = Array.from(
-  { length: 8 },
+  { length: 60 },
   (_, index) =>
     `20000000-0000-4000-8000-${String(176 + index).padStart(12, "0")}`,
 );
@@ -122,6 +122,167 @@ test("one bearer settles queued work and reaches the exact ceiling through bound
   assert.equal(result.stdout.includes(bearer), false);
 });
 
+test("an expired bearer is renewed after partial releases before the exact ceiling continues", async () => {
+  const expiredBearer = "synthetic.canary.expired";
+  const renewedBearer = "synthetic.canary.renewed";
+  const renewalInitial = {
+    released: 36_100,
+    held: 86_141,
+    accepted: 35_993,
+    unknown: 106,
+    cancelled: 1,
+  };
+  const responses = [
+    progress({
+      ...renewalInitial,
+      status: "paused",
+      controlState: "paused",
+    }),
+    progress(renewalInitial),
+  ];
+  for (let index = 0; index < 50; index += 1) {
+    const released = 36_200 + index * 100;
+    const held = 86_041 - index * 100;
+    const accepted = 35_993 + index * 100;
+    responses.push(
+      progress({
+        released,
+        held,
+        accepted,
+        pending: 100,
+        unknown: 106,
+        cancelled: 1,
+      }),
+    );
+    if (released === 37_000) {
+      responses.push(json({ error: "human_auth_invalid" }, 401));
+    }
+    responses.push(
+      progress({
+        released,
+        held,
+        accepted: accepted + 100,
+        unknown: 106,
+        cancelled: 1,
+      }),
+    );
+  }
+  responses.push(
+    progress({
+      released: 41_100,
+      held: 81_141,
+      accepted: 40_993,
+      unknown: 106,
+      cancelled: 1,
+      status: "paused",
+      controlState: "paused",
+    }),
+  );
+  const harness = canaryHarness(responses, {
+    bearers: [expiredBearer, renewedBearer],
+    sleepAdvanceMilliseconds: 0,
+  });
+
+  const result = await runProgram(
+    argumentsForCanary(41_100),
+    harness.dependencies,
+  );
+  const receipt = JSON.parse(result.stdout);
+  const requests = harness.coreRequests();
+  const renewalIndex = requests.findIndex(
+    ({ bearer: value }) => value === renewedBearer,
+  );
+  const releases = requests.filter(
+    ({ body }) => body?.operation === "release",
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(harness.authorizationCalls(), 2);
+  assert.equal(renewalIndex > 0, true);
+  assert.equal(requests[renewalIndex - 1].method, "GET");
+  assert.equal(requests[renewalIndex].method, "GET");
+  assert.equal(releases.length, 50);
+  assert.equal(
+    new Set(releases.map(({ body }) => body.idempotencyKey)).size,
+    50,
+  );
+  assert.deepEqual(
+    releases.map(({ body }) => body.maximumRecipientCount),
+    Array.from({ length: 50 }, (_, index) => 5_000 - index * 100),
+  );
+  assert.equal(receipt.outcome, "completed");
+  assert.equal(receipt.core_effect, "controlled");
+  assert.equal(receipt.result.final.released_recipient_count, 41_100);
+  assert.equal(receipt.result.final.accepted_recipient_count, 40_993);
+  assert.equal(receipt.result.final.pending_recipient_count, 0);
+  assert.equal(receipt.result.final.control_state, "paused");
+  assert.equal(result.stdout.includes(expiredBearer), false);
+  assert.equal(result.stdout.includes(renewedBearer), false);
+});
+
+test("cancellation after an observed release renews authorization and returns a truthful paused effect", async () => {
+  const cancellation = new AbortController();
+  const activeRelease = progress({
+    released: 35_300,
+    held: 86_941,
+    accepted: 35_093,
+    pending: 100,
+    unknown: 106,
+    cancelled: 1,
+  });
+  let cancelled = false;
+  const harness = canaryHarness(
+    [
+      progress({ ...settled, status: "paused", controlState: "paused" }),
+      progress(settled),
+      activeRelease,
+      activeRelease,
+      progress({
+        released: 35_300,
+        held: 86_941,
+        accepted: 35_093,
+        pending: 100,
+        unknown: 106,
+        cancelled: 1,
+        status: "paused",
+        controlState: "paused",
+      }),
+    ],
+    {
+      bearers: ["synthetic.canary.initial", "synthetic.canary.safety"],
+      signal: cancellation.signal,
+      afterCoreRequest: ({ body }) => {
+        if (!cancelled && body?.operation === "release") {
+          cancelled = true;
+          cancellation.abort();
+        }
+      },
+    },
+  );
+
+  const result = await runProgram(argumentsForCanary(), harness.dependencies);
+  const receipt = JSON.parse(result.stdout);
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(harness.authorizationCalls(), 2);
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "operation_cancelled");
+  assert.equal(receipt.core_effect, "controlled");
+  assert.equal(receipt.result.final.released_recipient_count, 35_300);
+  assert.equal(receipt.result.final.pending_recipient_count, 100);
+  assert.equal(receipt.result.final.control_state, "paused");
+  assert.deepEqual(
+    harness.coreRequests().map(({ method, bearer: value }) => [method, value]),
+    [
+      ["GET", "synthetic.canary.initial"],
+      ["POST", "synthetic.canary.initial"],
+      ["POST", "synthetic.canary.initial"],
+      ["GET", "synthetic.canary.safety"],
+      ["POST", "synthetic.canary.safety"],
+    ],
+  );
+});
+
 test("an increase above the frozen historical unknown or cancelled count pauses immediately", async () => {
   for (const [name, change, reason] of [
     ["unknown", { unknown: 107 }, "broadcast_canary_unknown_increase"],
@@ -178,7 +339,7 @@ test("a release with no positive progress pauses without retrying the mutation",
   );
 });
 
-function argumentsForCanary() {
+function argumentsForCanary(releaseCeiling = 36_100) {
   const argv = [
     "broadcast",
     "canary",
@@ -189,7 +350,7 @@ function argumentsForCanary() {
     "--broadcast-id",
     broadcastId,
     "--release-ceiling",
-    "36100",
+    String(releaseCeiling),
     "--idempotency-key",
     "release-to-36100",
     "--json",
@@ -198,7 +359,7 @@ function argumentsForCanary() {
   return argv;
 }
 
-function canaryHarness(responses) {
+function canaryHarness(responses, options = {}) {
   let nowMilliseconds = startedAt;
   let authorizationCount = 0;
   let responseIndex = 0;
@@ -224,22 +385,26 @@ function canaryHarness(responses) {
             });
           }
           const body = init.body ? JSON.parse(init.body) : null;
-          requests.push({
+          const request = {
             method: init.method,
             body,
             bearer: init.headers.authorization.replace("Bearer ", ""),
-          });
+          };
+          requests.push(request);
           const response = responses[responseIndex++];
+          options.afterCoreRequest?.(request);
           if (response instanceof Error) throw response;
+          if (response instanceof Response) return response;
           return json(response);
         },
         authorize: async () => {
           authorizationCount += 1;
-          return bearer;
+          return options.bearers?.[authorizationCount - 1] ?? bearer;
         },
         sleep: async (milliseconds) => {
-          nowMilliseconds += milliseconds;
+          nowMilliseconds += options.sleepAdvanceMilliseconds ?? milliseconds;
         },
+        signal: options.signal,
         now: () => new Date(nowMilliseconds),
       },
     },

@@ -1,5 +1,5 @@
 import { HostedTestBlockedError } from "./hosted-errors.js";
-import { loadHostedConfig } from "./hosted-config.js";
+import { loadHostedConfig, type HostedConfig } from "./hosted-config.js";
 import {
   createCoreOperatorClient,
   CoreOperatorError,
@@ -22,6 +22,7 @@ interface CanaryState {
   readonly deadlineAt: number;
   authorizationStartedAt: Date | null;
   authorizationGranted: boolean;
+  mutationObserved: boolean;
   pauseRequired: boolean;
   pauseAttempted: boolean;
   baseline: ProductionBroadcastProgressResult | null;
@@ -33,6 +34,8 @@ const OPERATION_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
 const PROGRESS_FRESHNESS_MILLISECONDS = 30_000;
 const FUTURE_CLOCK_SKEW_MILLISECONDS = 5_000;
 const WAIT_MILLISECONDS = 2_000;
+const AUTHORIZATION_RENEWAL_LEAD_MILLISECONDS = 30_000;
+const SAFETY_PAUSE_TIMEOUT_MILLISECONDS = 60_000;
 
 export async function runBroadcastCanary(
   command: BroadcastCanaryCommand,
@@ -47,37 +50,67 @@ export async function runBroadcastCanary(
     deadlineAt: startedAt.getTime() + OPERATION_LIFETIME_MILLISECONDS,
     authorizationStartedAt: null,
     authorizationGranted: false,
+    mutationObserved: false,
     pauseRequired: false,
     pauseAttempted: false,
     baseline: null,
     current: null,
     completedSteps: new Set(),
   };
+  let config: HostedConfig | null = null;
   let client: CoreOperatorClient | null = null;
+  let bearerExpiresAt: number | null = null;
+
+  const authorize = async (signal: AbortSignal | undefined): Promise<void> => {
+    if (!config) throw new HostedTestBlockedError("authorization_failed");
+    state.authorizationStartedAt ??= now();
+    const bearer = await dependencies.authorize(config, signal);
+    if (!bearer.trim()) {
+      throw new HostedTestBlockedError("authorization_token_missing");
+    }
+    state.authorizationGranted = true;
+    requireActive(state, signal, now);
+    bearerExpiresAt = bearerExpiration(bearer);
+    client = createCoreOperatorClient({
+      coreApiBaseUrl: config.coreApiBaseUrl,
+      bearer,
+      fetch: dependencies.fetch as typeof fetch,
+      signal,
+    });
+  };
+
+  const readProgress = async (): Promise<ProductionBroadcastProgressResult> => {
+    requireActive(state, dependencies.signal, now);
+    if (
+      bearerExpiresAt !== null &&
+      now().getTime() + AUTHORIZATION_RENEWAL_LEAD_MILLISECONDS >=
+        bearerExpiresAt
+    ) {
+      await authorize(dependencies.signal);
+    }
+    try {
+      return await client!.readProductionProgress(command);
+    } catch (error) {
+      if (!unambiguousHumanAuthInvalidRead(error)) throw error;
+      requireActive(state, dependencies.signal, now);
+      await authorize(dependencies.signal);
+      return client!.readProductionProgress(command);
+    }
+  };
+
   try {
     requireActive(state, dependencies.signal, now);
-    const config = await loadHostedConfig(
+    config = await loadHostedConfig(
       dependencies.fetch as typeof fetch,
       dependencies.configUrl,
     );
     if (config.scopes.length !== 1 || config.scopes[0] !== "email") {
       throw new HostedTestBlockedError("operation_authority_expansion");
     }
-    state.authorizationStartedAt = now();
-    const bearer = await dependencies.authorize(config, dependencies.signal);
-    if (!bearer.trim()) {
-      throw new HostedTestBlockedError("authorization_token_missing");
-    }
-    state.authorizationGranted = true;
+    await authorize(dependencies.signal);
     requireActive(state, dependencies.signal, now);
-    client = createCoreOperatorClient({
-      coreApiBaseUrl: config.coreApiBaseUrl,
-      bearer,
-      fetch: dependencies.fetch as typeof fetch,
-      signal: dependencies.signal,
-    });
 
-    const first = await client.readProductionProgress(command);
+    const first = await readProgress();
     state.baseline = first;
     state.current = first;
     state.completedSteps.add("authoritative_status");
@@ -88,11 +121,12 @@ export async function runBroadcastCanary(
     let baseline = first;
     if (baseline.control_state === "paused") {
       state.pauseRequired = true;
-      baseline = await client.controlProductionBroadcast({
+      baseline = await client!.controlProductionBroadcast({
         workspace: command.workspace,
         broadcastId: command.broadcastId,
         operation: "resume",
       });
+      state.mutationObserved = true;
       state.current = baseline;
       state.completedSteps.add("safe_resume");
       requireSettlingBaseline(baseline, first, command.releaseCeiling, now());
@@ -103,7 +137,7 @@ export async function runBroadcastCanary(
       baseline.claimed_recipient_count > 0
     ) {
       await waitForProgress(state, dependencies, now);
-      baseline = await client.readProductionProgress(command);
+      baseline = await readProgress();
       state.baseline = baseline;
       state.current = baseline;
       state.completedSteps.add("authoritative_wait_read");
@@ -116,14 +150,16 @@ export async function runBroadcastCanary(
     let trancheBaseline = baseline;
     let idempotencyKey = command.idempotencyKey;
     while (trancheBaseline.released_recipient_count < command.releaseCeiling) {
+      requireActive(state, dependencies.signal, now);
       const maximumRecipientCount =
         command.releaseCeiling - trancheBaseline.released_recipient_count;
-      let progress = await client.releaseProductionBroadcast({
+      let progress = await client!.releaseProductionBroadcast({
         workspace: command.workspace,
         broadcastId: command.broadcastId,
         idempotencyKey,
         maximumRecipientCount,
       });
+      state.mutationObserved = true;
       state.current = progress;
       state.completedSteps.add("guarded_release");
       const releasedDelta = requireTargetProgress(
@@ -132,7 +168,7 @@ export async function runBroadcastCanary(
 
       while (!targetAccepted(progress, trancheBaseline, releasedDelta)) {
         await waitForProgress(state, dependencies, now);
-        progress = await client.readProductionProgress(command);
+        progress = await readProgress();
         state.current = progress;
         state.completedSteps.add("authoritative_wait_read");
         requireTargetProgress(
@@ -146,7 +182,7 @@ export async function runBroadcastCanary(
     }
 
     requireActive(state, dependencies.signal, now);
-    await pause(client, command, state);
+    await pause(client!, command, state);
     requirePausedTarget(
       state.current!, releaseBaseline, command.releaseCeiling,
       command.releaseCeiling - releaseBaseline.released_recipient_count, now(),
@@ -162,15 +198,31 @@ export async function runBroadcastCanary(
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
     let coreEffect: OperatorReceipt["core_effect"] = core?.coreEffect ?? "none";
-    if (client && state.pauseRequired && !state.pauseAttempted) {
+    const freshSafetyAuthorization =
+      state.mutationObserved && requiresFreshSafetyAuthorization(error);
+    if (
+      config &&
+      state.pauseRequired &&
+      (freshSafetyAuthorization || (client && !state.pauseAttempted))
+    ) {
       try {
-        await pause(client, command, state);
+        if (freshSafetyAuthorization) {
+          await freshSafetyPause(
+            config,
+            command,
+            state,
+            dependencies,
+            now,
+          );
+        } else {
+          await pause(client!, command, state);
+        }
         if (coreEffect === "none") coreEffect = "controlled";
-      } catch (pauseError) {
-        const pauseCore = pauseError instanceof CoreOperatorError ? pauseError : null;
-        if (pauseCore?.coreEffect === "unknown") coreEffect = "unknown";
+      } catch {
+        if (state.mutationObserved) coreEffect = "unknown";
       }
     }
+    if (state.mutationObserved && coreEffect === "none") coreEffect = "unknown";
     return receipt(
       command,
       state,
@@ -179,6 +231,96 @@ export async function runBroadcastCanary(
       failureReason(error),
       coreEffect,
     );
+  }
+}
+
+async function freshSafetyPause(
+  config: HostedConfig,
+  command: BroadcastCanaryCommand,
+  state: CanaryState,
+  dependencies: OperatorDependencies,
+  now: () => Date,
+): Promise<void> {
+  const signal = AbortSignal.timeout(SAFETY_PAUSE_TIMEOUT_MILLISECONDS);
+  const bearer = await dependencies.authorize(config, signal);
+  if (!bearer.trim()) {
+    throw new HostedTestBlockedError("authorization_token_missing");
+  }
+  const client = createCoreOperatorClient({
+    coreApiBaseUrl: config.coreApiBaseUrl,
+    bearer,
+    fetch: dependencies.fetch as typeof fetch,
+    signal,
+  });
+  const observed = await client.readProductionProgress(command);
+  state.current = observed;
+  state.completedSteps.add("authoritative_wait_read");
+  if (observed.control_state === "active") {
+    await pause(client, command, state);
+  }
+  requireSafetyPaused(
+    state.current,
+    state.baseline,
+    command.releaseCeiling,
+    now(),
+  );
+}
+
+function requireSafetyPaused(
+  progress: ProductionBroadcastProgressResult | null,
+  baseline: ProductionBroadcastProgressResult | null,
+  releaseCeiling: number,
+  observedAt: Date,
+): void {
+  if (!progress || !baseline) {
+    throw new HostedTestBlockedError("broadcast_canary_pause_unconfirmed");
+  }
+  requireFresh(progress, observedAt);
+  requireFrozenSafetyCounts(progress, baseline);
+  const releasedDelta =
+    progress.released_recipient_count - baseline.released_recipient_count;
+  if (
+    progress.status !== "paused" ||
+    progress.control_state !== "paused" ||
+    releasedDelta < 0 ||
+    progress.released_recipient_count > releaseCeiling ||
+    progress.held_recipient_count !==
+      baseline.held_recipient_count - releasedDelta ||
+    progress.accepted_recipient_count < baseline.accepted_recipient_count ||
+    releasedAccounting(progress) !== progress.released_recipient_count
+  ) {
+    throw new HostedTestBlockedError("broadcast_canary_pause_unconfirmed");
+  }
+}
+
+function unambiguousHumanAuthInvalidRead(error: unknown): boolean {
+  return error instanceof CoreOperatorError &&
+    error.reason === "human_auth_invalid" &&
+    error.statusCode === 401 &&
+    error.coreEffect === "none";
+}
+
+function requiresFreshSafetyAuthorization(error: unknown): boolean {
+  const reason = failureReason(error);
+  return reason === "human_auth_invalid" ||
+    reason === "operation_cancelled" ||
+    reason === "operation_expired" ||
+    reason === "browser_open_failed" ||
+    reason.startsWith("authorization_");
+}
+
+function bearerExpiration(bearer: string): number | null {
+  const encoded = bearer.split(".")[1];
+  if (!encoded) return null;
+  try {
+    const body = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    ) as { readonly exp?: unknown };
+    return Number.isSafeInteger(body.exp) && Number(body.exp) > 0
+      ? Number(body.exp) * 1_000
+      : null;
+  } catch {
+    return null;
   }
 }
 
