@@ -142,6 +142,46 @@ export interface ProviderAudienceCountsResult {
   readonly final: number;
 }
 
+export type ProviderResponseInvalidStage =
+  "segment" | "contacts_page" | "suppressions_page";
+
+export type ProviderResponseInvalidReason =
+  | "identity_invalid"
+  | "timestamp_invalid"
+  | "protection_state_invalid"
+  | "pagination_invalid"
+  | "envelope_invalid";
+
+export type ProviderUnavailableReason =
+  | "http_authentication"
+  | "http_not_found"
+  | "http_rate_limited"
+  | "http_client_error"
+  | "http_server_error"
+  | "http_unexpected"
+  | "timeout"
+  | "transport_error";
+
+export interface ProviderAudienceUnavailableInputResult {
+  readonly role: "source" | "exclusion";
+  readonly index: number | null;
+  readonly reference: ProviderAudienceSourceReferenceResult;
+  readonly reason:
+    | "connection_unavailable"
+    | "collection_missing"
+    | "provider_unavailable"
+    | "provider_response_invalid"
+    | "observation_incomplete"
+    | "observation_stale"
+    | "fonte_audience_unavailable"
+    | "fonte_audience_identity_mismatch";
+  readonly observed_at: string | null;
+  readonly provider_response_invalid_stage?: ProviderResponseInvalidStage;
+  readonly provider_response_invalid_reason?: ProviderResponseInvalidReason;
+  readonly provider_unavailable_stage?: ProviderResponseInvalidStage;
+  readonly provider_unavailable_reason?: ProviderUnavailableReason;
+}
+
 export interface ProviderAudienceReconciliationResult {
   readonly kind: "provider_audience_reconciliation";
   readonly environment: "sandbox" | "production";
@@ -153,21 +193,7 @@ export interface ProviderAudienceReconciliationResult {
     readonly index: number;
     readonly overlap_count: number | null;
   })[];
-  readonly unavailable_inputs: readonly {
-    readonly role: "source" | "exclusion";
-    readonly index: number | null;
-    readonly reference: ProviderAudienceSourceReferenceResult;
-    readonly reason:
-      | "connection_unavailable"
-      | "collection_missing"
-      | "provider_unavailable"
-      | "provider_response_invalid"
-      | "observation_incomplete"
-      | "observation_stale"
-      | "fonte_audience_unavailable"
-      | "fonte_audience_identity_mismatch";
-    readonly observed_at: string | null;
-  }[];
+  readonly unavailable_inputs: readonly ProviderAudienceUnavailableInputResult[];
   readonly counts: ProviderAudienceCountsResult | null;
 }
 

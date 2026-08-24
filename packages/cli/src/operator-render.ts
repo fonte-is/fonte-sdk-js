@@ -1,5 +1,6 @@
 import { renderProductionOperatorHuman } from "./operator-production-render.js";
 import type {
+  ProviderAudienceUnavailableInputResult as UnavailableInput,
   ProviderAudienceSourceReferenceResult,
   ProviderAudienceReconciliationResult,
 } from "./operator-provider-audience-types.js";
@@ -192,12 +193,22 @@ function renderProviderAudienceReconciliation(
           "Unavailable inputs:",
           ...result.unavailable_inputs.map(
             (item) =>
-              `- ${item.role}${item.index === null ? "" : ` ${item.index}`}: ${item.reason}; ${referenceLabel(item.reference)}.`,
+              `- ${item.role}${item.index === null ? "" : ` ${item.index}`}: ${item.reason}; ${referenceLabel(item.reference)}${unavailableDiagnostics(item)}.`,
           ),
         ]),
     "Core effect: none.",
     "",
   ].join("\n");
+}
+
+function unavailableDiagnostics(item: UnavailableInput): string {
+  const fields = Object.entries({
+    provider_response_invalid_stage: item.provider_response_invalid_stage,
+    provider_response_invalid_reason: item.provider_response_invalid_reason,
+    provider_unavailable_stage: item.provider_unavailable_stage,
+    provider_unavailable_reason: item.provider_unavailable_reason,
+  }).flatMap(([key, value]) => (value ? [`${key}=${value}`] : []));
+  return fields.length === 0 ? "" : `; ${fields.join("; ")}`;
 }
 
 function referenceLabel(value: ProviderAudienceSourceReferenceResult): string {

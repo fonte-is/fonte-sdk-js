@@ -220,6 +220,18 @@ function unavailable(value: unknown): Unavailable {
   }
   const index = nullableCount(body.index);
   if ((role === "source") !== (index === null)) invalid();
+  const providerResponseInvalidStage = optionalFailureStage(
+    body.providerResponseInvalidStage,
+  );
+  const providerResponseInvalidReason = optionalResponseInvalidReason(
+    body.providerResponseInvalidReason,
+  );
+  const providerUnavailableStage = optionalFailureStage(
+    body.providerUnavailableStage,
+  );
+  const providerUnavailableReason = optionalProviderUnavailableReason(
+    body.providerUnavailableReason,
+  );
   return {
     role,
     index,
@@ -229,6 +241,18 @@ function unavailable(value: unknown): Unavailable {
         : reference(body.reference),
     reason,
     observed_at: body.observedAt === null ? null : instant(body.observedAt),
+    ...(providerResponseInvalidStage === undefined
+      ? {}
+      : { provider_response_invalid_stage: providerResponseInvalidStage }),
+    ...(providerResponseInvalidReason === undefined
+      ? {}
+      : { provider_response_invalid_reason: providerResponseInvalidReason }),
+    ...(providerUnavailableStage === undefined
+      ? {}
+      : { provider_unavailable_stage: providerUnavailableStage }),
+    ...(providerUnavailableReason === undefined
+      ? {}
+      : { provider_unavailable_reason: providerUnavailableReason }),
   };
 }
 
@@ -296,6 +320,55 @@ function unavailableReason(value: unknown): value is Unavailable["reason"] {
     "fonte_audience_unavailable",
     "fonte_audience_identity_mismatch",
   ].includes(String(value));
+}
+
+function optionalFailureStage(
+  value: unknown,
+): Unavailable["provider_response_invalid_stage"] {
+  if (value === undefined) return undefined;
+  if (
+    value === "segment" ||
+    value === "contacts_page" ||
+    value === "suppressions_page"
+  ) {
+    return value;
+  }
+  return invalid();
+}
+
+function optionalResponseInvalidReason(
+  value: unknown,
+): Unavailable["provider_response_invalid_reason"] {
+  if (value === undefined) return undefined;
+  if (
+    value === "identity_invalid" ||
+    value === "timestamp_invalid" ||
+    value === "protection_state_invalid" ||
+    value === "pagination_invalid" ||
+    value === "envelope_invalid"
+  ) {
+    return value;
+  }
+  return invalid();
+}
+
+function optionalProviderUnavailableReason(
+  value: unknown,
+): Unavailable["provider_unavailable_reason"] {
+  if (value === undefined) return undefined;
+  if (
+    value === "http_authentication" ||
+    value === "http_not_found" ||
+    value === "http_rate_limited" ||
+    value === "http_client_error" ||
+    value === "http_server_error" ||
+    value === "http_unexpected" ||
+    value === "timeout" ||
+    value === "transport_error"
+  ) {
+    return value;
+  }
+  return invalid();
 }
 
 function nullableText(value: unknown, maximum: number): string | null {
