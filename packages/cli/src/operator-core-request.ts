@@ -11,6 +11,7 @@ export interface CorePostOptions {
   readonly idempotencyKey?: string;
   readonly body: Record<string, unknown>;
   readonly lostResponseEffect: "none" | "unknown";
+  readonly timeoutMs?: number;
 }
 
 export type CoreRequester = (
@@ -41,6 +42,7 @@ export function createCoreRequester(
     if (options.signal?.aborted) {
       throw new CoreOperatorError("operation_cancelled", null, "none");
     }
+    const timeoutMs = requestTimeoutMs(post?.timeoutMs);
     let response: Response;
     try {
       response = await options.fetch(`${baseUrl}${path}`, {
@@ -59,8 +61,8 @@ export function createCoreRequester(
         },
         ...(post ? { body: JSON.stringify(post.body) } : {}),
         signal: options.signal
-          ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
-          : AbortSignal.timeout(15_000),
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
+          : AbortSignal.timeout(timeoutMs),
       });
     } catch {
       if (options.signal?.aborted) {
@@ -83,6 +85,14 @@ export function createCoreRequester(
     }
     return body;
   };
+}
+
+function requestTimeoutMs(value: number | undefined): number {
+  if (value === undefined) return 15_000;
+  if (!Number.isInteger(value) || value < 1 || value > 60_000) {
+    throw new CoreOperatorError("core_request_timeout_invalid", null, "none");
+  }
+  return value;
 }
 
 export function parseCoreReceipt<T>(

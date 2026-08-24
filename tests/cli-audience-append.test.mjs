@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { parseArguments } from "../packages/cli/dist/arguments.js";
 import { createBrowserAuthorizationSession } from "../packages/cli/dist/oauth.js";
+import { createCoreRequester } from "../packages/cli/dist/operator-core-request.js";
 import { renderOperatorHuman } from "../packages/cli/dist/operator-render.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
@@ -88,10 +89,18 @@ test("audience append grammar is exact and production-only", async () => {
   );
 });
 
-test("one browser session sends the exact Core preflight baseline and mutation body", async () => {
+test("audience append alone receives the bounded longer Core timeout", async () => {
   let prepared = 0;
   let opened = 0;
   const requests = [];
+  const requestTimeouts = [];
+  const timeoutBySignal = new Map();
+  const originalTimeout = AbortSignal.timeout;
+  AbortSignal.timeout = (milliseconds) => {
+    const signal = new AbortController().signal;
+    timeoutBySignal.set(signal, milliseconds);
+    return signal;
+  };
   const authorization = createBrowserAuthorizationSession({
     prepare: async () => {
       prepared += 1;
@@ -121,18 +130,36 @@ test("one browser session sends the exact Core preflight baseline and mutation b
   const dependencies = programDependencies(async (input, init = {}) => {
     if (String(input).includes(".well-known/fonte-cli.json"))
       return json(hosted);
+    requestTimeouts.push(timeoutBySignal.get(init.signal));
     requests.push(coreRequest(input, init));
     return (init.method ?? "GET") === "GET"
       ? json(preflight())
       : json(appendReadback());
   }, authorization.authorize);
 
-  const result = await runProgram(argumentsForAppend("--json"), dependencies);
+  let result;
+  const unrelatedTimeouts = [];
+  try {
+    result = await runProgram(argumentsForAppend("--json"), dependencies);
+    const unrelatedRequest = createCoreRequester({
+      coreApiBaseUrl: hosted.coreApiBaseUrl,
+      bearer,
+      fetch: async (_input, init = {}) => {
+        unrelatedTimeouts.push(timeoutBySignal.get(init.signal));
+        return json({ ok: true });
+      },
+    });
+    await unrelatedRequest("/v1/workspaces/unrelated/status");
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+  }
   const receipt = JSON.parse(result.stdout);
 
   assert.equal(result.exitCode, 0);
   assert.equal(prepared, 1);
   assert.equal(opened, 1);
+  assert.deepEqual(requestTimeouts, [15_000, 60_000]);
+  assert.deepEqual(unrelatedTimeouts, [15_000]);
   assert.deepEqual(
     requests.map(({ method, url }) => ({ method, url })),
     [

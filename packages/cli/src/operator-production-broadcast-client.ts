@@ -197,6 +197,7 @@ export function createProductionBroadcastClient(
             {
               idempotencyKey: input.idempotencyKey,
               lostResponseEffect: "unknown",
+              timeoutMs: 60_000,
               body: {
                 expectedBaseline: baselineBody(preflight.baseline),
                 frozenAudienceId: input.frozenAudienceId,
