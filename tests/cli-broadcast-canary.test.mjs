@@ -10,37 +10,51 @@ const operationId = "20000000-0000-4000-8000-000000000175";
 const bearer = "synthetic.canary.bearer";
 const startedAt = Date.parse("2026-08-24T12:00:00.000Z");
 const initial = {
-  released: 35_100,
-  held: 2_000,
-  accepted: 34_992,
-  pending: 1,
+  released: 35_200,
+  held: 87_041,
+  accepted: 34_993,
+  pending: 100,
   unknown: 106,
   cancelled: 1,
 };
+const settled = { ...initial, accepted: 35_093, pending: 0 };
+const additionalReleaseKeys = Array.from(
+  { length: 8 },
+  (_, index) =>
+    `20000000-0000-4000-8000-${String(176 + index).padStart(12, "0")}`,
+);
 
-test("one bearer settles a paused baseline, resumes once, adds 1,000 accepted recipients, and pauses", async () => {
+test("one bearer settles queued work and reaches the exact ceiling through bounded partial tranches", async () => {
+  const trancheResponses = Array.from({ length: 9 }, (_, index) => {
+    const released = 35_300 + index * 100;
+    const held = 86_941 - index * 100;
+    const accepted = 35_093 + index * 100;
+    return [
+      progress({
+        released,
+        held,
+        accepted,
+        pending: 100,
+        unknown: 106,
+        cancelled: 1,
+      }),
+      progress({
+        released,
+        held,
+        accepted: accepted + 100,
+        unknown: 106,
+        cancelled: 1,
+      }),
+    ];
+  }).flat();
   const harness = canaryHarness([
     progress({ ...initial, status: "paused", controlState: "paused" }),
     progress(initial),
-    progress({ ...initial, accepted: 34_993, pending: 0 }),
+    progress(settled),
+    ...trancheResponses,
     progress({
       released: 36_100,
-      held: 1_000,
-      accepted: 34_993,
-      pending: 1_000,
-      unknown: 106,
-      cancelled: 1,
-    }),
-    progress({
-      released: 36_100,
-      held: 1_000,
-      accepted: 35_993,
-      unknown: 106,
-      cancelled: 1,
-    }),
-    progress({
-      released: 36_100,
-      held: 1_000,
+      held: 86_141,
       accepted: 35_993,
       unknown: 106,
       cancelled: 1,
@@ -54,21 +68,25 @@ test("one bearer settles a paused baseline, resumes once, adds 1,000 accepted re
 
   assert.equal(result.exitCode, 0);
   assert.equal(harness.authorizationCalls(), 1);
+  const trancheRequests = Array.from({ length: 9 }, (_, index) => [
+    {
+      method: "POST",
+      body: {
+        operation: "release",
+        idempotencyKey:
+          index === 0 ? "release-to-36100" : additionalReleaseKeys[index - 1],
+        maximumRecipientCount: 900 - index * 100,
+      },
+    },
+    { method: "GET", body: null },
+  ]).flat();
   assert.deepEqual(
     harness.coreRequests().map(({ method, body }) => ({ method, body })),
     [
       { method: "GET", body: null },
       { method: "POST", body: { operation: "resume" } },
       { method: "GET", body: null },
-      {
-        method: "POST",
-        body: {
-          operation: "release",
-          idempotencyKey: "release-to-36100",
-          maximumRecipientCount: 1_000,
-        },
-      },
-      { method: "GET", body: null },
+      ...trancheRequests,
       { method: "POST", body: { operation: "pause" } },
     ],
   );
@@ -78,11 +96,12 @@ test("one bearer settles a paused baseline, resumes once, adds 1,000 accepted re
   );
   assert.equal(receipt.reason, "broadcast_canary_ceiling_accepted_and_paused");
   assert.equal(receipt.result.release_ceiling, 36_100);
-  assert.equal(receipt.result.baseline.released_recipient_count, 35_100);
-  assert.equal(receipt.result.baseline.accepted_recipient_count, 34_993);
+  assert.equal(receipt.result.baseline.released_recipient_count, 35_200);
+  assert.equal(receipt.result.baseline.accepted_recipient_count, 35_093);
   assert.equal(receipt.result.baseline.unknown_recipient_count, 106);
   assert.equal(receipt.result.baseline.cancelled_recipient_count, 1);
   assert.equal(receipt.result.final.released_recipient_count, 36_100);
+  assert.equal(receipt.result.final.held_recipient_count, 86_141);
   assert.equal(receipt.result.final.accepted_recipient_count, 35_993);
   assert.notEqual(
     receipt.result.final.accepted_recipient_count,
@@ -109,10 +128,10 @@ test("an increase above the frozen historical unknown or cancelled count pauses 
     ["cancelled", { cancelled: 2 }, "broadcast_canary_cancelled_increase"],
   ]) {
     const unsafe = {
-      released: 36_100,
-      held: 1_000,
-      accepted: 34_993,
-      pending: 999,
+      released: 35_300,
+      held: 86_941,
+      accepted: 35_093,
+      pending: 99,
       unknown: 106,
       cancelled: 1,
       ...change,
@@ -120,7 +139,7 @@ test("an increase above the frozen historical unknown or cancelled count pauses 
     const harness = canaryHarness([
       progress({ ...initial, status: "paused", controlState: "paused" }),
       progress(initial),
-      progress({ ...initial, accepted: 34_993, pending: 0 }),
+      progress(settled),
       progress(unsafe),
       progress({ ...unsafe, status: "paused", controlState: "paused" }),
     ]);
@@ -137,6 +156,26 @@ test("an increase above the frozen historical unknown or cancelled count pauses 
       name,
     );
   }
+});
+
+test("a release with no positive progress pauses without retrying the mutation", async () => {
+  const harness = canaryHarness([
+    progress({ ...initial, status: "paused", controlState: "paused" }),
+    progress(initial),
+    progress(settled),
+    progress(settled),
+    progress({ ...settled, status: "paused", controlState: "paused" }),
+  ]);
+
+  const result = await runProgram(argumentsForCanary(), harness.dependencies);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(result.exitCode, 3);
+  assert.equal(receipt.reason, "broadcast_canary_release_no_progress");
+  assert.equal(receipt.result.final.control_state, "paused");
+  assert.deepEqual(
+    harness.coreRequests().map(({ method }) => method),
+    ["GET", "POST", "GET", "POST", "POST"],
+  );
 });
 
 function argumentsForCanary() {
@@ -163,11 +202,13 @@ function canaryHarness(responses) {
   let nowMilliseconds = startedAt;
   let authorizationCount = 0;
   let responseIndex = 0;
+  let uuidIndex = 0;
   const requests = [];
+  const uuids = [operationId, ...additionalReleaseKeys];
   return {
     dependencies: {
       cwd: process.cwd(),
-      randomUUID: () => operationId,
+      randomUUID: () => uuids[uuidIndex++],
       runner: { run: async () => 1 },
       operator: {
         configUrl: "http://127.0.0.1:43111/.well-known/fonte-cli.json",

@@ -38,6 +38,7 @@ export async function runBroadcastCanary(
   command: BroadcastCanaryCommand,
   dependencies: OperatorDependencies,
   operationId: string,
+  randomUUID: () => string,
 ): Promise<OperatorReceipt> {
   const now = dependencies.now ?? (() => new Date());
   const startedAt = now();
@@ -111,29 +112,44 @@ export async function runBroadcastCanary(
     state.baseline = baseline;
     requireActive(state, dependencies.signal, now);
 
-    const releaseCount = command.releaseCeiling - baseline.released_recipient_count;
-    let progress = await client.releaseProductionBroadcast({
-      workspace: command.workspace,
-      broadcastId: command.broadcastId,
-      idempotencyKey: command.idempotencyKey,
-      maximumRecipientCount: releaseCount,
-    });
-    state.current = progress;
-    state.completedSteps.add("guarded_release");
-    requireTargetProgress(progress, baseline, command.releaseCeiling, now());
-
-    while (!targetAccepted(progress, baseline, releaseCount)) {
-      await waitForProgress(state, dependencies, now);
-      progress = await client.readProductionProgress(command);
+    const releaseBaseline = baseline;
+    let trancheBaseline = baseline;
+    let idempotencyKey = command.idempotencyKey;
+    while (trancheBaseline.released_recipient_count < command.releaseCeiling) {
+      const maximumRecipientCount =
+        command.releaseCeiling - trancheBaseline.released_recipient_count;
+      let progress = await client.releaseProductionBroadcast({
+        workspace: command.workspace,
+        broadcastId: command.broadcastId,
+        idempotencyKey,
+        maximumRecipientCount,
+      });
       state.current = progress;
-      state.completedSteps.add("authoritative_wait_read");
-      requireTargetProgress(progress, baseline, command.releaseCeiling, now());
+      state.completedSteps.add("guarded_release");
+      const releasedDelta = requireTargetProgress(
+        progress, trancheBaseline, command.releaseCeiling, now(),
+      );
+
+      while (!targetAccepted(progress, trancheBaseline, releasedDelta)) {
+        await waitForProgress(state, dependencies, now);
+        progress = await client.readProductionProgress(command);
+        state.current = progress;
+        state.completedSteps.add("authoritative_wait_read");
+        requireTargetProgress(
+          progress, trancheBaseline, command.releaseCeiling, now(), releasedDelta,
+        );
+      }
+      trancheBaseline = progress;
+      if (trancheBaseline.released_recipient_count < command.releaseCeiling) {
+        idempotencyKey = randomUUID();
+      }
     }
 
     requireActive(state, dependencies.signal, now);
     await pause(client, command, state);
     requirePausedTarget(
-      state.current!, baseline, command.releaseCeiling, releaseCount, now(),
+      state.current!, releaseBaseline, command.releaseCeiling,
+      command.releaseCeiling - releaseBaseline.released_recipient_count, now(),
     );
     return receipt(
       command,
@@ -210,11 +226,18 @@ function requireTargetProgress(
   baseline: ProductionBroadcastProgressResult,
   releaseCeiling: number,
   observedAt: Date,
-): void {
+  expectedReleasedDelta?: number,
+): number {
   requireFresh(progress, observedAt);
-  const releasedDelta = releaseCeiling - baseline.released_recipient_count;
+  const releasedDelta =
+    progress.released_recipient_count - baseline.released_recipient_count;
+  if (releasedDelta < 1) {
+    throw new HostedTestBlockedError("broadcast_canary_release_no_progress");
+  }
   if (
-    progress.released_recipient_count !== releaseCeiling ||
+    (expectedReleasedDelta !== undefined &&
+      releasedDelta !== expectedReleasedDelta) ||
+    progress.released_recipient_count > releaseCeiling ||
     progress.held_recipient_count !== baseline.held_recipient_count - releasedDelta
   ) {
     throw new HostedTestBlockedError("broadcast_canary_release_ceiling_not_exact");
@@ -230,6 +253,7 @@ function requireTargetProgress(
   ) {
     throw new HostedTestBlockedError("broadcast_canary_authority_changed");
   }
+  return releasedDelta;
 }
 
 function targetAccepted(

@@ -42,7 +42,7 @@ export async function runOperatorCommand(
 ): Promise<OperatorReceipt> {
   if (command.kind === "unsupported") return unsupportedReceipt();
   if (command.kind === "broadcast_canary") {
-    return runBroadcastCanary(command, dependencies, randomUUID());
+    return runBroadcastCanary(command, dependencies, randomUUID(), randomUUID);
   }
   try {
     const config = await loadHostedConfig(
