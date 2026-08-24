@@ -82,10 +82,11 @@ test("browser authorization orchestrates a mocked IdP without changing callback 
   );
 });
 
-test("one in-memory authorization refreshes without another browser and follows refresh-token rotation", async () => {
+test("one in-memory authorization refreshes opaque tokens only at their expires-in lead window", async () => {
   const firstRefreshToken = "synthetic-refresh-secret-one";
   const rotatedRefreshToken = "synthetic-refresh-secret-two";
   const refreshTokens = [];
+  let now = 1_000_000;
   let prepared = 0;
   let listened = 0;
   let opened = 0;
@@ -100,23 +101,23 @@ test("one in-memory authorization refreshes without another browser and follows 
         exchange: async () => {
           exchanged += 1;
           return {
-            accessToken: "synthetic-access-one",
+            accessToken: "opaque-access-one",
             refreshToken: firstRefreshToken,
-            expiresInSeconds: 300,
+            expiresInSeconds: 120,
           };
         },
         refresh: async (refreshToken) => {
           refreshTokens.push(refreshToken);
           if (refreshToken === firstRefreshToken) {
             return {
-              accessToken: "synthetic-access-two",
+              accessToken: "opaque-access-two",
               refreshToken: rotatedRefreshToken,
-              expiresInSeconds: 300,
+              expiresInSeconds: 120,
             };
           }
           return {
-            accessToken: "synthetic-access-three",
-            expiresInSeconds: 300,
+            accessToken: "opaque-access-three",
+            expiresInSeconds: 120,
           };
         },
       };
@@ -138,18 +139,36 @@ test("one in-memory authorization refreshes without another browser and follows 
       opened += 1;
       return true;
     },
+    now: () => now,
   });
 
   assert.deepEqual(
     await Promise.all([session.authorize(config), session.authorize(config)]),
-    ["synthetic-access-one", "synthetic-access-one"],
+    ["opaque-access-one", "opaque-access-one"],
   );
-  assert.equal(await session.refresh(config), "synthetic-access-two");
+  now += 89_999;
   assert.deepEqual(
     await Promise.all([session.authorize(config), session.authorize(config)]),
-    ["synthetic-access-two", "synthetic-access-two"],
+    ["opaque-access-one", "opaque-access-one"],
   );
-  assert.equal(await session.refresh(config), "synthetic-access-three");
+  assert.deepEqual(refreshTokens, []);
+
+  now += 1;
+  assert.deepEqual(
+    await Promise.all([session.authorize(config), session.authorize(config)]),
+    ["opaque-access-two", "opaque-access-two"],
+  );
+  assert.deepEqual(refreshTokens, [firstRefreshToken]);
+
+  now += 89_999;
+  assert.equal(await session.authorize(config), "opaque-access-two");
+  assert.deepEqual(refreshTokens, [firstRefreshToken]);
+
+  now += 1;
+  assert.deepEqual(
+    await Promise.all([session.authorize(config), session.authorize(config)]),
+    ["opaque-access-three", "opaque-access-three"],
+  );
 
   assert.equal(prepared, 1);
   assert.equal(listened, 1);
@@ -162,6 +181,37 @@ test("one in-memory authorization refreshes without another browser and follows 
       JSON.stringify(session).includes(rotatedRefreshToken),
     false,
   );
+});
+
+test("the refresh-capable session is wired only to operator runtime", async () => {
+  const source = await readFile(
+    new URL("../packages/cli/src/main.ts", import.meta.url),
+    "utf8",
+  );
+  const authExec = source.match(
+    /authExec: \{([\s\S]*?)\n  \},\n  operator:/,
+  )?.[1];
+  const operator = source.match(
+    /operator: \{([\s\S]*?)\n  \},\n  hosted:/,
+  )?.[1];
+  const hosted = source.match(
+    /hosted: \{([\s\S]*?)\n  \},\n\}\)\.finally/,
+  )?.[1];
+
+  assert.match(
+    source,
+    /const operatorAuthorization = broadcastCanaryInvocation\s+\? createBrowserAuthorizationSession\(\)\s+: null;/,
+  );
+  assert.match(authExec ?? "", /authorize: authorizeOnce,/);
+  assert.doesNotMatch(authExec ?? "", /operatorAuthorization/);
+  assert.match(operator ?? "", /authorize: operatorAuthorization\.authorize,/);
+  assert.match(operator ?? "", /renewAuthorization:/);
+  assert.match(operator ?? "", /: \{ authorize: authorizeOnce \}/);
+  assert.match(
+    hosted ?? "",
+    /authorize: \(config\) => authorizeWithBrowser\(config\),/,
+  );
+  assert.doesNotMatch(hosted ?? "", /operatorAuthorization/);
 });
 
 test("refresh failure is cached, token-free, and never falls back to another browser", async () => {

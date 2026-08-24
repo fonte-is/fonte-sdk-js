@@ -272,9 +272,9 @@ test("new cancellations cannot conceal a release overshoot or accepted-count reg
   }
 });
 
-test("an expired bearer is renewed after partial releases before the exact ceiling continues", async () => {
-  const expiredBearer = "synthetic.canary.expired";
-  const renewedBearer = "synthetic.canary.renewed";
+test("an auth-invalid opaque bearer is renewed after partial releases before the exact ceiling continues", async () => {
+  const expiredBearer = "opaque-access-expired";
+  const renewedBearer = "opaque-access-renewed";
   const renewalInitial = {
     released: 36_100,
     held: 86_141,
@@ -350,6 +350,7 @@ test("an expired bearer is renewed after partial releases before the exact ceili
   assert.equal(harness.authorizationCalls(), 2);
   assert.equal(harness.browserAuthorizationCalls(), 1);
   assert.equal(harness.renewalCalls(), 1);
+  assert.equal(harness.freshnessChecks() > 1, true);
   assert.equal(renewalIndex > 0, true);
   assert.equal(requests[renewalIndex - 1].method, "GET");
   assert.equal(requests[renewalIndex].method, "GET");
@@ -559,6 +560,7 @@ function argumentsForCanary(
 function canaryHarness(responses, options = {}) {
   let nowMilliseconds = startedAt;
   let browserAuthorizationCount = 0;
+  let freshnessCheckCount = 0;
   let renewalCount = 0;
   let responseIndex = 0;
   let uuidIndex = 0;
@@ -599,7 +601,11 @@ function canaryHarness(responses, options = {}) {
           browserAuthorizationCount += 1;
           return options.bearers?.[0] ?? bearer;
         },
-        renewAuthorization: async () => {
+        renewAuthorization: async (_config, _signal, force = false) => {
+          if (!force) {
+            freshnessCheckCount += 1;
+            return options.bearers?.[renewalCount] ?? bearer;
+          }
           renewalCount += 1;
           if (options.renewError) throw options.renewError;
           return options.bearers?.[renewalCount] ?? bearer;
@@ -613,6 +619,7 @@ function canaryHarness(responses, options = {}) {
     },
     authorizationCalls: () => browserAuthorizationCount + renewalCount,
     browserAuthorizationCalls: () => browserAuthorizationCount,
+    freshnessChecks: () => freshnessCheckCount,
     renewalCalls: () => renewalCount,
     coreRequests: () => requests,
   };

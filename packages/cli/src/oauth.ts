@@ -28,6 +28,7 @@ export interface BrowserAuthorizationDependencies {
     expectedState: string,
     options: { readonly signal?: AbortSignal },
   ): ReturnType<typeof listenForOAuthCallback>;
+  now?(): number;
 }
 
 export interface BrowserAuthorizationOptions {
@@ -53,13 +54,19 @@ export async function authorizeWithBrowser(
   dependencies: BrowserAuthorizationDependencies = productionDependencies,
 ): Promise<string> {
   return (
-    await authorizeGrantWithBrowser(hosted, options, dependencies)
+    await authorizeGrantWithBrowser(
+      hosted,
+      options,
+      dependencies,
+      dependencies.now ?? Date.now,
+    )
   ).accessToken;
 }
 
 export function createBrowserAuthorizationSession(
   dependencies: BrowserAuthorizationDependencies = productionDependencies,
 ): BrowserAuthorizationSession {
+  const now = dependencies.now ?? Date.now;
   let authority: string | null = null;
   let grant: MemoryAuthorizationGrant | null = null;
   let authorizing: Promise<MemoryAuthorizationGrant> | null = null;
@@ -112,7 +119,7 @@ export function createBrowserAuthorizationSession(
       if (grant) {
         if (
           grant.expiresAt !== null &&
-          Date.now() + REFRESH_LEAD_MILLISECONDS >= grant.expiresAt
+          now() + REFRESH_LEAD_MILLISECONDS >= grant.expiresAt
         ) {
           return refresh(hosted, signal);
         }
@@ -123,6 +130,7 @@ export function createBrowserAuthorizationSession(
           hosted,
           { signal },
           dependencies,
+          now,
         ).then((initial) => {
           grant = initial;
           return initial;
@@ -142,6 +150,7 @@ async function authorizeGrantWithBrowser(
   hosted: HostedConfig,
   options: BrowserAuthorizationOptions,
   dependencies: BrowserAuthorizationDependencies,
+  now: () => number,
 ): Promise<MemoryAuthorizationGrant> {
   assertActive(options.signal);
   let listener: Awaited<ReturnType<typeof listenForOAuthCallback>> | undefined;
@@ -159,6 +168,7 @@ async function authorizeGrantWithBrowser(
       await prepared.exchange(callback),
       prepared.refresh,
       null,
+      now,
     );
   } catch (error) {
     if (error instanceof HostedTestBlockedError) throw error;
@@ -172,12 +182,13 @@ function grant(
   value: string | BrowserAuthorizationTokenResponse | undefined,
   refresh: PreparedBrowserAuthorization["refresh"],
   retainedRefreshToken: string | null,
+  now: () => number,
 ): MemoryAuthorizationGrant {
   const response = tokenResponse(value);
   const refreshToken = response.refreshToken ?? retainedRefreshToken;
   const expiresAt = response.expiresInSeconds === undefined
     ? null
-    : Date.now() + response.expiresInSeconds * 1_000;
+    : now() + response.expiresInSeconds * 1_000;
   return {
     accessToken: response.accessToken,
     expiresAt,
@@ -189,6 +200,7 @@ function grant(
         await refresh(refreshToken),
         refresh,
         refreshToken,
+        now,
       );
     },
   };

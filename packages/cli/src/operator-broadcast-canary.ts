@@ -34,7 +34,6 @@ const OPERATION_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
 const PROGRESS_FRESHNESS_MILLISECONDS = 30_000;
 const FUTURE_CLOCK_SKEW_MILLISECONDS = 5_000;
 const WAIT_MILLISECONDS = 2_000;
-const AUTHORIZATION_RENEWAL_LEAD_MILLISECONDS = 30_000;
 const SAFETY_PAUSE_TIMEOUT_MILLISECONDS = 60_000;
 
 export async function runBroadcastCanary(
@@ -59,23 +58,26 @@ export async function runBroadcastCanary(
   };
   let config: HostedConfig | null = null;
   let client: CoreOperatorClient | null = null;
-  let bearerExpiresAt: number | null = null;
 
   const authorize = async (
     signal: AbortSignal | undefined,
-    renewal = false,
+    renewal: "initial" | "current" | "force" = "initial",
   ): Promise<void> => {
     if (!config) throw new HostedTestBlockedError("authorization_failed");
     state.authorizationStartedAt ??= now();
-    const bearer = renewal
-      ? await refreshBearer(dependencies, config, signal)
-      : await dependencies.authorize(config, signal);
+    const bearer = renewal === "initial"
+      ? await dependencies.authorize(config, signal)
+      : await refreshBearer(
+          dependencies,
+          config,
+          signal,
+          renewal === "force",
+        );
     if (!bearer.trim()) {
       throw new HostedTestBlockedError("authorization_token_missing");
     }
     state.authorizationGranted = true;
     requireActive(state, signal, now);
-    bearerExpiresAt = bearerExpiration(bearer);
     client = createCoreOperatorClient({
       coreApiBaseUrl: config.coreApiBaseUrl,
       bearer,
@@ -86,19 +88,13 @@ export async function runBroadcastCanary(
 
   const readProgress = async (): Promise<ProductionBroadcastProgressResult> => {
     requireActive(state, dependencies.signal, now);
-    if (
-      bearerExpiresAt !== null &&
-      now().getTime() + AUTHORIZATION_RENEWAL_LEAD_MILLISECONDS >=
-        bearerExpiresAt
-    ) {
-      await authorize(dependencies.signal, true);
-    }
+    await authorize(dependencies.signal, "current");
     try {
       return await client!.readProductionProgress(command);
     } catch (error) {
       if (!unambiguousHumanAuthInvalidRead(error)) throw error;
       requireActive(state, dependencies.signal, now);
-      await authorize(dependencies.signal, true);
+      await authorize(dependencies.signal, "force");
       return client!.readProductionProgress(command);
     }
   };
@@ -250,7 +246,7 @@ async function freshSafetyPause(
   now: () => Date,
 ): Promise<void> {
   const signal = AbortSignal.timeout(SAFETY_PAUSE_TIMEOUT_MILLISECONDS);
-  const bearer = await refreshBearer(dependencies, config, signal);
+  const bearer = await refreshBearer(dependencies, config, signal, true);
   if (!bearer.trim()) {
     throw new HostedTestBlockedError("authorization_token_missing");
   }
@@ -278,11 +274,12 @@ function refreshBearer(
   dependencies: OperatorDependencies,
   config: HostedConfig,
   signal: AbortSignal | undefined,
+  force = false,
 ): Promise<string> {
   if (!dependencies.renewAuthorization) {
     throw new HostedTestBlockedError("authorization_refresh_unavailable");
   }
-  return dependencies.renewAuthorization(config, signal);
+  return dependencies.renewAuthorization(config, signal, force);
 }
 
 function requireSafetyPaused(
@@ -326,21 +323,6 @@ function requiresFreshSafetyAuthorization(error: unknown): boolean {
     reason === "operation_expired" ||
     reason === "browser_open_failed" ||
     reason.startsWith("authorization_");
-}
-
-function bearerExpiration(bearer: string): number | null {
-  const encoded = bearer.split(".")[1];
-  if (!encoded) return null;
-  try {
-    const body = JSON.parse(
-      Buffer.from(encoded, "base64url").toString("utf8"),
-    ) as { readonly exp?: unknown };
-    return Number.isSafeInteger(body.exp) && Number(body.exp) > 0
-      ? Number(body.exp) * 1_000
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function requireOpenBaseline(

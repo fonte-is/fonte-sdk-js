@@ -33,6 +33,7 @@ export interface OperatorDependencies {
   renewAuthorization?(
     config: HostedConfig,
     signal?: AbortSignal,
+    force?: boolean,
   ): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
   openUrl?(url: URL): Promise<boolean>;
