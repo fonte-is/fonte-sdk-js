@@ -62,6 +62,7 @@ export interface ProviderAudienceReconcileInput {
 export interface ProviderAudienceFreezeInput extends ProviderAudienceReconcileInput {
   readonly expectedObservationFingerprint: string;
   readonly idempotencyKey: string;
+  readonly declaredPermissionBasis?: "permission_basis_marketing_claimed";
 }
 
 export type ProviderAudienceOperatorCommand =

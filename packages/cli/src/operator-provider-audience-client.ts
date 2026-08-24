@@ -110,6 +110,9 @@ export function createProviderAudienceClient(
               exclusions: input.exclusions,
               expectedObservationFingerprint: fingerprint,
               idempotencyKey: key,
+              ...(input.declaredPermissionBasis
+                ? { declaredPermissionBasis: input.declaredPermissionBasis }
+                : {}),
             },
             idempotencyKey: key,
             lostResponseEffect: "unknown",

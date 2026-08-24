@@ -94,7 +94,11 @@ function reconcile(argv: readonly string[]): ParsedOperatorArguments {
 }
 
 function freeze(argv: readonly string[]): ParsedOperatorArguments {
-  const options = audienceOptions(argv, ["--fingerprint", "--idempotency-key"]);
+  const options = audienceOptions(
+    argv,
+    ["--fingerprint", "--idempotency-key"],
+    ["--declare-marketing-permission"],
+  );
   const key = idempotencyKey(required(options, "--idempotency-key"));
   if (key.length > 120) {
     invalidProductionArguments("invalid_field", "--idempotency-key");
@@ -111,12 +115,19 @@ function freeze(argv: readonly string[]): ParsedOperatorArguments {
     exclusions: exclusions(options),
     expectedObservationFingerprint: fingerprint,
     idempotencyKey: key,
+    ...(options.flags.has("--declare-marketing-permission")
+      ? {
+          declaredPermissionBasis:
+            "permission_basis_marketing_claimed" as const,
+        }
+      : {}),
   });
 }
 
 function audienceOptions(
   argv: readonly string[],
   extraNames: readonly string[] = [],
+  flags: readonly string[] = [],
 ): ProductionOptions {
   return parseProductionOptions(
     argv,
@@ -128,6 +139,7 @@ function audienceOptions(
       ...extraNames,
     ],
     exclusionNames,
+    flags,
   );
 }
 

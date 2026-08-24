@@ -72,10 +72,11 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         [
           "<the exact bridge reconcile source, exclusions, and max-age flags>",
           "--fingerprint <sha256> --idempotency-key <key>",
+          "[--declare-marketing-permission]",
         ],
       ],
       detail:
-        "Explicitly freezes only the fingerprint-bound final audience into an immutable Core reference.",
+        "Explicitly freezes only the fingerprint-bound final audience into an immutable Core reference. --declare-marketing-permission confirms independent valid marketing permission; existing unsubscribe, suppression, and purpose blocks remain authoritative.",
       json: true,
     },
   ];

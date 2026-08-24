@@ -36,6 +36,7 @@ const admittedFields = new Set([
   "--expected-version",
   "--segment-id",
   "--fingerprint",
+  "--declare-marketing-permission",
 ]);
 
 function boundedInvocationField(field: string): string {

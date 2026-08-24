@@ -63,6 +63,30 @@ test("provider audience grammar keeps source, exclusions, fingerprint, and help 
     expectedObservationFingerprint: fingerprint,
     idempotencyKey: "freeze-once-5",
   });
+  assert.deepEqual(
+    parseArguments([...freezeArguments(), "--declare-marketing-permission"])
+      .operator,
+    {
+      kind: "bridge_provider_freeze",
+      workspace: "northstar",
+      environment: "sandbox",
+      source: sourceReference(),
+      exclusions: [exclusionReference()],
+      expectedObservationFingerprint: fingerprint,
+      idempotencyKey: "freeze-once-5",
+      declaredPermissionBasis: "permission_basis_marketing_claimed",
+    },
+  );
+  assert.throws(() =>
+    parseArguments([...reconcileArguments(), "--declare-marketing-permission"]),
+  );
+  assert.throws(() =>
+    parseArguments([
+      ...freezeArguments(),
+      "--declare-marketing-permission",
+      "--declare-marketing-permission",
+    ]),
+  );
   assert.throws(() =>
     parseArguments(
       reconcileArguments().filter((value) => value !== "Suppressed"),
@@ -80,6 +104,13 @@ test("provider audience grammar keeps source, exclusions, fingerprint, and help 
     );
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /Core/);
+    if (argv[1] === "freeze") {
+      assert.match(result.stdout, /independent valid marketing permission/);
+      assert.match(
+        result.stdout,
+        /unsubscribe, suppression, and purpose blocks remain authoritative/,
+      );
+    }
   }
 });
 
@@ -362,6 +393,20 @@ test("freeze is an explicit idempotent mutation and lost response stays unknown"
     batchId,
   );
   assertSanitized(completed.stdout);
+
+  const declaredRequests = [];
+  const declared = await runProgram(
+    [...freezeArguments(), "--declare-marketing-permission", "--json"],
+    dependencies(declaredRequests, () => json(freezeReceipt(), 201)),
+  );
+  assert.deepEqual(JSON.parse(declaredRequests[1].init.body), {
+    source: sourceReference(),
+    exclusions: [exclusionReference()],
+    expectedObservationFingerprint: fingerprint,
+    idempotencyKey: "freeze-once-5",
+    declaredPermissionBasis: "permission_basis_marketing_claimed",
+  });
+  assertSanitized(declared.stdout);
 
   const lost = await runProgram(
     [...freezeArguments(), "--json"],
