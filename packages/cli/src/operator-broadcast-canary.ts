@@ -13,9 +13,12 @@ import type {
   OperatorReceipt,
 } from "./operator-types.js";
 
-type BroadcastCanaryCommand = Extract<OperatorCommand, {
-  readonly kind: "broadcast_canary";
-}>;
+type BroadcastCanaryCommand = Extract<
+  OperatorCommand,
+  {
+    readonly kind: "broadcast_canary";
+  }
+>;
 
 interface CanaryState {
   readonly operationId: string;
@@ -27,7 +30,9 @@ interface CanaryState {
   pauseAttempted: boolean;
   baseline: ProductionBroadcastProgressResult | null;
   current: ProductionBroadcastProgressResult | null;
-  readonly completedSteps: Set<BroadcastCanaryResult["completed_steps"][number]>;
+  readonly completedSteps: Set<
+    BroadcastCanaryResult["completed_steps"][number]
+  >;
 }
 
 const OPERATION_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
@@ -65,14 +70,15 @@ export async function runBroadcastCanary(
   ): Promise<void> => {
     if (!config) throw new HostedTestBlockedError("authorization_failed");
     state.authorizationStartedAt ??= now();
-    const bearer = renewal === "initial"
-      ? await dependencies.authorize(config, signal)
-      : await refreshBearer(
-          dependencies,
-          config,
-          signal,
-          renewal === "force",
-        );
+    const bearer =
+      renewal === "initial"
+        ? await dependencies.authorize(config, signal)
+        : await refreshBearer(
+            dependencies,
+            config,
+            signal,
+            renewal === "force",
+          );
     if (!bearer.trim()) {
       throw new HostedTestBlockedError("authorization_token_missing");
     }
@@ -133,51 +139,63 @@ export async function runBroadcastCanary(
       requireSettlingBaseline(baseline, first, command.releaseCeiling, now());
     }
 
-    while (
-      baseline.pending_recipient_count > 0 ||
-      baseline.claimed_recipient_count > 0
-    ) {
-      await waitForProgress(state, dependencies, now);
-      baseline = await readProgress();
-      state.baseline = baseline;
-      state.current = baseline;
-      state.completedSteps.add("authoritative_wait_read");
-      requireSettlingBaseline(baseline, first, command.releaseCeiling, now());
-    }
-    state.baseline = baseline;
     requireActive(state, dependencies.signal, now);
 
-    const releaseBaseline = baseline;
-    let trancheBaseline = baseline;
+    const releaseBaseline = first;
+    let progress = baseline;
     let idempotencyKey = command.idempotencyKey;
-    while (trancheBaseline.released_recipient_count < command.releaseCeiling) {
+    while (!targetAccepted(progress, command.releaseCeiling)) {
       requireActive(state, dependencies.signal, now);
-      const maximumRecipientCount =
-        command.releaseCeiling - trancheBaseline.released_recipient_count;
-      let progress = await client!.releaseProductionBroadcast({
+      const headroom = acceptanceHeadroom(progress, command.releaseCeiling);
+      if (headroom === 0) {
+        await waitForProgress(state, dependencies, now);
+        const observed = await readProgress();
+        requireTargetProgress(
+          observed,
+          progress,
+          command.releaseCeiling,
+          now(),
+          0,
+        );
+        progress = observed;
+        state.current = observed;
+        state.completedSteps.add("authoritative_wait_read");
+        continue;
+      }
+
+      const maximumRecipientCount = Math.min(
+        headroom,
+        progress.held_recipient_count,
+      );
+      if (maximumRecipientCount === 0) {
+        throw new HostedTestBlockedError(
+          "broadcast_canary_release_no_progress",
+        );
+      }
+      const beforeRelease = progress;
+      const releaseInput = {
         workspace: command.workspace,
         broadcastId: command.broadcastId,
         idempotencyKey,
         maximumRecipientCount,
-      });
+      };
       state.mutationObserved = true;
+      try {
+        progress = await client!.releaseProductionBroadcast(releaseInput);
+      } catch (error) {
+        if (!indeterminateMutation(error)) throw error;
+        progress = await client!.releaseProductionBroadcast(releaseInput);
+      }
       state.current = progress;
       state.completedSteps.add("guarded_release");
-      const releasedDelta = requireTargetProgress(
-        progress, trancheBaseline, command.releaseCeiling, now(),
+      requireTargetProgress(
+        progress,
+        beforeRelease,
+        command.releaseCeiling,
+        now(),
+        maximumRecipientCount,
       );
-
-      while (!targetAccepted(progress, trancheBaseline, releasedDelta)) {
-        await waitForProgress(state, dependencies, now);
-        progress = await readProgress();
-        state.current = progress;
-        state.completedSteps.add("authoritative_wait_read");
-        requireTargetProgress(
-          progress, trancheBaseline, command.releaseCeiling, now(), releasedDelta,
-        );
-      }
-      trancheBaseline = progress;
-      if (trancheBaseline.released_recipient_count < command.releaseCeiling) {
+      if (!targetAccepted(progress, command.releaseCeiling)) {
         idempotencyKey = randomUUID();
       }
     }
@@ -185,8 +203,10 @@ export async function runBroadcastCanary(
     requireActive(state, dependencies.signal, now);
     await pause(client!, command, state);
     requirePausedTarget(
-      state.current!, releaseBaseline, command.releaseCeiling,
-      command.releaseCeiling - releaseBaseline.released_recipient_count, now(),
+      state.current!,
+      releaseBaseline,
+      command.releaseCeiling,
+      now(),
     );
     return receipt(
       command,
@@ -194,7 +214,7 @@ export async function runBroadcastCanary(
       now(),
       "completed",
       state.current!.cancelled_recipient_count >
-          releaseBaseline.cancelled_recipient_count
+        releaseBaseline.cancelled_recipient_count
         ? "broadcast_canary_ceiling_settled_with_cancellation_and_paused"
         : "broadcast_canary_ceiling_accepted_and_paused",
       "controlled",
@@ -211,13 +231,7 @@ export async function runBroadcastCanary(
     ) {
       try {
         if (freshSafetyAuthorization) {
-          await freshSafetyPause(
-            config,
-            command,
-            state,
-            dependencies,
-            now,
-          );
+          await freshSafetyPause(config, command, state, dependencies, now);
         } else {
           await pause(client!, command, state);
         }
@@ -299,10 +313,10 @@ function requireSafetyPaused(
     progress.status !== "paused" ||
     progress.control_state !== "paused" ||
     releasedDelta < 0 ||
-    progress.released_recipient_count > releaseCeiling ||
     progress.held_recipient_count !==
       baseline.held_recipient_count - releasedDelta ||
     progress.accepted_recipient_count < baseline.accepted_recipient_count ||
+    possibleAcceptances(progress) > releaseCeiling ||
     releasedAccounting(progress) !== progress.released_recipient_count
   ) {
     throw new HostedTestBlockedError("broadcast_canary_pause_unconfirmed");
@@ -310,33 +324,36 @@ function requireSafetyPaused(
 }
 
 function unambiguousHumanAuthInvalidRead(error: unknown): boolean {
-  return error instanceof CoreOperatorError &&
+  return (
+    error instanceof CoreOperatorError &&
     error.reason === "human_auth_invalid" &&
     error.statusCode === 401 &&
-    error.coreEffect === "none";
+    error.coreEffect === "none"
+  );
 }
 
 function requiresFreshSafetyAuthorization(error: unknown): boolean {
   const reason = failureReason(error);
-  return reason === "human_auth_invalid" ||
+  return (
+    reason === "human_auth_invalid" ||
     reason === "operation_cancelled" ||
     reason === "operation_expired" ||
     reason === "browser_open_failed" ||
-    reason.startsWith("authorization_");
+    reason.startsWith("authorization_")
+  );
 }
 
 function requireOpenBaseline(
   progress: ProductionBroadcastProgressResult,
   releaseCeiling: number,
 ): void {
-  const delta = releaseCeiling - progress.released_recipient_count;
+  const headroom = acceptanceHeadroom(progress, releaseCeiling);
   const open =
     (progress.status === "paused" && progress.control_state === "paused") ||
     (progress.status === "processing" && progress.control_state === "active");
   if (
     !open ||
-    delta < 1 ||
-    progress.held_recipient_count < delta ||
+    progress.held_recipient_count < headroom ||
     releasedAccounting(progress) !== progress.released_recipient_count
   ) {
     throw new HostedTestBlockedError("broadcast_canary_baseline_unsafe");
@@ -356,8 +373,8 @@ function requireSettlingBaseline(
     progress.control_state !== "active" ||
     progress.released_recipient_count !== frozen.released_recipient_count ||
     progress.held_recipient_count !== frozen.held_recipient_count ||
-    progress.released_recipient_count >= releaseCeiling ||
     progress.accepted_recipient_count < frozen.accepted_recipient_count ||
+    possibleAcceptances(progress) > releaseCeiling ||
     releasedAccounting(progress) !== progress.released_recipient_count
   ) {
     throw new HostedTestBlockedError("broadcast_canary_authority_changed");
@@ -369,7 +386,7 @@ function requireTargetProgress(
   baseline: ProductionBroadcastProgressResult,
   releaseCeiling: number,
   observedAt: Date,
-  expectedReleasedDelta?: number,
+  maximumRecipientCount: number,
 ): number {
   requireFresh(progress, observedAt);
   const releasedDelta =
@@ -378,24 +395,24 @@ function requireTargetProgress(
     progress.accepted_recipient_count - baseline.accepted_recipient_count;
   const cancelledDelta =
     progress.cancelled_recipient_count - baseline.cancelled_recipient_count;
-  if (releasedDelta < 1) {
+  if (maximumRecipientCount > 0 && releasedDelta < 1) {
     throw new HostedTestBlockedError("broadcast_canary_release_no_progress");
   }
-  if (
-    (expectedReleasedDelta !== undefined &&
-      releasedDelta !== expectedReleasedDelta) ||
-    progress.released_recipient_count > releaseCeiling ||
-    progress.held_recipient_count !== baseline.held_recipient_count - releasedDelta
-  ) {
-    throw new HostedTestBlockedError("broadcast_canary_release_ceiling_not_exact");
+  if (maximumRecipientCount > 0 && releasedDelta > maximumRecipientCount) {
+    throw new HostedTestBlockedError(
+      "broadcast_canary_release_ceiling_not_exact",
+    );
   }
   requireFrozenSafetyCounts(progress, baseline);
   if (
     progress.control_state !== "active" ||
     progress.status !== "processing" ||
+    (maximumRecipientCount === 0 && releasedDelta !== 0) ||
+    progress.held_recipient_count !==
+      baseline.held_recipient_count - releasedDelta ||
     acceptedDelta < 0 ||
     cancelledDelta < 0 ||
-    acceptedDelta + cancelledDelta > releasedDelta ||
+    possibleAcceptances(progress) > releaseCeiling ||
     releasedAccounting(progress) !== progress.released_recipient_count
   ) {
     throw new HostedTestBlockedError("broadcast_canary_authority_changed");
@@ -403,37 +420,23 @@ function requireTargetProgress(
   return releasedDelta;
 }
 
-function targetAccepted(
-  progress: ProductionBroadcastProgressResult,
-  baseline: ProductionBroadcastProgressResult,
-  releasedDelta: number,
-): boolean {
-  return (
-    progress.accepted_recipient_count - baseline.accepted_recipient_count +
-        progress.cancelled_recipient_count -
-        baseline.cancelled_recipient_count === releasedDelta &&
-    progress.pending_recipient_count === 0 &&
-    progress.claimed_recipient_count === 0
-  );
-}
-
 function requirePausedTarget(
   progress: ProductionBroadcastProgressResult,
   baseline: ProductionBroadcastProgressResult,
   releaseCeiling: number,
-  releasedDelta: number,
   observedAt: Date,
 ): void {
   requireFresh(progress, observedAt);
   requireFrozenSafetyCounts(progress, baseline);
+  const releasedDelta =
+    progress.released_recipient_count - baseline.released_recipient_count;
   if (
     progress.status !== "paused" ||
     progress.control_state !== "paused" ||
-    progress.released_recipient_count !== releaseCeiling ||
     progress.held_recipient_count !==
       baseline.held_recipient_count - releasedDelta ||
     releasedAccounting(progress) !== progress.released_recipient_count ||
-    !targetAccepted(progress, baseline, releasedDelta)
+    !targetAccepted(progress, releaseCeiling)
   ) {
     throw new HostedTestBlockedError("broadcast_canary_pause_unconfirmed");
   }
@@ -458,12 +461,55 @@ function requireFrozenSafetyCounts(
   }
 }
 
+function targetAccepted(
+  progress: ProductionBroadcastProgressResult,
+  releaseCeiling: number,
+): boolean {
+  return (
+    progress.accepted_recipient_count === releaseCeiling &&
+    progress.pending_recipient_count === 0 &&
+    progress.claimed_recipient_count === 0
+  );
+}
+
+function acceptanceHeadroom(
+  progress: ProductionBroadcastProgressResult,
+  releaseCeiling: number,
+): number {
+  const possible = possibleAcceptances(progress);
+  if (possible > releaseCeiling) {
+    throw new HostedTestBlockedError(
+      "broadcast_canary_release_ceiling_not_exact",
+    );
+  }
+  return releaseCeiling - possible;
+}
+
+function possibleAcceptances(
+  progress: ProductionBroadcastProgressResult,
+): number {
+  return (
+    progress.accepted_recipient_count +
+    progress.pending_recipient_count +
+    progress.claimed_recipient_count
+  );
+}
+
+function indeterminateMutation(error: unknown): boolean {
+  return error instanceof CoreOperatorError && error.coreEffect === "unknown";
+}
+
 function releasedAccounting(
   progress: ProductionBroadcastProgressResult,
 ): number {
-  return progress.pending_recipient_count + progress.claimed_recipient_count
-    + progress.accepted_recipient_count + progress.refused_recipient_count
-    + progress.unknown_recipient_count + progress.cancelled_recipient_count;
+  return (
+    progress.pending_recipient_count +
+    progress.claimed_recipient_count +
+    progress.accepted_recipient_count +
+    progress.refused_recipient_count +
+    progress.unknown_recipient_count +
+    progress.cancelled_recipient_count
+  );
 }
 
 async function pause(
@@ -534,7 +580,8 @@ function requireFresh(
 }
 
 function failureReason(error: unknown): string {
-  return error instanceof CoreOperatorError || error instanceof HostedTestBlockedError
+  return error instanceof CoreOperatorError ||
+    error instanceof HostedTestBlockedError
     ? error.reason
     : "operator_request_failed";
 }
@@ -553,7 +600,10 @@ function receipt(
     outcome,
     reason,
     workspace: command.workspace,
-    authority: { status: "current", contract_id: "fonte.core.production_broadcast.v1" },
+    authority: {
+      status: "current",
+      contract_id: "fonte.core.production_broadcast.v1",
+    },
     core_effect: coreEffect,
     result: {
       kind: "broadcast_canary",

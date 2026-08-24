@@ -19,12 +19,12 @@ const initial = {
   cancelled: 1,
 };
 const settled = { ...initial, accepted: 35_093, pending: 0 };
-const cancellationWindowBaseline = {
-  released: 66_100,
-  held: 56_141,
-  accepted: 65_991,
+const overlapInitial = {
+  released: 38_015,
+  held: 6_009,
+  accepted: 37_574,
+  pending: 335,
   unknown: 106,
-  cancelled: 3,
 };
 const additionalReleaseKeys = Array.from(
   { length: 120 },
@@ -32,38 +32,45 @@ const additionalReleaseKeys = Array.from(
     `20000000-0000-4000-8000-${String(176 + index).padStart(12, "0")}`,
 );
 
-test("one bearer settles queued work and reaches the exact ceiling through bounded partial tranches", async () => {
-  const trancheResponses = Array.from({ length: 9 }, (_, index) => {
-    const released = 35_300 + index * 100;
-    const held = 86_941 - index * 100;
-    const accepted = 35_093 + index * 100;
-    return [
-      progress({
-        released,
-        held,
-        accepted,
-        pending: 100,
-        unknown: 106,
-        cancelled: 1,
-      }),
-      progress({
-        released,
-        held,
-        accepted: accepted + 100,
-        unknown: 106,
-        cancelled: 1,
-      }),
-    ];
-  }).flat();
+test("historical pending overlaps held release and cancellation headroom reaches the exact accepted target", async () => {
   const harness = canaryHarness([
-    progress({ ...initial, status: "paused", controlState: "paused" }),
-    progress(initial),
-    progress(settled),
-    ...trancheResponses,
+    progress({ ...overlapInitial, status: "paused", controlState: "paused" }),
+    progress(overlapInitial),
+    json({ error: "core_api_unavailable" }, 503),
     progress({
-      released: 36_100,
-      held: 86_141,
-      accepted: 35_993,
+      released: 43_689,
+      held: 335,
+      accepted: 37_574,
+      pending: 6_009,
+      unknown: 106,
+    }),
+    progress({
+      released: 43_689,
+      held: 335,
+      accepted: 38_000,
+      pending: 5_582,
+      unknown: 106,
+      cancelled: 1,
+    }),
+    progress({
+      released: 43_690,
+      held: 334,
+      accepted: 38_000,
+      pending: 5_583,
+      unknown: 106,
+      cancelled: 1,
+    }),
+    progress({
+      released: 43_690,
+      held: 334,
+      accepted: 43_583,
+      unknown: 106,
+      cancelled: 1,
+    }),
+    progress({
+      released: 43_690,
+      held: 334,
+      accepted: 43_583,
       unknown: 106,
       cancelled: 1,
       status: "paused",
@@ -71,30 +78,45 @@ test("one bearer settles queued work and reaches the exact ceiling through bound
     }),
   ]);
 
-  const result = await runProgram(argumentsForCanary(), harness.dependencies);
+  const result = await runProgram(
+    argumentsForCanary(43_583, "release-to-43583"),
+    harness.dependencies,
+  );
   const receipt = JSON.parse(result.stdout);
 
   assert.equal(result.exitCode, 0);
   assert.equal(harness.authorizationCalls(), 1);
-  const trancheRequests = Array.from({ length: 9 }, (_, index) => [
-    {
-      method: "POST",
-      body: {
-        operation: "release",
-        idempotencyKey:
-          index === 0 ? "release-to-36100" : additionalReleaseKeys[index - 1],
-        maximumRecipientCount: 900 - index * 100,
-      },
-    },
-    { method: "GET", body: null },
-  ]).flat();
   assert.deepEqual(
     harness.coreRequests().map(({ method, body }) => ({ method, body })),
     [
       { method: "GET", body: null },
       { method: "POST", body: { operation: "resume" } },
+      {
+        method: "POST",
+        body: {
+          operation: "release",
+          idempotencyKey: "release-to-43583",
+          maximumRecipientCount: 5_674,
+        },
+      },
+      {
+        method: "POST",
+        body: {
+          operation: "release",
+          idempotencyKey: "release-to-43583",
+          maximumRecipientCount: 5_674,
+        },
+      },
       { method: "GET", body: null },
-      ...trancheRequests,
+      {
+        method: "POST",
+        body: {
+          operation: "release",
+          idempotencyKey: additionalReleaseKeys[0],
+          maximumRecipientCount: 1,
+        },
+      },
+      { method: "GET", body: null },
       { method: "POST", body: { operation: "pause" } },
     ],
   );
@@ -102,27 +124,28 @@ test("one bearer settles queued work and reaches the exact ceiling through bound
     new Set(harness.coreRequests().map(({ bearer: value }) => value)),
     new Set([bearer]),
   );
-  assert.equal(receipt.reason, "broadcast_canary_ceiling_accepted_and_paused");
-  assert.equal(receipt.result.release_ceiling, 36_100);
-  assert.equal(receipt.result.baseline.released_recipient_count, 35_200);
-  assert.equal(receipt.result.baseline.accepted_recipient_count, 35_093);
-  assert.equal(receipt.result.baseline.unknown_recipient_count, 106);
-  assert.equal(receipt.result.baseline.cancelled_recipient_count, 1);
-  assert.equal(receipt.result.final.released_recipient_count, 36_100);
-  assert.equal(receipt.result.final.held_recipient_count, 86_141);
-  assert.equal(receipt.result.final.accepted_recipient_count, 35_993);
-  assert.notEqual(
-    receipt.result.final.accepted_recipient_count,
-    receipt.result.release_ceiling,
+  assert.equal(
+    receipt.reason,
+    "broadcast_canary_ceiling_settled_with_cancellation_and_paused",
   );
+  assert.equal(receipt.result.release_ceiling, 43_583);
+  assert.equal(receipt.result.baseline.released_recipient_count, 38_015);
+  assert.equal(receipt.result.baseline.pending_recipient_count, 335);
+  assert.equal(receipt.result.baseline.accepted_recipient_count, 37_574);
+  assert.equal(receipt.result.baseline.unknown_recipient_count, 106);
+  assert.equal(receipt.result.final.released_recipient_count, 43_690);
+  assert.equal(receipt.result.final.held_recipient_count, 334);
+  assert.equal(receipt.result.final.accepted_recipient_count, 43_583);
+  assert.equal(receipt.result.final.pending_recipient_count, 0);
+  assert.equal(receipt.result.final.claimed_recipient_count, 0);
   assert.equal(receipt.result.final.unknown_recipient_count, 106);
   assert.equal(receipt.result.final.cancelled_recipient_count, 1);
   assert.equal(receipt.result.final.control_state, "paused");
   assert.deepEqual(receipt.result.completed_steps, [
     "authoritative_status",
     "safe_resume",
-    "authoritative_wait_read",
     "guarded_release",
+    "authoritative_wait_read",
     "safety_pause",
   ]);
   assert.equal(receipt.result.authorization.status, "released");
@@ -130,132 +153,51 @@ test("one bearer settles queued work and reaches the exact ceiling through bound
   assert.equal(result.stdout.includes(bearer), false);
 });
 
-test("a conserved 10000-recipient window completes with 9999 accepted and one newly cancelled", async () => {
-  const responses = [
-    progress({
-      ...cancellationWindowBaseline,
-      status: "paused",
-      controlState: "paused",
-    }),
-    progress(cancellationWindowBaseline),
-  ];
-  for (let index = 0; index < 100; index += 1) {
-    const released = 66_200 + index * 100;
-    const held = 56_041 - index * 100;
-    const accepted = 65_991 + index * 100;
-    responses.push(
-      progress({
-        released,
-        held,
-        accepted,
-        pending: 100,
-        unknown: 106,
-        cancelled: 3,
-      }),
-      progress({
-        released,
-        held,
-        accepted: accepted + (index === 99 ? 99 : 100),
-        unknown: 106,
-        cancelled: index === 99 ? 4 : 3,
-      }),
-    );
-  }
-  responses.push(
-    progress({
-      released: 76_100,
-      held: 46_141,
-      accepted: 75_990,
-      unknown: 106,
-      cancelled: 4,
-      status: "paused",
-      controlState: "paused",
-    }),
-  );
-  const harness = canaryHarness(responses, {
-    sleepAdvanceMilliseconds: 0,
-  });
-
-  const result = await runProgram(
-    argumentsForCanary(76_100, "release-to-76100"),
-    harness.dependencies,
-  );
-  const receipt = JSON.parse(result.stdout);
-  const releases = harness.coreRequests().filter(
-    ({ body }) => body?.operation === "release",
-  );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(harness.authorizationCalls(), 1);
-  assert.equal(releases.length, 100);
-  assert.equal(
-    new Set(releases.map(({ body }) => body.idempotencyKey)).size,
-    100,
-  );
-  assert.deepEqual(
-    releases.map(({ body }) => body.maximumRecipientCount),
-    Array.from({ length: 100 }, (_, index) => 10_000 - index * 100),
-  );
-  assert.equal(
-    receipt.reason,
-    "broadcast_canary_ceiling_settled_with_cancellation_and_paused",
-  );
-  assert.equal(
-    receipt.result.final.accepted_recipient_count -
-      receipt.result.baseline.accepted_recipient_count,
-    9_999,
-  );
-  assert.equal(
-    receipt.result.final.cancelled_recipient_count -
-      receipt.result.baseline.cancelled_recipient_count,
-    1,
-  );
-  assert.equal(receipt.result.final.released_recipient_count, 76_100);
-  assert.equal(receipt.result.final.held_recipient_count, 46_141);
-  assert.equal(receipt.result.final.unknown_recipient_count, 106);
-  assert.equal(receipt.result.final.refused_recipient_count, 0);
-  assert.equal(receipt.result.final.control_state, "paused");
-});
-
 test("new cancellations cannot conceal a release overshoot or accepted-count regression", async () => {
+  const negativeBaseline = {
+    released: 107,
+    held: 20,
+    accepted: 100,
+    pending: 5,
+    unknown: 2,
+  };
   for (const [name, unsafe, reason] of [
     [
       "overshoot",
       progress({
-        released: 76_101,
-        held: 46_140,
-        accepted: 75_990,
-        pending: 1,
-        unknown: 106,
-        cancelled: 4,
+        released: 123,
+        held: 4,
+        accepted: 100,
+        pending: 21,
+        unknown: 2,
       }),
       "broadcast_canary_release_ceiling_not_exact",
     ],
     [
       "regression",
       progress({
-        released: 76_100,
-        held: 46_141,
-        accepted: 65_990,
-        unknown: 106,
-        cancelled: 10_004,
+        released: 122,
+        held: 5,
+        accepted: 99,
+        pending: 21,
+        unknown: 2,
       }),
       "broadcast_canary_authority_changed",
     ],
   ]) {
     const harness = canaryHarness([
       progress({
-        ...cancellationWindowBaseline,
+        ...negativeBaseline,
         status: "paused",
         controlState: "paused",
       }),
-      progress(cancellationWindowBaseline),
+      progress(negativeBaseline),
       unsafe,
       { ...unsafe, status: "paused", controlState: "paused" },
     ]);
 
     const result = await runProgram(
-      argumentsForCanary(76_100, "release-to-76100"),
+      argumentsForCanary(120, "release-to-120"),
       harness.dependencies,
     );
     const receipt = JSON.parse(result.stdout);
@@ -276,11 +218,10 @@ test("an auth-invalid opaque bearer is renewed after partial releases before the
   const expiredBearer = "opaque-access-expired";
   const renewedBearer = "opaque-access-renewed";
   const renewalInitial = {
-    released: 36_100,
-    held: 86_141,
-    accepted: 35_993,
-    unknown: 106,
-    cancelled: 1,
+    released: 105,
+    held: 20,
+    accepted: 100,
+    unknown: 5,
   };
   const responses = [
     progress({
@@ -289,52 +230,31 @@ test("an auth-invalid opaque bearer is renewed after partial releases before the
       controlState: "paused",
     }),
     progress(renewalInitial),
-  ];
-  for (let index = 0; index < 50; index += 1) {
-    const released = 36_200 + index * 100;
-    const held = 86_041 - index * 100;
-    const accepted = 35_993 + index * 100;
-    responses.push(
-      progress({
-        released,
-        held,
-        accepted,
-        pending: 100,
-        unknown: 106,
-        cancelled: 1,
-      }),
-    );
-    if (released === 37_000) {
-      responses.push(json({ error: "human_auth_invalid" }, 401));
-    }
-    responses.push(
-      progress({
-        released,
-        held,
-        accepted: accepted + 100,
-        unknown: 106,
-        cancelled: 1,
-      }),
-    );
-  }
-  responses.push(
     progress({
-      released: 41_100,
-      held: 81_141,
-      accepted: 40_993,
-      unknown: 106,
-      cancelled: 1,
+      released: 115,
+      held: 10,
+      accepted: 100,
+      pending: 10,
+      unknown: 5,
+    }),
+    json({ error: "human_auth_invalid" }, 401),
+    progress({ released: 115, held: 10, accepted: 110, unknown: 5 }),
+    progress({
+      released: 115,
+      held: 10,
+      accepted: 110,
+      unknown: 5,
       status: "paused",
       controlState: "paused",
     }),
-  );
+  ];
   const harness = canaryHarness(responses, {
     bearers: [expiredBearer, renewedBearer],
     sleepAdvanceMilliseconds: 0,
   });
 
   const result = await runProgram(
-    argumentsForCanary(41_100),
+    argumentsForCanary(110, "release-to-110"),
     harness.dependencies,
   );
   const receipt = JSON.parse(result.stdout);
@@ -342,9 +262,7 @@ test("an auth-invalid opaque bearer is renewed after partial releases before the
   const renewalIndex = requests.findIndex(
     ({ bearer: value }) => value === renewedBearer,
   );
-  const releases = requests.filter(
-    ({ body }) => body?.operation === "release",
-  );
+  const releases = requests.filter(({ body }) => body?.operation === "release");
 
   assert.equal(result.exitCode, 0);
   assert.equal(harness.authorizationCalls(), 2);
@@ -354,19 +272,12 @@ test("an auth-invalid opaque bearer is renewed after partial releases before the
   assert.equal(renewalIndex > 0, true);
   assert.equal(requests[renewalIndex - 1].method, "GET");
   assert.equal(requests[renewalIndex].method, "GET");
-  assert.equal(releases.length, 50);
-  assert.equal(
-    new Set(releases.map(({ body }) => body.idempotencyKey)).size,
-    50,
-  );
-  assert.deepEqual(
-    releases.map(({ body }) => body.maximumRecipientCount),
-    Array.from({ length: 50 }, (_, index) => 5_000 - index * 100),
-  );
+  assert.equal(releases.length, 1);
+  assert.equal(releases[0].body.maximumRecipientCount, 10);
   assert.equal(receipt.outcome, "completed");
   assert.equal(receipt.core_effect, "controlled");
-  assert.equal(receipt.result.final.released_recipient_count, 41_100);
-  assert.equal(receipt.result.final.accepted_recipient_count, 40_993);
+  assert.equal(receipt.result.final.released_recipient_count, 115);
+  assert.equal(receipt.result.final.accepted_recipient_count, 110);
   assert.equal(receipt.result.final.pending_recipient_count, 0);
   assert.equal(receipt.result.final.control_state, "paused");
   assert.equal(result.stdout.includes(expiredBearer), false);
@@ -375,10 +286,10 @@ test("an auth-invalid opaque bearer is renewed after partial releases before the
 
 test("refresh failure after an observed release is fail-closed without replaying the mutation", async () => {
   const activeRelease = progress({
-    released: 35_300,
-    held: 86_941,
+    released: 36_207,
+    held: 86_034,
     accepted: 35_093,
-    pending: 100,
+    pending: 1_007,
     unknown: 106,
     cancelled: 1,
   });
@@ -396,15 +307,15 @@ test("refresh failure after an observed release is fail-closed without replaying
 
   const result = await runProgram(argumentsForCanary(), harness.dependencies);
   const receipt = JSON.parse(result.stdout);
-  const releases = harness.coreRequests().filter(
-    ({ body }) => body?.operation === "release",
-  );
+  const releases = harness
+    .coreRequests()
+    .filter(({ body }) => body?.operation === "release");
 
   assert.equal(result.exitCode, 3);
   assert.equal(receipt.reason, "authorization_refresh_failed");
   assert.equal(receipt.core_effect, "unknown");
   assert.equal(receipt.result.final.control_state, "active");
-  assert.equal(receipt.result.final.pending_recipient_count, 100);
+  assert.equal(receipt.result.final.pending_recipient_count, 1_007);
   assert.equal(harness.browserAuthorizationCalls(), 1);
   assert.equal(releases.length, 1);
   assert.equal(releases[0].body.idempotencyKey, "release-to-36100");
@@ -413,10 +324,10 @@ test("refresh failure after an observed release is fail-closed without replaying
 test("cancellation after an observed release renews authorization and returns a truthful paused effect", async () => {
   const cancellation = new AbortController();
   const activeRelease = progress({
-    released: 35_300,
-    held: 86_941,
+    released: 36_207,
+    held: 86_034,
     accepted: 35_093,
-    pending: 100,
+    pending: 1_007,
     unknown: 106,
     cancelled: 1,
   });
@@ -428,10 +339,10 @@ test("cancellation after an observed release renews authorization and returns a 
       activeRelease,
       activeRelease,
       progress({
-        released: 35_300,
-        held: 86_941,
+        released: 36_207,
+        held: 86_034,
         accepted: 35_093,
-        pending: 100,
+        pending: 1_007,
         unknown: 106,
         cancelled: 1,
         status: "paused",
@@ -458,8 +369,8 @@ test("cancellation after an observed release renews authorization and returns a 
   assert.equal(receipt.outcome, "blocked");
   assert.equal(receipt.reason, "operation_cancelled");
   assert.equal(receipt.core_effect, "controlled");
-  assert.equal(receipt.result.final.released_recipient_count, 35_300);
-  assert.equal(receipt.result.final.pending_recipient_count, 100);
+  assert.equal(receipt.result.final.released_recipient_count, 36_207);
+  assert.equal(receipt.result.final.pending_recipient_count, 1_007);
   assert.equal(receipt.result.final.control_state, "paused");
   assert.deepEqual(
     harness.coreRequests().map(({ method, bearer: value }) => [method, value]),
@@ -479,15 +390,15 @@ test("unknown, refused, or authority drift still pauses immediately", async () =
     ["refused", { refused: 1 }, "broadcast_canary_refused_increase"],
     [
       "authority",
-      { pending: 100, status: "paused", controlState: "paused" },
+      { pending: 1_107, status: "paused", controlState: "paused" },
       "broadcast_canary_authority_changed",
     ],
   ]) {
     const unsafe = {
-      released: 35_300,
-      held: 86_941,
-      accepted: 35_093,
-      pending: 99,
+      released: 36_207,
+      held: 86_034,
+      accepted: 34_993,
+      pending: 1_106,
       unknown: 106,
       cancelled: 1,
       ...change,
@@ -495,7 +406,14 @@ test("unknown, refused, or authority drift still pauses immediately", async () =
     const harness = canaryHarness([
       progress({ ...initial, status: "paused", controlState: "paused" }),
       progress(initial),
-      progress(settled),
+      progress({
+        released: 36_207,
+        held: 86_034,
+        accepted: 34_993,
+        pending: 1_107,
+        unknown: 106,
+        cancelled: 1,
+      }),
       progress(unsafe),
       progress({ ...unsafe, status: "paused", controlState: "paused" }),
     ]);
@@ -508,7 +426,7 @@ test("unknown, refused, or authority drift still pauses immediately", async () =
     assert.equal(harness.authorizationCalls(), 1, name);
     assert.deepEqual(
       harness.coreRequests().map(({ method }) => method),
-      ["GET", "POST", "GET", "POST", "POST"],
+      ["GET", "POST", "POST", "GET", "POST"],
       name,
     );
   }
@@ -518,9 +436,8 @@ test("a release with no positive progress pauses without retrying the mutation",
   const harness = canaryHarness([
     progress({ ...initial, status: "paused", controlState: "paused" }),
     progress(initial),
-    progress(settled),
-    progress(settled),
-    progress({ ...settled, status: "paused", controlState: "paused" }),
+    progress(initial),
+    progress({ ...initial, status: "paused", controlState: "paused" }),
   ]);
 
   const result = await runProgram(argumentsForCanary(), harness.dependencies);
@@ -530,7 +447,7 @@ test("a release with no positive progress pauses without retrying the mutation",
   assert.equal(receipt.result.final.control_state, "paused");
   assert.deepEqual(
     harness.coreRequests().map(({ method }) => method),
-    ["GET", "POST", "GET", "POST", "POST"],
+    ["GET", "POST", "POST", "POST"],
   );
 });
 
@@ -644,7 +561,9 @@ function progress({
     marketingBroadcastId: broadcastId,
     status,
     controlState,
-    progressVersion: String(released + accepted + refused + unknown + cancelled),
+    progressVersion: String(
+      released + accepted + refused + unknown + cancelled,
+    ),
     requestedRecipientCount: released + held,
     eligibleRecipientCount: released + held,
     releasedRecipientCount: released,
