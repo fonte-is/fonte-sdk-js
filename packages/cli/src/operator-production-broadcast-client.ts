@@ -12,7 +12,6 @@ import {
 } from "./operator-production-json.js";
 import type {
   ProductionAuthorizeInput,
-  ProductionAudienceAppendBaselineResult,
   ProductionAudienceAppendInput,
   ProductionAudienceAppendPreflightResult,
   ProductionAudienceAppendResult,
@@ -55,7 +54,7 @@ export interface ProductionBroadcastClient {
   ): Promise<ProductionAudienceAppendPreflightResult>;
   appendProductionAudience(
     input: ProductionAudienceAppendInput,
-    baseline: ProductionAudienceAppendBaselineResult,
+    preflight: ProductionAudienceAppendPreflightResult,
   ): Promise<ProductionAudienceAppendResult>;
 }
 
@@ -179,26 +178,29 @@ export function createProductionBroadcastClient(
       try {
         const result = parse(
           audienceAppendPreflight,
-          await request(`${broadcastPath(input)}/audience-append?environment=production`),
+          await request(
+            `${broadcastPath(input)}/audience-append?environment=production`,
+          ),
         );
-        return matchingBroadcast(result, input.broadcastId, "none");
+        if (result.readback.broadcast_id !== input.broadcastId) invalid("none");
+        return result;
       } catch (error) {
         return audienceAppendFailure(error);
       }
     },
-    async appendProductionAudience(input, baseline) {
+    async appendProductionAudience(input, preflight) {
       try {
         return parse(
-          (value) => audienceAppendResult(value, input, baseline),
+          (value) => audienceAppendResult(value, input, preflight),
           await request(
             `${broadcastPath(input)}/audience-append?environment=production`,
             {
               idempotencyKey: input.idempotencyKey,
               lostResponseEffect: "unknown",
               body: {
-                baseline: baselineBody(baseline),
+                expectedBaseline: baselineBody(preflight.baseline),
                 frozenAudienceId: input.frozenAudienceId,
-                identitySetSha256: input.identitySetSha256,
+                canonicalIdentitySetSha256: input.identitySetSha256,
                 acceptedTargetCeiling: input.acceptedTargetCeiling,
                 appendAuthorizationId: input.appendAuthorizationId,
                 idempotencyKey: input.idempotencyKey,
@@ -215,15 +217,23 @@ export function createProductionBroadcastClient(
 }
 
 function baselineBody(
-  baseline: ProductionAudienceAppendBaselineResult,
+  baseline: ProductionAudienceAppendPreflightResult["baseline"],
 ): Record<string, unknown> {
   return {
-    progressVersion: baseline.progress_version,
-    acceptedRecipientCount: baseline.accepted_recipient_count,
-    refusedRecipientCount: baseline.refused_recipient_count,
-    unknownRecipientCount: baseline.unknown_recipient_count,
-    cancelledRecipientCount: baseline.cancelled_recipient_count,
-    segmentCount: baseline.segment_count,
+    authorizationId: baseline.authorization_id,
+    recipientSnapshotId: baseline.recipient_snapshot_id,
+    sendPlanDecisionId: baseline.send_plan_decision_id,
+    draftVersion: baseline.draft_version,
+    senderId: baseline.sender_id,
+    renderContentDigest: baseline.render_content_digest,
+    communicationPurposeId: baseline.communication_purpose_id,
+    originalRecipientCount: baseline.original_recipient_count,
+    currentSnapshotCount: baseline.current_snapshot_count,
+    currentReleasedRecipientCount: baseline.current_released_recipient_count,
+    currentAcceptedRecipientCount: baseline.current_accepted_recipient_count,
+    currentBillingReservedRecipientCount:
+      baseline.current_billing_reserved_recipient_count,
+    controlState: baseline.control_state,
   };
 }
 
@@ -236,19 +246,18 @@ function audienceAppendFailure(error: unknown): never {
   ) {
     throw error;
   }
-  const reason = error.statusCode === 401
-    ? "human_auth_invalid"
-    : error.statusCode === 404
-      ? "broadcast_audience_append_not_found"
-      : error.statusCode === 409 || error.statusCode === 412
-        ? error.reason.includes("no_new_recipient")
-          ? "broadcast_audience_append_no_new_recipient"
-          : "broadcast_audience_append_conflict"
-        : error.statusCode === 422
-          ? "broadcast_audience_append_no_new_recipient"
-          : error.statusCode === 503
-            ? "broadcast_audience_append_unavailable"
-            : error.reason;
+  const reason =
+    error.statusCode === 401
+      ? "human_auth_invalid"
+      : error.statusCode === 404
+        ? "broadcast_audience_append_not_found"
+        : error.statusCode === 409 || error.statusCode === 412
+          ? "broadcast_audience_append_conflict"
+          : error.statusCode === 422
+            ? "broadcast_audience_append_has_no_new_recipients"
+            : error.statusCode === 503
+              ? "broadcast_audience_append_unavailable"
+              : error.reason;
   throw new CoreOperatorError(reason, error.statusCode, error.coreEffect);
 }
 

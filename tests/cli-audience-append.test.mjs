@@ -8,10 +8,13 @@ import { renderOperatorHuman } from "../packages/cli/dist/operator-render.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
 const workspace = "synthetic-audience";
+const tenantId = "workspace_synthetic_audience";
 const broadcastId = "30000000-0000-4000-8000-000000000199";
 const frozenAudienceId = "30000000-0000-4000-8000-000000000200";
 const existingFrozenAudienceId = "30000000-0000-4000-8000-000000000201";
-const connectionId = "30000000-0000-4000-8000-000000000202";
+const recipientSnapshotId = "30000000-0000-4000-8000-000000000202";
+const sendPlanDecisionId = "30000000-0000-4000-8000-000000000203";
+const communicationPurposeId = "30000000-0000-4000-8000-000000000204";
 const identitySetSha256 = "a".repeat(64);
 const existingIdentitySetSha256 = "b".repeat(64);
 const appendAuthorizationId = "synthetic-append-window-199";
@@ -29,12 +32,19 @@ const hosted = {
   scopes: ["email"],
 };
 const baseline = {
-  progressVersion: "synthetic-progress-7",
-  acceptedRecipientCount: 100,
-  refusedRecipientCount: 0,
-  unknownRecipientCount: 1,
-  cancelledRecipientCount: 1,
-  segmentCount: 1,
+  authorizationId: "199",
+  recipientSnapshotId,
+  sendPlanDecisionId,
+  draftVersion: 7,
+  senderId: "synthetic-sender",
+  renderContentDigest: `sha256:${"c".repeat(64)}`,
+  communicationPurposeId,
+  originalRecipientCount: 104,
+  currentSnapshotCount: 100,
+  currentReleasedRecipientCount: 100,
+  currentAcceptedRecipientCount: 99,
+  currentBillingReservedRecipientCount: 100,
+  controlState: "active",
 };
 
 test("audience append grammar is exact and production-only", async () => {
@@ -59,7 +69,7 @@ test("audience append grammar is exact and production-only", async () => {
     replaceArgument("--broadcast-id", "not-a-uuid"),
     replaceArgument("--frozen-audience-id", "not-a-uuid"),
     replaceArgument("--identity-set-sha256", "A".repeat(64)),
-    replaceArgument("--append-authorization-id", "x".repeat(101)),
+    replaceArgument("--append-authorization-id", "x".repeat(201)),
     [...argumentsForAppend(), "--json", "--json"],
     [...argumentsForAppend(), "--contact-file", "recipients.csv"],
     [...argumentsForAppend(), "--recipient-email", "person@example.test"],
@@ -78,11 +88,10 @@ test("audience append grammar is exact and production-only", async () => {
   );
 });
 
-test("one browser session preflights, posts the exact baseline, and reads back the same key", async () => {
+test("one browser session sends the exact Core preflight baseline and mutation body", async () => {
   let prepared = 0;
   let opened = 0;
   const requests = [];
-  let replayed = false;
   const authorization = createBrowserAuthorizationSession({
     prepare: async () => {
       prepared += 1;
@@ -110,23 +119,18 @@ test("one browser session preflights, posts the exact baseline, and reads back t
     },
   });
   const dependencies = programDependencies(async (input, init = {}) => {
-    if (String(input).includes(".well-known/fonte-cli.json")) {
+    if (String(input).includes(".well-known/fonte-cli.json"))
       return json(hosted);
-    }
     requests.push(coreRequest(input, init));
-    if ((init.method ?? "GET") === "GET") return json(preflight());
-    const response = appendReadback(replayed);
-    replayed = true;
-    return json(response);
+    return (init.method ?? "GET") === "GET"
+      ? json(preflight())
+      : json(appendReadback());
   }, authorization.authorize);
 
-  const first = await runProgram(argumentsForAppend("--json"), dependencies);
-  const second = await runProgram(argumentsForAppend("--json"), dependencies);
-  const firstReceipt = JSON.parse(first.stdout);
-  const secondReceipt = JSON.parse(second.stdout);
+  const result = await runProgram(argumentsForAppend("--json"), dependencies);
+  const receipt = JSON.parse(result.stdout);
 
-  assert.equal(first.exitCode, 0);
-  assert.equal(second.exitCode, 0);
+  assert.equal(result.exitCode, 0);
   assert.equal(prepared, 1);
   assert.equal(opened, 1);
   assert.deepEqual(
@@ -134,28 +138,28 @@ test("one browser session preflights, posts the exact baseline, and reads back t
     [
       { method: "GET", url: `https://api.example.test${path}` },
       { method: "POST", url: `https://api.example.test${path}` },
-      { method: "GET", url: `https://api.example.test${path}` },
-      { method: "POST", url: `https://api.example.test${path}` },
     ],
   );
   for (const request of requests) assert.equal(request.bearer, bearer);
-  for (const request of requests.filter(({ method }) => method === "POST")) {
-    assert.equal(request.idempotencyKey, idempotencyKey);
-    assert.deepEqual(request.body, {
-      baseline,
+  assert.deepEqual(requests[1], {
+    method: "POST",
+    url: `https://api.example.test${path}`,
+    bearer,
+    idempotencyKey,
+    body: {
+      expectedBaseline: baseline,
       frozenAudienceId,
-      identitySetSha256,
+      canonicalIdentitySetSha256: identitySetSha256,
       acceptedTargetCeiling: 120,
       appendAuthorizationId,
       idempotencyKey,
-    });
-  }
-  assert.equal(firstReceipt.reason, "broadcast_audience_append_completed");
-  assert.equal(firstReceipt.core_effect, "created");
-  assert.equal(secondReceipt.reason, "broadcast_audience_append_idempotent");
-  assert.equal(secondReceipt.core_effect, "none");
-  assert.equal(secondReceipt.result.idempotency_key, idempotencyKey);
-  assert.deepEqual(Object.keys(firstReceipt.result).sort(), [
+    },
+  });
+  assert.equal(receipt.reason, "broadcast_audience_append_completed");
+  assert.equal(receipt.core_effect, "created");
+  assert.equal(receipt.result.idempotency_key, idempotencyKey);
+  assert.equal(receipt.result.aggregate.held_recipient_count, 20);
+  assert.deepEqual(Object.keys(receipt.result).sort(), [
     "accepted_target_ceiling",
     "aggregate",
     "append_authorization_id",
@@ -166,21 +170,14 @@ test("one browser session preflights, posts the exact baseline, and reads back t
     "replayed",
     "segments",
   ]);
-  assert.deepEqual(
-    firstReceipt.result.segments[1].source_provenance,
-    {
-      provider: "resend",
-      connection_id: connectionId,
-      collection_type: "segment",
-      collection_id: "synthetic-provider-segment",
-    },
-  );
-  const human = renderOperatorHuman(firstReceipt);
-  assert.match(human, /Accepted baseline\/target\/final: 100\/120\/120/);
-  assert.match(human, /source resend\/segment\/synthetic-provider-segment/);
+  assert.equal("source_provenance" in receipt.result.segments[1], false);
+  const human = renderOperatorHuman(receipt);
+  assert.match(human, /Accepted baseline\/ceiling\/current: 99\/120\/99/);
+  assert.match(human, /Requested\/eligible\/released\/held: 129\/120\/100\/20/);
   assert.equal(human.includes("synthetic-provider-secret"), false);
-  assert.equal(first.stdout.includes(bearer), false);
-  assert.equal(first.stdout.includes("synthetic-memory-only-refresh"), false);
+  assert.equal(human.includes("hidden@example.test"), false);
+  assert.equal(result.stdout.includes(bearer), false);
+  assert.equal(result.stdout.includes("synthetic-memory-only-refresh"), false);
 });
 
 test("unknown or contact-shaped Core fields invalidate preflight and mutation receipts", async () => {
@@ -188,27 +185,29 @@ test("unknown or contact-shaped Core fields invalidate preflight and mutation re
   const invalidPreflight = await runProgram(
     argumentsForAppend("--json"),
     programDependencies(async (input, init = {}) => {
-      if (String(input).includes(".well-known/fonte-cli.json")) {
+      if (String(input).includes(".well-known/fonte-cli.json"))
         return json(hosted);
-      }
       if ((init.method ?? "GET") === "POST") posts += 1;
       return json({ ...preflight(), contactRows: [{ email: "hidden" }] });
     }),
   );
   assert.equal(invalidPreflight.exitCode, 3);
-  assert.equal(JSON.parse(invalidPreflight.stdout).reason, "core_operator_receipt_invalid");
+  assert.equal(
+    JSON.parse(invalidPreflight.stdout).reason,
+    "core_operator_receipt_invalid",
+  );
   assert.equal(posts, 0);
 
+  const readback = appendReadback();
   const invalidReadback = await runProgram(
     argumentsForAppend("--json"),
     programDependencies(async (input, init = {}) => {
-      if (String(input).includes(".well-known/fonte-cli.json")) {
+      if (String(input).includes(".well-known/fonte-cli.json"))
         return json(hosted);
-      }
       return (init.method ?? "GET") === "GET"
         ? json(preflight())
         : json({
-            ...appendReadback(false),
+            ...readback,
             providerPayload: { secret: "synthetic-provider-secret" },
           });
     }),
@@ -217,25 +216,52 @@ test("unknown or contact-shaped Core fields invalidate preflight and mutation re
   assert.equal(invalidReadback.exitCode, 3);
   assert.equal(receipt.reason, "core_operator_receipt_invalid");
   assert.equal(receipt.core_effect, "unknown");
-  assert.equal(invalidReadback.stdout.includes("synthetic-provider-secret"), false);
+  assert.equal(
+    invalidReadback.stdout.includes("synthetic-provider-secret"),
+    false,
+  );
 });
 
 test("baseline conflict and append failure states remain distinct and fail closed", async () => {
   const cases = [
-    { status: 404, reason: "ignored", expected: "broadcast_audience_append_not_found", failOn: "GET" },
-    { status: 409, reason: "baseline_drift", expected: "broadcast_audience_append_conflict", failOn: "POST" },
-    { status: 422, reason: "ignored", expected: "broadcast_audience_append_no_new_recipient", failOn: "POST" },
-    { status: 503, reason: "ignored", expected: "broadcast_audience_append_unavailable", failOn: "GET" },
-    { status: 401, reason: "ignored", expected: "human_auth_invalid", failOn: "GET" },
+    {
+      status: 404,
+      reason: "ignored",
+      expected: "broadcast_audience_append_not_found",
+      failOn: "GET",
+    },
+    {
+      status: 409,
+      reason: "baseline_drift",
+      expected: "broadcast_audience_append_conflict",
+      failOn: "POST",
+    },
+    {
+      status: 422,
+      reason: "ignored",
+      expected: "broadcast_audience_append_has_no_new_recipients",
+      failOn: "POST",
+    },
+    {
+      status: 503,
+      reason: "ignored",
+      expected: "broadcast_audience_append_unavailable",
+      failOn: "GET",
+    },
+    {
+      status: 401,
+      reason: "ignored",
+      expected: "human_auth_invalid",
+      failOn: "GET",
+    },
   ];
   for (const scenario of cases) {
     let postCount = 0;
     const result = await runProgram(
       argumentsForAppend("--json"),
       programDependencies(async (input, init = {}) => {
-        if (String(input).includes(".well-known/fonte-cli.json")) {
+        if (String(input).includes(".well-known/fonte-cli.json"))
           return json(hosted);
-        }
         const method = init.method ?? "GET";
         if (method === "POST") postCount += 1;
         if (method === scenario.failOn) {
@@ -257,9 +283,8 @@ test("a lost POST response is unknown and is never retried automatically", async
   const result = await runProgram(
     argumentsForAppend("--json"),
     programDependencies(async (input, init = {}) => {
-      if (String(input).includes(".well-known/fonte-cli.json")) {
+      if (String(input).includes(".well-known/fonte-cli.json"))
         return json(hosted);
-      }
       if ((init.method ?? "GET") === "GET") return json(preflight());
       postCount += 1;
       throw new Error("synthetic lost response");
@@ -306,56 +331,100 @@ function replaceArgument(name, replacement) {
 
 function preflight() {
   return {
+    tenantId,
     environment: "production",
-    marketingBroadcastId: broadcastId,
     baseline: { ...baseline },
+    readback: audienceReadback(false),
   };
 }
 
-function appendReadback(replayed) {
+function appendReadback() {
   return {
+    tenantId,
     environment: "production",
+    ...audienceReadback(true),
+  };
+}
+
+function audienceReadback(appended) {
+  return {
     marketingBroadcastId: broadcastId,
+    authorizationId: "199",
+    requestedRecipientCount: appended ? 129 : 104,
+    eligibleRecipientCount: appended ? 120 : 100,
+    releasedRecipientCount: 100,
+    acceptedRecipientCount: 99,
+    heldRecipientCount: appended ? 20 : 0,
+    controlState: "active",
+    segments: [originalSegment(), ...(appended ? [appendSegment()] : [])],
+  };
+}
+
+function originalSegment() {
+  return {
+    segment: "original",
+    appendAuthorizationId: null,
+    frozenAudienceId: existingFrozenAudienceId,
+    canonicalIdentitySetSha256: null,
+    sourceProvenance: [],
+    recipientIndexStart: 0,
+    sourceRecipientCount: 104,
+    priorSegmentRecipientCount: 0,
+    excludedRecipientCount: 1,
+    protectedRecipientCount: 1,
+    unknownRecipientCount: 2,
+    eligibleRecipientCount: 100,
+    acceptedTargetCeiling: null,
+    releasedRecipientCount: 100,
+    heldRecipientCount: 0,
+    acceptedRecipientCount: 99,
+    refusedRecipientCount: 0,
+    indeterminateRecipientCount: 1,
+    cancelledRecipientCount: 0,
+    deliveredRecipientCount: 90,
+    complainedRecipientCount: 0,
+    acceptedEmailUsageQuantity: 99,
+    createdAt: "2026-08-24T10:00:00.000Z",
+  };
+}
+
+function appendSegment() {
+  return {
+    segment: "append",
     appendAuthorizationId,
-    acceptedTargetCeiling: 120,
-    idempotencyKey,
-    replayed,
-    baseline: { ...baseline },
-    aggregate: {
-      acceptedRecipientCount: 120,
-      refusedRecipientCount: 0,
-      unknownRecipientCount: 1,
-      cancelledRecipientCount: 1,
-      segmentCount: 2,
+    frozenAudienceId,
+    canonicalIdentitySetSha256: identitySetSha256,
+    sourceProvenance: {
+      source: { provider: "resend", collectionId: "synthetic-segment" },
+      exclusions: [],
+      providerSecret: "synthetic-provider-secret",
+      contact: { email: "hidden@example.test" },
     },
-    segments: [
-      {
-        index: 0,
-        frozenAudienceId: existingFrozenAudienceId,
-        identitySetSha256: existingIdentitySetSha256,
-        acceptedRecipientCount: 100,
-        sourceProvenance: null,
-      },
-      {
-        index: 1,
-        frozenAudienceId,
-        identitySetSha256,
-        acceptedRecipientCount: 20,
-        sourceProvenance: {
-          provider: "resend",
-          connectionId,
-          collectionType: "segment",
-          collectionId: "synthetic-provider-segment",
-        },
-      },
-    ],
+    recipientIndexStart: 100,
+    sourceRecipientCount: 25,
+    priorSegmentRecipientCount: 3,
+    excludedRecipientCount: 1,
+    protectedRecipientCount: 0,
+    unknownRecipientCount: 1,
+    eligibleRecipientCount: 20,
+    acceptedTargetCeiling: 120,
+    releasedRecipientCount: 0,
+    heldRecipientCount: 20,
+    acceptedRecipientCount: 0,
+    refusedRecipientCount: 0,
+    indeterminateRecipientCount: 0,
+    cancelledRecipientCount: 0,
+    deliveredRecipientCount: 0,
+    complainedRecipientCount: 0,
+    acceptedEmailUsageQuantity: 0,
+    createdAt: "2026-08-24T10:01:00.000Z",
   };
 }
 
 function programDependencies(fetch, authorize = async () => bearer) {
   return {
     cwd: process.cwd(),
-    randomUUID: () => "30000000-0000-4000-8000-000000000203",
+    randomUUID: () => "30000000-0000-4000-8000-000000000205",
     runner: { run: async () => 1 },
     operator: {
       fetch,

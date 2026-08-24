@@ -66,7 +66,7 @@ export async function executeProductionCommand(
   }
   if (command.kind === "broadcast_audience_append") {
     const preflight = await client.preflightProductionAudienceAppend(command);
-    return client.appendProductionAudience(command, preflight.baseline);
+    return client.appendProductionAudience(command, preflight);
   }
   if (command.kind === "broadcast_production_test_send") {
     return client.sendProductionTest(command);

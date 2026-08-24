@@ -107,7 +107,7 @@ function audienceAppend(argv: readonly string[]): ParsedOperatorArguments {
     ),
     appendAuthorizationId: boundedText(
       required(options, "--append-authorization-id"),
-      100,
+      200,
       "--append-authorization-id",
     ),
     idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),

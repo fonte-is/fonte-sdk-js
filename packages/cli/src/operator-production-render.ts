@@ -42,11 +42,12 @@ export function renderProductionOperatorHuman(
     return [
       `Fonte broadcast audience append: ${result.replayed ? "idempotent" : "completed"}.`,
       `Broadcast/authorization: ${result.broadcast_id}/${result.append_authorization_id}.`,
-      `Accepted baseline/target/final: ${result.baseline.accepted_recipient_count}/${result.accepted_target_ceiling}/${result.aggregate.accepted_recipient_count}.`,
-      `Segments: ${result.aggregate.segment_count}.`,
+      `Accepted baseline/ceiling/current: ${result.baseline.current_accepted_recipient_count}/${result.accepted_target_ceiling}/${result.aggregate.accepted_recipient_count}.`,
+      `Requested/eligible/released/held: ${result.aggregate.requested_recipient_count}/${result.aggregate.eligible_recipient_count}/${result.aggregate.released_recipient_count}/${result.aggregate.held_recipient_count}.`,
+      `Control/segments: ${result.aggregate.control_state}/${result.segments.length}.`,
       ...result.segments.map(
         (segment) =>
-          `- ${segment.index}: ${segment.frozen_audience_id}; ${segment.identity_set_sha256}; accepted ${segment.accepted_recipient_count}${segment.source_provenance ? `; source ${segment.source_provenance.provider}/${segment.source_provenance.collection_type}/${segment.source_provenance.collection_id}` : ""}.`,
+          `- ${segment.segment}: authorization ${segment.append_authorization_id ?? "original"}; audience ${segment.frozen_audience_id ?? "original"}; eligible/released/held/accepted/refused/indeterminate/cancelled ${segment.eligible_recipient_count}/${segment.released_recipient_count}/${segment.held_recipient_count}/${segment.accepted_recipient_count}/${segment.refused_recipient_count}/${segment.indeterminate_recipient_count}/${segment.cancelled_recipient_count}.`,
       ),
       `Idempotency key: ${result.idempotency_key}.`,
       `Core effect: ${receipt.core_effect}.`,

@@ -1,7 +1,7 @@
 import {
   array,
-  boolean,
   count,
+  instant,
   requireProduction,
   text,
   uuid,
@@ -10,15 +10,59 @@ import type {
   ProductionAudienceAppendBaselineResult,
   ProductionAudienceAppendInput,
   ProductionAudienceAppendPreflightResult,
+  ProductionAudienceAppendReadbackResult,
   ProductionAudienceAppendResult,
 } from "./operator-production-types.js";
 
 const BASELINE_KEYS = [
+  "authorizationId",
+  "communicationPurposeId",
+  "controlState",
+  "currentAcceptedRecipientCount",
+  "currentBillingReservedRecipientCount",
+  "currentReleasedRecipientCount",
+  "currentSnapshotCount",
+  "draftVersion",
+  "originalRecipientCount",
+  "recipientSnapshotId",
+  "renderContentDigest",
+  "sendPlanDecisionId",
+  "senderId",
+] as const;
+const READBACK_KEYS = [
   "acceptedRecipientCount",
+  "authorizationId",
+  "controlState",
+  "eligibleRecipientCount",
+  "heldRecipientCount",
+  "marketingBroadcastId",
+  "releasedRecipientCount",
+  "requestedRecipientCount",
+  "segments",
+] as const;
+const SEGMENT_KEYS = [
+  "acceptedEmailUsageQuantity",
+  "acceptedRecipientCount",
+  "acceptedTargetCeiling",
+  "appendAuthorizationId",
   "cancelledRecipientCount",
-  "progressVersion",
+  "canonicalIdentitySetSha256",
+  "complainedRecipientCount",
+  "createdAt",
+  "deliveredRecipientCount",
+  "eligibleRecipientCount",
+  "excludedRecipientCount",
+  "frozenAudienceId",
+  "heldRecipientCount",
+  "indeterminateRecipientCount",
+  "priorSegmentRecipientCount",
+  "protectedRecipientCount",
+  "recipientIndexStart",
   "refusedRecipientCount",
-  "segmentCount",
+  "releasedRecipientCount",
+  "segment",
+  "sourceProvenance",
+  "sourceRecipientCount",
   "unknownRecipientCount",
 ] as const;
 
@@ -28,85 +72,71 @@ export function audienceAppendPreflight(
   const body = closedObject(value, [
     "baseline",
     "environment",
-    "marketingBroadcastId",
+    "readback",
+    "tenantId",
   ]);
   requireProduction(body);
-  return {
-    broadcast_id: uuid(body.marketingBroadcastId),
+  const result = {
+    tenant_id: identifier(body.tenantId, 200),
     baseline: audienceAppendBaseline(body.baseline),
+    readback: audienceAppendReadback(body.readback),
   };
+  if (
+    result.baseline.authorization_id !== result.readback.authorization_id ||
+    result.baseline.current_snapshot_count !==
+      result.readback.aggregate.eligible_recipient_count ||
+    result.baseline.current_released_recipient_count !==
+      result.readback.aggregate.released_recipient_count ||
+    result.baseline.current_accepted_recipient_count !==
+      result.readback.aggregate.accepted_recipient_count ||
+    result.baseline.control_state !== result.readback.aggregate.control_state
+  ) {
+    invalid();
+  }
+  return result;
 }
 
 export function audienceAppendResult(
   value: unknown,
   input: ProductionAudienceAppendInput,
-  expectedBaseline: ProductionAudienceAppendBaselineResult,
+  preflight: ProductionAudienceAppendPreflightResult,
 ): ProductionAudienceAppendResult {
   const body = closedObject(value, [
-    "acceptedTargetCeiling",
-    "aggregate",
-    "appendAuthorizationId",
-    "baseline",
     "environment",
-    "idempotencyKey",
-    "marketingBroadcastId",
-    "replayed",
-    "segments",
+    "tenantId",
+    ...READBACK_KEYS,
   ]);
   requireProduction(body);
-  const baseline = audienceAppendBaseline(body.baseline);
-  if (!sameBaseline(baseline, expectedBaseline)) invalid();
-  const aggregateBody = closedObject(body.aggregate, [
-    "acceptedRecipientCount",
-    "cancelledRecipientCount",
-    "refusedRecipientCount",
-    "segmentCount",
-    "unknownRecipientCount",
-  ]);
-  const aggregate = {
-    accepted_recipient_count: count(aggregateBody.acceptedRecipientCount),
-    refused_recipient_count: count(aggregateBody.refusedRecipientCount),
-    unknown_recipient_count: count(aggregateBody.unknownRecipientCount),
-    cancelled_recipient_count: count(aggregateBody.cancelledRecipientCount),
-    segment_count: count(aggregateBody.segmentCount),
-  };
-  const segments = array(body.segments, 1_000).map(audienceAppendSegment);
-  const acceptedTargetCeiling = count(body.acceptedTargetCeiling);
+  if (identifier(body.tenantId, 200) !== preflight.tenant_id) invalid();
+  const readback = audienceAppendReadback({
+    acceptedRecipientCount: body.acceptedRecipientCount,
+    authorizationId: body.authorizationId,
+    controlState: body.controlState,
+    eligibleRecipientCount: body.eligibleRecipientCount,
+    heldRecipientCount: body.heldRecipientCount,
+    marketingBroadcastId: body.marketingBroadcastId,
+    releasedRecipientCount: body.releasedRecipientCount,
+    requestedRecipientCount: body.requestedRecipientCount,
+    segments: body.segments,
+  });
   if (
-    uuid(body.marketingBroadcastId) !== input.broadcastId ||
-    identifier(body.appendAuthorizationId, 100) !==
-      input.appendAuthorizationId ||
-    identifier(body.idempotencyKey, 200) !== input.idempotencyKey ||
-    acceptedTargetCeiling !== input.acceptedTargetCeiling ||
-    aggregate.accepted_recipient_count !== acceptedTargetCeiling ||
-    aggregate.accepted_recipient_count < baseline.accepted_recipient_count ||
-    aggregate.refused_recipient_count < baseline.refused_recipient_count ||
-    aggregate.unknown_recipient_count < baseline.unknown_recipient_count ||
-    aggregate.cancelled_recipient_count < baseline.cancelled_recipient_count ||
-    aggregate.segment_count !== segments.length ||
-    aggregate.segment_count < baseline.segment_count ||
-    sum(segments.map((segment) => segment.accepted_recipient_count)) !==
-      aggregate.accepted_recipient_count ||
-    !segments.some(
-      (segment) =>
-        segment.frozen_audience_id === input.frozenAudienceId &&
-        segment.identity_set_sha256 === input.identitySetSha256,
-    )
+    readback.broadcast_id !== input.broadcastId ||
+    readback.authorization_id !== preflight.baseline.authorization_id ||
+    readback.aggregate.accepted_recipient_count > input.acceptedTargetCeiling ||
+    matchingAppendSegments(readback, input).length !== 1
   ) {
     invalid();
   }
-  const indexes = new Set(segments.map((segment) => segment.index));
-  if (indexes.size !== segments.length) invalid();
   return {
     kind: "broadcast_audience_append",
     broadcast_id: input.broadcastId,
     append_authorization_id: input.appendAuthorizationId,
-    accepted_target_ceiling: acceptedTargetCeiling,
+    accepted_target_ceiling: input.acceptedTargetCeiling,
     idempotency_key: input.idempotencyKey,
-    replayed: boolean(body.replayed),
-    baseline,
-    aggregate,
-    segments,
+    replayed: matchingAppendSegments(preflight.readback, input).length === 1,
+    baseline: preflight.baseline,
+    aggregate: readback.aggregate,
+    segments: readback.segments,
   };
 }
 
@@ -115,58 +145,141 @@ function audienceAppendBaseline(
 ): ProductionAudienceAppendBaselineResult {
   const body = closedObject(value, BASELINE_KEYS);
   return {
-    progress_version: identifier(body.progressVersion, 100),
-    accepted_recipient_count: count(body.acceptedRecipientCount),
-    refused_recipient_count: count(body.refusedRecipientCount),
-    unknown_recipient_count: count(body.unknownRecipientCount),
-    cancelled_recipient_count: count(body.cancelledRecipientCount),
-    segment_count: count(body.segmentCount),
+    authorization_id: identifier(body.authorizationId, 200),
+    recipient_snapshot_id: versionedUuid(body.recipientSnapshotId),
+    send_plan_decision_id: versionedUuid(body.sendPlanDecisionId),
+    draft_version: positiveCount(body.draftVersion),
+    sender_id: identifier(body.senderId, 200),
+    render_content_digest: prefixedSha256(body.renderContentDigest),
+    communication_purpose_id: versionedUuid(body.communicationPurposeId),
+    original_recipient_count: positiveCount(body.originalRecipientCount),
+    current_snapshot_count: positiveCount(body.currentSnapshotCount),
+    current_released_recipient_count: count(body.currentReleasedRecipientCount),
+    current_accepted_recipient_count: count(body.currentAcceptedRecipientCount),
+    current_billing_reserved_recipient_count: positiveCount(
+      body.currentBillingReservedRecipientCount,
+    ),
+    control_state: activeControlState(body.controlState),
+  };
+}
+
+function audienceAppendReadback(
+  value: unknown,
+): ProductionAudienceAppendReadbackResult {
+  const body = closedObject(value, READBACK_KEYS);
+  const requested = count(body.requestedRecipientCount);
+  const eligible = count(body.eligibleRecipientCount);
+  const released = count(body.releasedRecipientCount);
+  const accepted = count(body.acceptedRecipientCount);
+  const held = count(body.heldRecipientCount);
+  const segments = array(body.segments, 1_000).map(audienceAppendSegment);
+  if (
+    requested < eligible ||
+    accepted > released ||
+    released + held > eligible ||
+    safeSum(segments.map((segment) => segment.eligible_recipient_count)) !==
+      eligible
+  ) {
+    invalid();
+  }
+  return {
+    broadcast_id: uuid(body.marketingBroadcastId),
+    authorization_id: identifier(body.authorizationId, 200),
+    aggregate: {
+      requested_recipient_count: requested,
+      eligible_recipient_count: eligible,
+      released_recipient_count: released,
+      accepted_recipient_count: accepted,
+      held_recipient_count: held,
+      control_state: controlState(body.controlState),
+    },
+    segments,
   };
 }
 
 function audienceAppendSegment(
   value: unknown,
-): ProductionAudienceAppendResult["segments"][number] {
-  const body = closedObject(value, [
-    "acceptedRecipientCount",
-    "frozenAudienceId",
-    "identitySetSha256",
-    "index",
-    "sourceProvenance",
-  ]);
-  return {
-    index: count(body.index),
-    frozen_audience_id: uuid(body.frozenAudienceId),
-    identity_set_sha256: sha256(body.identitySetSha256),
-    accepted_recipient_count: count(body.acceptedRecipientCount),
-    source_provenance:
-      body.sourceProvenance === null
-        ? null
-        : providerSource(body.sourceProvenance),
-  };
-}
-
-function providerSource(
-  value: unknown,
-): NonNullable<
-  ProductionAudienceAppendResult["segments"][number]["source_provenance"]
-> {
-  const body = closedObject(value, [
-    "collectionId",
-    "collectionType",
-    "connectionId",
-    "provider",
-  ]);
-  if (body.provider !== "resend" && body.provider !== "kit") invalid();
-  if (body.collectionType !== "segment" && body.collectionType !== "tag") {
+): ProductionAudienceAppendReadbackResult["segments"][number] {
+  const body = closedObject(value, SEGMENT_KEYS);
+  const segment = body.segment;
+  if (segment !== "original" && segment !== "append") invalid();
+  const appendAuthorizationId = nullableIdentifier(
+    body.appendAuthorizationId,
+    200,
+  );
+  const frozenAudienceId = nullableUuid(body.frozenAudienceId);
+  const canonicalIdentitySetSha256 = nullableSha256(
+    body.canonicalIdentitySetSha256,
+  );
+  const acceptedTargetCeiling = nullablePositiveCount(
+    body.acceptedTargetCeiling,
+  );
+  if (
+    segment === "original"
+      ? appendAuthorizationId !== null ||
+        canonicalIdentitySetSha256 !== null ||
+        acceptedTargetCeiling !== null
+      : appendAuthorizationId === null ||
+        frozenAudienceId === null ||
+        canonicalIdentitySetSha256 === null ||
+        acceptedTargetCeiling === null
+  ) {
+    invalid();
+  }
+  const source = count(body.sourceRecipientCount);
+  const prior = count(body.priorSegmentRecipientCount);
+  const excluded = count(body.excludedRecipientCount);
+  const protectedCount = count(body.protectedRecipientCount);
+  const unknown = count(body.unknownRecipientCount);
+  const eligible = count(body.eligibleRecipientCount);
+  const released = count(body.releasedRecipientCount);
+  const held = count(body.heldRecipientCount);
+  const accepted = count(body.acceptedRecipientCount);
+  if (
+    source !== prior + excluded + protectedCount + unknown + eligible ||
+    released + held > eligible ||
+    accepted > released
+  ) {
     invalid();
   }
   return {
-    provider: body.provider,
-    connection_id: uuid(body.connectionId),
-    collection_type: body.collectionType,
-    collection_id: text(body.collectionId, 500),
+    segment,
+    append_authorization_id: appendAuthorizationId,
+    frozen_audience_id: frozenAudienceId,
+    canonical_identity_set_sha256: canonicalIdentitySetSha256,
+    recipient_index_start: count(body.recipientIndexStart),
+    source_recipient_count: source,
+    prior_segment_recipient_count: prior,
+    excluded_recipient_count: excluded,
+    protected_recipient_count: protectedCount,
+    unknown_recipient_count: unknown,
+    eligible_recipient_count: eligible,
+    accepted_target_ceiling: acceptedTargetCeiling,
+    released_recipient_count: released,
+    held_recipient_count: held,
+    accepted_recipient_count: accepted,
+    refused_recipient_count: count(body.refusedRecipientCount),
+    indeterminate_recipient_count: count(body.indeterminateRecipientCount),
+    cancelled_recipient_count: count(body.cancelledRecipientCount),
+    delivered_recipient_count: count(body.deliveredRecipientCount),
+    complained_recipient_count: count(body.complainedRecipientCount),
+    accepted_email_usage_quantity: count(body.acceptedEmailUsageQuantity),
+    created_at: instant(body.createdAt),
   };
+}
+
+function matchingAppendSegments(
+  readback: ProductionAudienceAppendReadbackResult,
+  input: ProductionAudienceAppendInput,
+) {
+  return readback.segments.filter(
+    (segment) =>
+      segment.segment === "append" &&
+      segment.append_authorization_id === input.appendAuthorizationId &&
+      segment.frozen_audience_id === input.frozenAudienceId &&
+      segment.canonical_identity_set_sha256 === input.identitySetSha256 &&
+      segment.accepted_target_ceiling === input.acceptedTargetCeiling,
+  );
 }
 
 function closedObject(
@@ -186,31 +299,16 @@ function closedObject(
   return body;
 }
 
-function sameBaseline(
-  left: ProductionAudienceAppendBaselineResult,
-  right: ProductionAudienceAppendBaselineResult,
-): boolean {
-  return BASELINE_KEYS.every((key) => {
-    const resultKey = snakeCaseBaselineKey(key);
-    return left[resultKey] === right[resultKey];
-  });
+function activeControlState(value: unknown): "active" | "paused" {
+  if (value !== "active" && value !== "paused") invalid();
+  return value;
 }
 
-function snakeCaseBaselineKey(
-  key: (typeof BASELINE_KEYS)[number],
-): keyof ProductionAudienceAppendBaselineResult {
-  const keys: Record<
-    (typeof BASELINE_KEYS)[number],
-    keyof ProductionAudienceAppendBaselineResult
-  > = {
-    acceptedRecipientCount: "accepted_recipient_count",
-    cancelledRecipientCount: "cancelled_recipient_count",
-    progressVersion: "progress_version",
-    refusedRecipientCount: "refused_recipient_count",
-    segmentCount: "segment_count",
-    unknownRecipientCount: "unknown_recipient_count",
-  };
-  return keys[key];
+function controlState(value: unknown): "active" | "paused" | "cancelled" {
+  if (value !== "active" && value !== "paused" && value !== "cancelled") {
+    invalid();
+  }
+  return value;
 }
 
 function identifier(value: unknown, maximum: number): string {
@@ -219,12 +317,50 @@ function identifier(value: unknown, maximum: number): string {
   return result;
 }
 
-function sha256(value: unknown): string {
-  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) invalid();
+function nullableIdentifier(value: unknown, maximum: number): string | null {
+  return value === null ? null : identifier(value, maximum);
+}
+
+function versionedUuid(value: unknown): string {
+  const result = uuid(value);
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      result,
+    )
+  ) {
+    invalid();
+  }
+  return result;
+}
+
+function nullableUuid(value: unknown): string | null {
+  return value === null ? null : versionedUuid(value);
+}
+
+function prefixedSha256(value: unknown): string {
+  if (typeof value !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value)) {
+    invalid();
+  }
   return value;
 }
 
-function sum(values: readonly number[]): number {
+function nullableSha256(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) invalid();
+  return value;
+}
+
+function positiveCount(value: unknown): number {
+  const result = count(value);
+  if (result < 1) invalid();
+  return result;
+}
+
+function nullablePositiveCount(value: unknown): number | null {
+  return value === null ? null : positiveCount(value);
+}
+
+function safeSum(values: readonly number[]): number {
   let result = 0;
   for (const value of values) {
     result += value;

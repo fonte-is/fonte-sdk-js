@@ -86,17 +86,62 @@ export interface ProductionAudienceAppendInput extends ProductionBroadcastReadIn
 }
 
 export interface ProductionAudienceAppendBaselineResult {
-  readonly progress_version: string;
-  readonly accepted_recipient_count: number;
-  readonly refused_recipient_count: number;
-  readonly unknown_recipient_count: number;
-  readonly cancelled_recipient_count: number;
-  readonly segment_count: number;
+  readonly authorization_id: string;
+  readonly recipient_snapshot_id: string;
+  readonly send_plan_decision_id: string;
+  readonly draft_version: number;
+  readonly sender_id: string;
+  readonly render_content_digest: string;
+  readonly communication_purpose_id: string;
+  readonly original_recipient_count: number;
+  readonly current_snapshot_count: number;
+  readonly current_released_recipient_count: number;
+  readonly current_accepted_recipient_count: number;
+  readonly current_billing_reserved_recipient_count: number;
+  readonly control_state: "active" | "paused";
 }
 
 export interface ProductionAudienceAppendPreflightResult {
-  readonly broadcast_id: string;
+  readonly tenant_id: string;
   readonly baseline: ProductionAudienceAppendBaselineResult;
+  readonly readback: ProductionAudienceAppendReadbackResult;
+}
+
+export interface ProductionAudienceAppendReadbackResult {
+  readonly broadcast_id: string;
+  readonly authorization_id: string;
+  readonly aggregate: {
+    readonly requested_recipient_count: number;
+    readonly eligible_recipient_count: number;
+    readonly released_recipient_count: number;
+    readonly accepted_recipient_count: number;
+    readonly held_recipient_count: number;
+    readonly control_state: "active" | "paused" | "cancelled";
+  };
+  readonly segments: readonly {
+    readonly segment: "original" | "append";
+    readonly append_authorization_id: string | null;
+    readonly frozen_audience_id: string | null;
+    readonly canonical_identity_set_sha256: string | null;
+    readonly recipient_index_start: number;
+    readonly source_recipient_count: number;
+    readonly prior_segment_recipient_count: number;
+    readonly excluded_recipient_count: number;
+    readonly protected_recipient_count: number;
+    readonly unknown_recipient_count: number;
+    readonly eligible_recipient_count: number;
+    readonly accepted_target_ceiling: number | null;
+    readonly released_recipient_count: number;
+    readonly held_recipient_count: number;
+    readonly accepted_recipient_count: number;
+    readonly refused_recipient_count: number;
+    readonly indeterminate_recipient_count: number;
+    readonly cancelled_recipient_count: number;
+    readonly delivered_recipient_count: number;
+    readonly complained_recipient_count: number;
+    readonly accepted_email_usage_quantity: number;
+    readonly created_at: string;
+  }[];
 }
 
 export interface ProductionAudienceAppendResult {
@@ -107,25 +152,8 @@ export interface ProductionAudienceAppendResult {
   readonly idempotency_key: string;
   readonly replayed: boolean;
   readonly baseline: ProductionAudienceAppendBaselineResult;
-  readonly aggregate: {
-    readonly accepted_recipient_count: number;
-    readonly refused_recipient_count: number;
-    readonly unknown_recipient_count: number;
-    readonly cancelled_recipient_count: number;
-    readonly segment_count: number;
-  };
-  readonly segments: readonly {
-    readonly index: number;
-    readonly frozen_audience_id: string;
-    readonly identity_set_sha256: string;
-    readonly accepted_recipient_count: number;
-    readonly source_provenance: {
-      readonly provider: "resend" | "kit";
-      readonly connection_id: string;
-      readonly collection_type: "segment" | "tag";
-      readonly collection_id: string;
-    } | null;
-  }[];
+  readonly aggregate: ProductionAudienceAppendReadbackResult["aggregate"];
+  readonly segments: ProductionAudienceAppendReadbackResult["segments"];
 }
 
 export interface ProductionDraftResult {
