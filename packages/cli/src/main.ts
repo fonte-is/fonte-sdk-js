@@ -17,14 +17,20 @@ const authExecInvocation =
   process.argv[2] === "auth" && process.argv[3] === "exec";
 const broadcastCanaryInvocation =
   process.argv[2] === "broadcast" && process.argv[3] === "canary";
-const operatorAuthorization = broadcastCanaryInvocation
+const audienceAppendInvocation =
+  process.argv[2] === "broadcast" &&
+  process.argv[3] === "audience" &&
+  process.argv[4] === "append";
+const refreshOperatorInvocation =
+  broadcastCanaryInvocation || audienceAppendInvocation;
+const operatorAuthorization = refreshOperatorInvocation
   ? createBrowserAuthorizationSession()
   : null;
 const authorizeOnce = (
   config: Parameters<typeof authorizeWithBrowser>[0],
   signal?: AbortSignal,
 ) => authorizeWithBrowser(config, { signal });
-if (authExecInvocation || broadcastCanaryInvocation) {
+if (authExecInvocation || refreshOperatorInvocation) {
   process.once("SIGINT", cancel);
   process.once("SIGTERM", cancel);
 }
@@ -67,7 +73,7 @@ const result = await runProgram(process.argv.slice(2), {
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   },
 }).finally(() => {
-  if (authExecInvocation || broadcastCanaryInvocation) {
+  if (authExecInvocation || refreshOperatorInvocation) {
     process.removeListener("SIGINT", cancel);
     process.removeListener("SIGTERM", cancel);
   }

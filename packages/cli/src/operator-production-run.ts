@@ -14,6 +14,7 @@ type ProductionOperatorCommand = Extract<
       | "broadcast_draft_read"
       | "broadcast_audience_options"
       | "broadcast_audience_preview"
+      | "broadcast_audience_append"
       | "broadcast_production_test_send"
       | "broadcast_production_test_status"
       | "broadcast_authorize"
@@ -63,6 +64,10 @@ export async function executeProductionCommand(
   if (command.kind === "broadcast_audience_preview") {
     return client.previewProductionAudience(command);
   }
+  if (command.kind === "broadcast_audience_append") {
+    const preflight = await client.preflightProductionAudienceAppend(command);
+    return client.appendProductionAudience(command, preflight.baseline);
+  }
   if (command.kind === "broadcast_production_test_send") {
     return client.sendProductionTest(command);
   }
@@ -107,6 +112,15 @@ export function productionReceiptDescriptor(
       outcome: "completed",
       reason: `${result.kind}_observed`,
       coreEffect: "none",
+    };
+  }
+  if (result.kind === "broadcast_audience_append") {
+    return {
+      outcome: "completed",
+      reason: result.replayed
+        ? "broadcast_audience_append_idempotent"
+        : "broadcast_audience_append_completed",
+      coreEffect: result.replayed ? "none" : "created",
     };
   }
   if (

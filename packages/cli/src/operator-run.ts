@@ -290,6 +290,8 @@ function currentAuthority(
     contract_id:
       command.kind === "broadcast_preflight"
         ? "fonte.core.broadcast_preflight.v1"
+        : command.kind === "broadcast_audience_append"
+          ? "fonte.core.production_broadcast_audience_append.v1"
         : command.kind.startsWith("broadcast_") &&
             command.kind !== "broadcast_test_send" &&
             command.kind !== "broadcast_test_status"

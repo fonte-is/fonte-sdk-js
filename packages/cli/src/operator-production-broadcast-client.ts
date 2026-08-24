@@ -1,6 +1,10 @@
 import type { CoreRequester } from "./operator-core-request.js";
 import { CoreOperatorError } from "./operator-core-request.js";
 import {
+  audienceAppendPreflight,
+  audienceAppendResult,
+} from "./operator-audience-append-json.js";
+import {
   productionProgress,
   productionResult,
   productionTest,
@@ -8,6 +12,10 @@ import {
 } from "./operator-production-json.js";
 import type {
   ProductionAuthorizeInput,
+  ProductionAudienceAppendBaselineResult,
+  ProductionAudienceAppendInput,
+  ProductionAudienceAppendPreflightResult,
+  ProductionAudienceAppendResult,
   ProductionBroadcastControlInput,
   ProductionBroadcastProgressResult,
   ProductionBroadcastReadInput,
@@ -42,6 +50,13 @@ export interface ProductionBroadcastClient {
   readProductionResult(
     input: ProductionBroadcastReadInput,
   ): Promise<ProductionBroadcastResult>;
+  preflightProductionAudienceAppend(
+    input: ProductionBroadcastReadInput,
+  ): Promise<ProductionAudienceAppendPreflightResult>;
+  appendProductionAudience(
+    input: ProductionAudienceAppendInput,
+    baseline: ProductionAudienceAppendBaselineResult,
+  ): Promise<ProductionAudienceAppendResult>;
 }
 
 export function createProductionBroadcastClient(
@@ -160,7 +175,81 @@ export function createProductionBroadcastClient(
         "none",
       );
     },
+    async preflightProductionAudienceAppend(input) {
+      try {
+        const result = parse(
+          audienceAppendPreflight,
+          await request(`${broadcastPath(input)}/audience-append?environment=production`),
+        );
+        return matchingBroadcast(result, input.broadcastId, "none");
+      } catch (error) {
+        return audienceAppendFailure(error);
+      }
+    },
+    async appendProductionAudience(input, baseline) {
+      try {
+        return parse(
+          (value) => audienceAppendResult(value, input, baseline),
+          await request(
+            `${broadcastPath(input)}/audience-append?environment=production`,
+            {
+              idempotencyKey: input.idempotencyKey,
+              lostResponseEffect: "unknown",
+              body: {
+                baseline: baselineBody(baseline),
+                frozenAudienceId: input.frozenAudienceId,
+                identitySetSha256: input.identitySetSha256,
+                acceptedTargetCeiling: input.acceptedTargetCeiling,
+                appendAuthorizationId: input.appendAuthorizationId,
+                idempotencyKey: input.idempotencyKey,
+              },
+            },
+          ),
+          "unknown",
+        );
+      } catch (error) {
+        return audienceAppendFailure(error);
+      }
+    },
   };
+}
+
+function baselineBody(
+  baseline: ProductionAudienceAppendBaselineResult,
+): Record<string, unknown> {
+  return {
+    progressVersion: baseline.progress_version,
+    acceptedRecipientCount: baseline.accepted_recipient_count,
+    refusedRecipientCount: baseline.refused_recipient_count,
+    unknownRecipientCount: baseline.unknown_recipient_count,
+    cancelledRecipientCount: baseline.cancelled_recipient_count,
+    segmentCount: baseline.segment_count,
+  };
+}
+
+function audienceAppendFailure(error: unknown): never {
+  if (!(error instanceof CoreOperatorError)) throw error;
+  if (
+    error.reason === "core_api_unavailable" ||
+    error.reason === "core_operator_receipt_invalid" ||
+    error.reason === "operation_cancelled"
+  ) {
+    throw error;
+  }
+  const reason = error.statusCode === 401
+    ? "human_auth_invalid"
+    : error.statusCode === 404
+      ? "broadcast_audience_append_not_found"
+      : error.statusCode === 409 || error.statusCode === 412
+        ? error.reason.includes("no_new_recipient")
+          ? "broadcast_audience_append_no_new_recipient"
+          : "broadcast_audience_append_conflict"
+        : error.statusCode === 422
+          ? "broadcast_audience_append_no_new_recipient"
+          : error.statusCode === 503
+            ? "broadcast_audience_append_unavailable"
+            : error.reason;
+  throw new CoreOperatorError(reason, error.statusCode, error.coreEffect);
 }
 
 function workspacePath(workspace: string): string {

@@ -177,6 +177,13 @@ export function idempotencyKey(
   return value;
 }
 
+export function sha256(value: string, field = "value"): string {
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    invalidProductionArguments("invalid_field", field);
+  }
+  return value;
+}
+
 export function reuseOverride(
   options: ProductionOptions,
 ): AudienceReuseOverrideInput | null {

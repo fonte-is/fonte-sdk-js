@@ -75,6 +75,20 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["broadcast", "audience", "append"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --broadcast-id <uuid>",
+        "--frozen-audience-id <uuid> --identity-set-sha256 <sha256>",
+        "--accepted-target-ceiling <n> --append-authorization-id <id>",
+        "--idempotency-key <key>",
+      ],
+    ],
+    detail:
+      "Reads one authoritative append baseline, then requests one exact frozen-audience append under the supplied ceiling and idempotency key.",
+    json: true,
+  },
+  {
     command: ["broadcast", "test", "send"],
     usage: [
       [

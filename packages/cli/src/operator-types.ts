@@ -14,6 +14,7 @@ import type {
 import type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
+  ProductionAudienceAppendResult,
   ProductionAudienceOptionsResult,
   ProductionAudiencePreviewResult,
   ProductionBroadcastProgressResult,
@@ -119,6 +120,16 @@ export type OperatorCommand =
       readonly workspace: string;
       readonly broadcastId: string;
       readonly releaseCeiling: number;
+      readonly idempotencyKey: string;
+    }
+  | {
+      readonly kind: "broadcast_audience_append";
+      readonly workspace: string;
+      readonly broadcastId: string;
+      readonly frozenAudienceId: string;
+      readonly identitySetSha256: string;
+      readonly acceptedTargetCeiling: number;
+      readonly appendAuthorizationId: string;
       readonly idempotencyKey: string;
     }
   | {
@@ -234,6 +245,7 @@ export interface ResendBridgeCopyResult extends Omit<
 export type OperatorResult =
   | SandboxTestResult
   | BroadcastCanaryResult
+  | ProductionAudienceAppendResult
   | ContactImportStatusResult
   | BroadcastPreflightResult
   | ProductionDraftResult
@@ -264,6 +276,7 @@ export interface OperatorReceipt {
       | "fonte.core.sandbox_canary.v1"
       | "fonte.core.broadcast_preflight.v1"
       | "fonte.core.production_broadcast.v1"
+      | "fonte.core.production_broadcast_audience_append.v1"
       | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"
       | "fonte.core.provider_audience.v1"

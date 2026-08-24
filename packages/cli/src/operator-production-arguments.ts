@@ -1,6 +1,7 @@
 import { parseProductionDraftCreate } from "./operator-production-draft-arguments.js";
 import {
   content,
+  boundedText,
   idempotencyKey,
   isProduction,
   operatorArguments,
@@ -8,6 +9,7 @@ import {
   productionRead,
   required,
   reuseOverride,
+  sha256,
   uuid,
   workspace,
 } from "./operator-production-options.js";
@@ -28,6 +30,9 @@ export function parseProductionOperatorArguments(
   }
   if (argv[1] === "audience" && argv[2] === "preview") {
     return audiencePreview(argv.slice(3));
+  }
+  if (argv[1] === "audience" && argv[2] === "append") {
+    return audienceAppend(argv.slice(3));
   }
   if (argv[1] === "authorize") return authorize(argv.slice(2));
   if (argv[1] === "canary") return canary(argv.slice(2));
@@ -72,6 +77,40 @@ function audiencePreview(argv: readonly string[]): ParsedOperatorArguments {
     kind: "broadcast_audience_preview",
     workspace: workspace(options),
     draftId: uuid(required(options, "--draft-id"), "--draft-id"),
+  });
+}
+
+function audienceAppend(argv: readonly string[]): ParsedOperatorArguments {
+  const options = productionRead(argv, [
+    "--broadcast-id",
+    "--frozen-audience-id",
+    "--identity-set-sha256",
+    "--accepted-target-ceiling",
+    "--append-authorization-id",
+    "--idempotency-key",
+  ]);
+  return operatorArguments(options, {
+    kind: "broadcast_audience_append",
+    workspace: workspace(options),
+    broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
+    frozenAudienceId: uuid(
+      required(options, "--frozen-audience-id"),
+      "--frozen-audience-id",
+    ),
+    identitySetSha256: sha256(
+      required(options, "--identity-set-sha256"),
+      "--identity-set-sha256",
+    ),
+    acceptedTargetCeiling: positiveInteger(
+      required(options, "--accepted-target-ceiling"),
+      "--accepted-target-ceiling",
+    ),
+    appendAuthorizationId: boundedText(
+      required(options, "--append-authorization-id"),
+      100,
+      "--append-authorization-id",
+    ),
+    idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
   });
 }
 

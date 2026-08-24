@@ -77,6 +77,57 @@ export interface ProductionBroadcastReleaseInput extends ProductionBroadcastRead
   readonly maximumRecipientCount: number;
 }
 
+export interface ProductionAudienceAppendInput extends ProductionBroadcastReadInput {
+  readonly frozenAudienceId: string;
+  readonly identitySetSha256: string;
+  readonly acceptedTargetCeiling: number;
+  readonly appendAuthorizationId: string;
+  readonly idempotencyKey: string;
+}
+
+export interface ProductionAudienceAppendBaselineResult {
+  readonly progress_version: string;
+  readonly accepted_recipient_count: number;
+  readonly refused_recipient_count: number;
+  readonly unknown_recipient_count: number;
+  readonly cancelled_recipient_count: number;
+  readonly segment_count: number;
+}
+
+export interface ProductionAudienceAppendPreflightResult {
+  readonly broadcast_id: string;
+  readonly baseline: ProductionAudienceAppendBaselineResult;
+}
+
+export interface ProductionAudienceAppendResult {
+  readonly kind: "broadcast_audience_append";
+  readonly broadcast_id: string;
+  readonly append_authorization_id: string;
+  readonly accepted_target_ceiling: number;
+  readonly idempotency_key: string;
+  readonly replayed: boolean;
+  readonly baseline: ProductionAudienceAppendBaselineResult;
+  readonly aggregate: {
+    readonly accepted_recipient_count: number;
+    readonly refused_recipient_count: number;
+    readonly unknown_recipient_count: number;
+    readonly cancelled_recipient_count: number;
+    readonly segment_count: number;
+  };
+  readonly segments: readonly {
+    readonly index: number;
+    readonly frozen_audience_id: string;
+    readonly identity_set_sha256: string;
+    readonly accepted_recipient_count: number;
+    readonly source_provenance: {
+      readonly provider: "resend" | "kit";
+      readonly connection_id: string;
+      readonly collection_type: "segment" | "tag";
+      readonly collection_id: string;
+    } | null;
+  }[];
+}
+
 export interface ProductionDraftResult {
   readonly kind: "broadcast_draft";
   readonly outcome: "applied" | "no_change" | null;

@@ -200,7 +200,11 @@ test("the refresh-capable session is wired only to operator runtime", async () =
 
   assert.match(
     source,
-    /const operatorAuthorization = broadcastCanaryInvocation\s+\? createBrowserAuthorizationSession\(\)\s+: null;/,
+    /const refreshOperatorInvocation =\s+broadcastCanaryInvocation \|\| audienceAppendInvocation;/,
+  );
+  assert.match(
+    source,
+    /const operatorAuthorization = refreshOperatorInvocation\s+\? createBrowserAuthorizationSession\(\)\s+: null;/,
   );
   assert.match(authExec ?? "", /authorize: authorizeOnce,/);
   assert.doesNotMatch(authExec ?? "", /operatorAuthorization/);

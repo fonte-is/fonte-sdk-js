@@ -38,6 +38,21 @@ export function renderProductionOperatorHuman(
       "",
     ].join("\n");
   }
+  if (result?.kind === "broadcast_audience_append") {
+    return [
+      `Fonte broadcast audience append: ${result.replayed ? "idempotent" : "completed"}.`,
+      `Broadcast/authorization: ${result.broadcast_id}/${result.append_authorization_id}.`,
+      `Accepted baseline/target/final: ${result.baseline.accepted_recipient_count}/${result.accepted_target_ceiling}/${result.aggregate.accepted_recipient_count}.`,
+      `Segments: ${result.aggregate.segment_count}.`,
+      ...result.segments.map(
+        (segment) =>
+          `- ${segment.index}: ${segment.frozen_audience_id}; ${segment.identity_set_sha256}; accepted ${segment.accepted_recipient_count}${segment.source_provenance ? `; source ${segment.source_provenance.provider}/${segment.source_provenance.collection_type}/${segment.source_provenance.collection_id}` : ""}.`,
+      ),
+      `Idempotency key: ${result.idempotency_key}.`,
+      `Core effect: ${receipt.core_effect}.`,
+      "",
+    ].join("\n");
+  }
   if (
     result?.kind === "broadcast_test_queued" ||
     result?.kind === "broadcast_authorization"

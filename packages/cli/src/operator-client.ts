@@ -65,6 +65,10 @@ export type {
 } from "./operator-provider-connection-types.js";
 export type {
   AudienceReuseOverrideInput,
+  ProductionAudienceAppendBaselineResult,
+  ProductionAudienceAppendInput,
+  ProductionAudienceAppendPreflightResult,
+  ProductionAudienceAppendResult,
   ProductionAudienceInput,
   ProductionAudienceOptionsResult,
   ProductionAudiencePreviewResult,
