@@ -30,6 +30,10 @@ export interface OperatorDependencies {
   readonly configUrl?: string;
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
   authorize(config: HostedConfig, signal?: AbortSignal): Promise<string>;
+  renewAuthorization?(
+    config: HostedConfig,
+    signal?: AbortSignal,
+  ): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
   openUrl?(url: URL): Promise<boolean>;
   readonly signal?: AbortSignal;

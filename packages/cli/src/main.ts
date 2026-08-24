@@ -4,11 +4,12 @@ import { randomUUID } from "node:crypto";
 
 import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
-import { authorizeWithBrowser } from "./oauth.js";
+import { createBrowserAuthorizationSession } from "./oauth.js";
 import { systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
 
 const cancellation = new AbortController();
+const authorization = createBrowserAuthorizationSession();
 const cancel = () => cancellation.abort();
 const authExecInvocation =
   process.argv[2] === "auth" && process.argv[3] === "exec";
@@ -25,14 +26,15 @@ const result = await runProgram(process.argv.slice(2), {
   authExec: {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
-    authorize: (config, signal) => authorizeWithBrowser(config, { signal }),
+    authorize: authorization.authorize,
     spawn: spawnAuthorizedConsumer,
     signal: cancellation.signal,
   },
   operator: {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
-    authorize: (config, signal) => authorizeWithBrowser(config, { signal }),
+    authorize: authorization.authorize,
+    renewAuthorization: authorization.refresh,
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
     openUrl: openBrowser,
@@ -40,7 +42,7 @@ const result = await runProgram(process.argv.slice(2), {
   },
   hosted: {
     fetch: globalThis.fetch,
-    authorize: authorizeWithBrowser,
+    authorize: authorization.authorize,
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   },

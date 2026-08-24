@@ -61,10 +61,15 @@ export async function runBroadcastCanary(
   let client: CoreOperatorClient | null = null;
   let bearerExpiresAt: number | null = null;
 
-  const authorize = async (signal: AbortSignal | undefined): Promise<void> => {
+  const authorize = async (
+    signal: AbortSignal | undefined,
+    renewal = false,
+  ): Promise<void> => {
     if (!config) throw new HostedTestBlockedError("authorization_failed");
     state.authorizationStartedAt ??= now();
-    const bearer = await dependencies.authorize(config, signal);
+    const bearer = renewal
+      ? await refreshBearer(dependencies, config, signal)
+      : await dependencies.authorize(config, signal);
     if (!bearer.trim()) {
       throw new HostedTestBlockedError("authorization_token_missing");
     }
@@ -86,14 +91,14 @@ export async function runBroadcastCanary(
       now().getTime() + AUTHORIZATION_RENEWAL_LEAD_MILLISECONDS >=
         bearerExpiresAt
     ) {
-      await authorize(dependencies.signal);
+      await authorize(dependencies.signal, true);
     }
     try {
       return await client!.readProductionProgress(command);
     } catch (error) {
       if (!unambiguousHumanAuthInvalidRead(error)) throw error;
       requireActive(state, dependencies.signal, now);
-      await authorize(dependencies.signal);
+      await authorize(dependencies.signal, true);
       return client!.readProductionProgress(command);
     }
   };
@@ -245,7 +250,7 @@ async function freshSafetyPause(
   now: () => Date,
 ): Promise<void> {
   const signal = AbortSignal.timeout(SAFETY_PAUSE_TIMEOUT_MILLISECONDS);
-  const bearer = await dependencies.authorize(config, signal);
+  const bearer = await refreshBearer(dependencies, config, signal);
   if (!bearer.trim()) {
     throw new HostedTestBlockedError("authorization_token_missing");
   }
@@ -267,6 +272,17 @@ async function freshSafetyPause(
     command.releaseCeiling,
     now(),
   );
+}
+
+function refreshBearer(
+  dependencies: OperatorDependencies,
+  config: HostedConfig,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  if (!dependencies.renewAuthorization) {
+    throw new HostedTestBlockedError("authorization_refresh_unavailable");
+  }
+  return dependencies.renewAuthorization(config, signal);
 }
 
 function requireSafetyPaused(

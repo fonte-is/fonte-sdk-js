@@ -13,7 +13,10 @@ import {
 import { AUTHORIZATION_ERROR_TEXT } from "../packages/cli/dist/constants.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
 import { listenForOAuthCallback } from "../packages/cli/dist/loopback-callback.js";
-import { authorizeWithBrowser } from "../packages/cli/dist/oauth.js";
+import {
+  authorizeWithBrowser,
+  createBrowserAuthorizationSession,
+} from "../packages/cli/dist/oauth.js";
 import { parseOAuthCallback } from "../packages/cli/dist/oauth-callback.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
@@ -77,6 +80,135 @@ test("browser authorization orchestrates a mocked IdP without changing callback 
       "expected-state",
     ),
   );
+});
+
+test("one in-memory authorization refreshes without another browser and follows refresh-token rotation", async () => {
+  const firstRefreshToken = "synthetic-refresh-secret-one";
+  const rotatedRefreshToken = "synthetic-refresh-secret-two";
+  const refreshTokens = [];
+  let prepared = 0;
+  let listened = 0;
+  let opened = 0;
+  let exchanged = 0;
+  let closed = 0;
+  const session = createBrowserAuthorizationSession({
+    prepare: async () => {
+      prepared += 1;
+      return {
+        state: "session-state",
+        authorizationUrl: new URL("https://identity.example.test/authorize"),
+        exchange: async () => {
+          exchanged += 1;
+          return {
+            accessToken: "synthetic-access-one",
+            refreshToken: firstRefreshToken,
+            expiresInSeconds: 300,
+          };
+        },
+        refresh: async (refreshToken) => {
+          refreshTokens.push(refreshToken);
+          if (refreshToken === firstRefreshToken) {
+            return {
+              accessToken: "synthetic-access-two",
+              refreshToken: rotatedRefreshToken,
+              expiresInSeconds: 300,
+            };
+          }
+          return {
+            accessToken: "synthetic-access-three",
+            expiresInSeconds: 300,
+          };
+        },
+      };
+    },
+    listenForOAuthCallback: async () => {
+      listened += 1;
+      return {
+        callback: Promise.resolve(
+          new URL(
+            "http://127.0.0.1:49671/callback?code=synthetic-code&state=session-state",
+          ),
+        ),
+        close: () => {
+          closed += 1;
+        },
+      };
+    },
+    openBrowser: async () => {
+      opened += 1;
+      return true;
+    },
+  });
+
+  assert.deepEqual(
+    await Promise.all([session.authorize(config), session.authorize(config)]),
+    ["synthetic-access-one", "synthetic-access-one"],
+  );
+  assert.equal(await session.refresh(config), "synthetic-access-two");
+  assert.deepEqual(
+    await Promise.all([session.authorize(config), session.authorize(config)]),
+    ["synthetic-access-two", "synthetic-access-two"],
+  );
+  assert.equal(await session.refresh(config), "synthetic-access-three");
+
+  assert.equal(prepared, 1);
+  assert.equal(listened, 1);
+  assert.equal(opened, 1);
+  assert.equal(exchanged, 1);
+  assert.equal(closed, 1);
+  assert.deepEqual(refreshTokens, [firstRefreshToken, rotatedRefreshToken]);
+  assert.equal(
+    JSON.stringify(session).includes(firstRefreshToken) ||
+      JSON.stringify(session).includes(rotatedRefreshToken),
+    false,
+  );
+});
+
+test("refresh failure is cached, token-free, and never falls back to another browser", async () => {
+  const refreshToken = "synthetic-refresh-secret-failure";
+  let opened = 0;
+  let refreshAttempts = 0;
+  const session = createBrowserAuthorizationSession({
+    prepare: async () => ({
+      state: "failure-state",
+      authorizationUrl: new URL("https://identity.example.test/authorize"),
+      exchange: async () => ({
+        accessToken: "synthetic-access-before-failure",
+        refreshToken,
+        expiresInSeconds: 300,
+      }),
+      refresh: async () => {
+        refreshAttempts += 1;
+        throw new Error(`authorization server rejected ${refreshToken}`);
+      },
+    }),
+    listenForOAuthCallback: async () => ({
+      callback: Promise.resolve(
+        new URL(
+          "http://127.0.0.1:49671/callback?code=synthetic-code&state=failure-state",
+        ),
+      ),
+      close: () => {},
+    }),
+    openBrowser: async () => {
+      opened += 1;
+      return true;
+    },
+  });
+
+  await session.authorize(config);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await assert.rejects(
+      session.refresh(config),
+      (error) =>
+        error instanceof HostedTestBlockedError &&
+        error.reason === "authorization_refresh_failed" &&
+        !error.message.includes(refreshToken),
+    );
+  }
+  assert.equal(opened, 1);
+  assert.equal(refreshAttempts, 1);
+  assert.equal(JSON.stringify(session).includes(refreshToken), false);
 });
 
 test("a preliminary loopback request cannot consume the exact authorized callback", async () => {

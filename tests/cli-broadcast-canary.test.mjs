@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseArguments } from "../packages/cli/dist/arguments.js";
+import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
 const workspace = "synthetic-canary";
@@ -347,6 +348,8 @@ test("an expired bearer is renewed after partial releases before the exact ceili
 
   assert.equal(result.exitCode, 0);
   assert.equal(harness.authorizationCalls(), 2);
+  assert.equal(harness.browserAuthorizationCalls(), 1);
+  assert.equal(harness.renewalCalls(), 1);
   assert.equal(renewalIndex > 0, true);
   assert.equal(requests[renewalIndex - 1].method, "GET");
   assert.equal(requests[renewalIndex].method, "GET");
@@ -367,6 +370,43 @@ test("an expired bearer is renewed after partial releases before the exact ceili
   assert.equal(receipt.result.final.control_state, "paused");
   assert.equal(result.stdout.includes(expiredBearer), false);
   assert.equal(result.stdout.includes(renewedBearer), false);
+});
+
+test("refresh failure after an observed release is fail-closed without replaying the mutation", async () => {
+  const activeRelease = progress({
+    released: 35_300,
+    held: 86_941,
+    accepted: 35_093,
+    pending: 100,
+    unknown: 106,
+    cancelled: 1,
+  });
+  const harness = canaryHarness(
+    [
+      progress({ ...settled, status: "paused", controlState: "paused" }),
+      progress(settled),
+      activeRelease,
+      json({ error: "human_auth_invalid" }, 401),
+    ],
+    {
+      renewError: new HostedTestBlockedError("authorization_refresh_failed"),
+    },
+  );
+
+  const result = await runProgram(argumentsForCanary(), harness.dependencies);
+  const receipt = JSON.parse(result.stdout);
+  const releases = harness.coreRequests().filter(
+    ({ body }) => body?.operation === "release",
+  );
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(receipt.reason, "authorization_refresh_failed");
+  assert.equal(receipt.core_effect, "unknown");
+  assert.equal(receipt.result.final.control_state, "active");
+  assert.equal(receipt.result.final.pending_recipient_count, 100);
+  assert.equal(harness.browserAuthorizationCalls(), 1);
+  assert.equal(releases.length, 1);
+  assert.equal(releases[0].body.idempotencyKey, "release-to-36100");
 });
 
 test("cancellation after an observed release renews authorization and returns a truthful paused effect", async () => {
@@ -518,7 +558,8 @@ function argumentsForCanary(
 
 function canaryHarness(responses, options = {}) {
   let nowMilliseconds = startedAt;
-  let authorizationCount = 0;
+  let browserAuthorizationCount = 0;
+  let renewalCount = 0;
   let responseIndex = 0;
   let uuidIndex = 0;
   const requests = [];
@@ -555,8 +596,13 @@ function canaryHarness(responses, options = {}) {
           return json(response);
         },
         authorize: async () => {
-          authorizationCount += 1;
-          return options.bearers?.[authorizationCount - 1] ?? bearer;
+          browserAuthorizationCount += 1;
+          return options.bearers?.[0] ?? bearer;
+        },
+        renewAuthorization: async () => {
+          renewalCount += 1;
+          if (options.renewError) throw options.renewError;
+          return options.bearers?.[renewalCount] ?? bearer;
         },
         sleep: async (milliseconds) => {
           nowMilliseconds += options.sleepAdvanceMilliseconds ?? milliseconds;
@@ -565,7 +611,9 @@ function canaryHarness(responses, options = {}) {
         now: () => new Date(nowMilliseconds),
       },
     },
-    authorizationCalls: () => authorizationCount,
+    authorizationCalls: () => browserAuthorizationCount + renewalCount,
+    browserAuthorizationCalls: () => browserAuthorizationCount,
+    renewalCalls: () => renewalCount,
     coreRequests: () => requests,
   };
 }
