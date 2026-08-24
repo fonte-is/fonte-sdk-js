@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { request } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -80,20 +81,23 @@ test("browser authorization orchestrates a mocked IdP without changing callback 
 
 test("a preliminary loopback request cannot consume the exact authorized callback", async () => {
   const listener = await listenForOAuthCallback("expected-state", {
+    bindPort: 0,
     timeoutMs: 5_000,
   });
   try {
-    const preliminary = await fetch(
-      "http://127.0.0.1:49671/callback?state=expected-state",
+    const preliminary = await requestCallback(
+      listener.boundPort,
+      "/callback?state=expected-state",
     );
     assert.equal(preliminary.status, 400);
-    assert.match(await preliminary.text(), /Authorization not completed/);
+    assert.match(preliminary.body, /Authorization not completed/);
 
-    const accepted = await fetch(
-      "http://127.0.0.1:49671/callback?code=synthetic-code&state=expected-state",
+    const accepted = await requestCallback(
+      listener.boundPort,
+      "/callback?code=synthetic-code&state=expected-state",
     );
     assert.equal(accepted.status, 200);
-    assert.match(await accepted.text(), /Authorization complete/);
+    assert.match(accepted.body, /Authorization complete/);
     const callback = await listener.callback;
     assert.equal(callback.searchParams.get("code"), "synthetic-code");
     assert.equal(callback.searchParams.get("state"), "expected-state");
@@ -344,6 +348,33 @@ test("authorization and child failures use bounded token-free results", async ()
 function json(body) {
   return new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json" },
+  });
+}
+
+function requestCallback(port, path) {
+  return new Promise((resolve, reject) => {
+    const pending = request(
+      {
+        headers: { host: "127.0.0.1:49671" },
+        hostname: "127.0.0.1",
+        method: "GET",
+        path,
+        port,
+      },
+      (response) => {
+        const chunks = [];
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () =>
+          resolve({
+            body: chunks.join(""),
+            status: response.statusCode,
+          }),
+        );
+      },
+    );
+    pending.once("error", reject);
+    pending.end();
   });
 }
 

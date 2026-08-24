@@ -5,10 +5,12 @@ import { parseOAuthCallback } from "./oauth-callback.js";
 
 export interface CallbackListener {
   readonly callback: Promise<URL>;
+  readonly boundPort: number;
   close(): void;
 }
 
 export interface CallbackListenerOptions {
+  readonly bindPort?: number;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
 }
@@ -59,7 +61,7 @@ export async function listenForOAuthCallback(
       server.close();
     }
   });
-  await bind(server);
+  const boundPort = await bind(server, options.bindPort ?? 49671);
   if (options.signal?.aborted) {
     server.close();
     throw new HostedTestBlockedError("authorization_cancelled");
@@ -84,6 +86,7 @@ export async function listenForOAuthCallback(
   };
   return {
     callback: callback.finally(cleanup),
+    boundPort,
     close: () => {
       cleanup();
       if (server.listening) server.close();
@@ -91,11 +94,18 @@ export async function listenForOAuthCallback(
   };
 }
 
-function bind(server: Server): Promise<void> {
+function bind(server: Server, port: number): Promise<number> {
   return new Promise((resolve, reject) => {
     server.once("error", () =>
       reject(new HostedTestBlockedError("authorization_callback_unavailable")),
     );
-    server.listen(49671, "127.0.0.1", () => resolve());
+    server.listen(port, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new HostedTestBlockedError("authorization_callback_unavailable"));
+        return;
+      }
+      resolve(address.port);
+    });
   });
 }
