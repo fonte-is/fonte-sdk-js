@@ -30,6 +30,7 @@ export function parseProductionOperatorArguments(
     return audiencePreview(argv.slice(3));
   }
   if (argv[1] === "authorize") return authorize(argv.slice(2));
+  if (argv[1] === "canary") return canary(argv.slice(2));
   if (argv[1] === "status") return progress(argv.slice(2));
   if (argv[1] === "pause" || argv[1] === "resume" || argv[1] === "cancel") {
     return control(argv[1], argv.slice(2));
@@ -143,6 +144,24 @@ function progress(argv: readonly string[]): ParsedOperatorArguments {
     workspace: workspace(options),
     broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
     watch: options.flags.has("--watch"),
+  });
+}
+
+function canary(argv: readonly string[]): ParsedOperatorArguments {
+  const options = productionRead(argv, [
+    "--broadcast-id",
+    "--release-ceiling",
+    "--idempotency-key",
+  ]);
+  return operatorArguments(options, {
+    kind: "broadcast_canary",
+    workspace: workspace(options),
+    broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
+    releaseCeiling: positiveInteger(
+      required(options, "--release-ceiling"),
+      "--release-ceiling",
+    ),
+    idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
   });
 }
 

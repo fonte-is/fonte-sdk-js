@@ -138,6 +138,18 @@ const entries: readonly HelpEntry[] = [
     detail: "Reads authoritative progress; --watch polls the same read route.",
     json: true,
   },
+  {
+    command: ["broadcast", "canary"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --broadcast-id <uuid>",
+        "--release-ceiling <n> --idempotency-key <key>",
+      ],
+    ],
+    detail:
+      "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one browser authorization.",
+    json: true,
+  },
   ...(["pause", "resume", "cancel"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [

@@ -19,6 +19,7 @@ import {
   isProductionCommand,
   productionReceiptDescriptor,
 } from "./operator-production-run.js";
+import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
@@ -28,9 +29,11 @@ import type {
 export interface OperatorDependencies {
   readonly configUrl?: string;
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
-  authorize(config: HostedConfig): Promise<string>;
+  authorize(config: HostedConfig, signal?: AbortSignal): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
   openUrl?(url: URL): Promise<boolean>;
+  readonly signal?: AbortSignal;
+  now?(): Date;
 }
 export async function runOperatorCommand(
   command: OperatorCommand,
@@ -38,16 +41,20 @@ export async function runOperatorCommand(
   randomUUID: () => string,
 ): Promise<OperatorReceipt> {
   if (command.kind === "unsupported") return unsupportedReceipt();
+  if (command.kind === "broadcast_canary") {
+    return runBroadcastCanary(command, dependencies, randomUUID());
+  }
   try {
     const config = await loadHostedConfig(
       dependencies.fetch as typeof fetch,
       dependencies.configUrl,
     );
-    const bearer = await dependencies.authorize(config);
+    const bearer = await dependencies.authorize(config, dependencies.signal);
     const client = createCoreOperatorClient({
       coreApiBaseUrl: config.coreApiBaseUrl,
       bearer,
       fetch: dependencies.fetch as typeof fetch,
+      signal: dependencies.signal,
     });
     const result = await execute(
       command,

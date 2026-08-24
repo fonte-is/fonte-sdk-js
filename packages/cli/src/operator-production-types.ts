@@ -72,6 +72,11 @@ export interface ProductionBroadcastControlInput extends ProductionBroadcastRead
   readonly operation: "pause" | "resume" | "cancel_remaining";
 }
 
+export interface ProductionBroadcastReleaseInput extends ProductionBroadcastReadInput {
+  readonly idempotencyKey: string;
+  readonly maximumRecipientCount: number;
+}
+
 export interface ProductionDraftResult {
   readonly kind: "broadcast_draft";
   readonly outcome: "applied" | "no_change" | null;
@@ -151,6 +156,8 @@ export interface ProductionBroadcastProgressResult {
   readonly progress_version: string;
   readonly requested_recipient_count: number;
   readonly eligible_recipient_count: number;
+  readonly released_recipient_count: number;
+  readonly held_recipient_count: number;
   readonly excluded_recipient_count: number;
   readonly pending_recipient_count: number;
   readonly claimed_recipient_count: number;

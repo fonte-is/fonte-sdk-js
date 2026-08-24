@@ -62,6 +62,19 @@ export function renderProductionOperatorHuman(
       "",
     ].join("\n");
   }
+  if (result?.kind === "broadcast_canary") {
+    const final = result.final;
+    return [
+      `Fonte broadcast canary: ${receipt.outcome}.`,
+      `Operation/broadcast: ${result.operation_id}/${result.broadcast_id}.`,
+      `Cumulative release ceiling: ${result.release_ceiling}.`,
+      `Accepted/refused/unknown/cancelled: ${final?.accepted_recipient_count ?? "unavailable"}/${final?.refused_recipient_count ?? "unavailable"}/${final?.unknown_recipient_count ?? "unavailable"}/${final?.cancelled_recipient_count ?? "unavailable"}.`,
+      `Control state: ${final?.control_state ?? "unavailable"}.`,
+      `Authorization: ${result.authorization.status}; bearer persisted: no.`,
+      `Reason: ${receipt.reason}.`,
+      "",
+    ].join("\n");
+  }
   if (result?.kind === "broadcast_result") return renderResult(result);
   return null;
 }

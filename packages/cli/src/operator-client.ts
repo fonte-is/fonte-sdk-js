@@ -72,6 +72,7 @@ export type {
   ProductionBroadcastControlInput,
   ProductionBroadcastProgressResult,
   ProductionBroadcastReadInput,
+  ProductionBroadcastReleaseInput,
   ProductionBroadcastResult,
   ProductionDraftCreateInput,
   ProductionDraftReadInput,
@@ -89,6 +90,7 @@ export interface CoreOperatorClientOptions {
   readonly coreApiBaseUrl: string;
   readonly bearer: string;
   readonly fetch: typeof fetch;
+  readonly signal?: AbortSignal;
 }
 
 export interface CoreOperatorClient

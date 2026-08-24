@@ -11,6 +11,7 @@ import type {
   ProductionBroadcastControlInput,
   ProductionBroadcastProgressResult,
   ProductionBroadcastReadInput,
+  ProductionBroadcastReleaseInput,
   ProductionBroadcastResult,
   ProductionDraftReadInput,
   ProductionTestReadInput,
@@ -34,6 +35,9 @@ export interface ProductionBroadcastClient {
   ): Promise<ProductionBroadcastProgressResult>;
   controlProductionBroadcast(
     input: ProductionBroadcastControlInput,
+  ): Promise<ProductionBroadcastProgressResult>;
+  releaseProductionBroadcast(
+    input: ProductionBroadcastReleaseInput,
   ): Promise<ProductionBroadcastProgressResult>;
   readProductionResult(
     input: ProductionBroadcastReadInput,
@@ -114,6 +118,28 @@ export function createProductionBroadcastClient(
             {
               lostResponseEffect: "unknown",
               body: { operation: input.operation },
+            },
+          ),
+          "unknown",
+        ),
+        input.broadcastId,
+        "unknown",
+      );
+    },
+    async releaseProductionBroadcast(input) {
+      return matchingBroadcast(
+        parse(
+          productionProgress,
+          await request(
+            `${broadcastPath(input)}/control?environment=production`,
+            {
+              idempotencyKey: input.idempotencyKey,
+              lostResponseEffect: "unknown",
+              body: {
+                operation: "release",
+                idempotencyKey: input.idempotencyKey,
+                maximumRecipientCount: input.maximumRecipientCount,
+              },
             },
           ),
           "unknown",

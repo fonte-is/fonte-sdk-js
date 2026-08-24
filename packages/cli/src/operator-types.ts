@@ -115,6 +115,13 @@ export type OperatorCommand =
       readonly broadcastId: string;
     }
   | {
+      readonly kind: "broadcast_canary";
+      readonly workspace: string;
+      readonly broadcastId: string;
+      readonly releaseCeiling: number;
+      readonly idempotencyKey: string;
+    }
+  | {
       readonly kind: "bridge_resend_preview";
       readonly workspace: string;
       readonly environment: "sandbox" | "production";
@@ -175,6 +182,29 @@ export interface ResendBridgePreviewResult {
   };
 }
 
+export interface BroadcastCanaryResult {
+  readonly kind: "broadcast_canary";
+  readonly operation_id: string;
+  readonly broadcast_id: string;
+  readonly environment: "production";
+  readonly release_ceiling: number;
+  readonly authorization: {
+    readonly status: "not_granted" | "released";
+    readonly started_at: string | null;
+    readonly ended_at: string;
+    readonly bearer_persisted: false;
+  };
+  readonly completed_steps: readonly (
+    | "authoritative_status"
+    | "safe_resume"
+    | "guarded_release"
+    | "authoritative_wait_read"
+    | "safety_pause"
+  )[];
+  readonly baseline: ProductionBroadcastProgressResult | null;
+  readonly final: ProductionBroadcastProgressResult | null;
+}
+
 export interface ResendBridgeCoverage {
   readonly status: "complete" | "partial";
   readonly pages_observed: number;
@@ -203,6 +233,7 @@ export interface ResendBridgeCopyResult extends Omit<
 
 export type OperatorResult =
   | SandboxTestResult
+  | BroadcastCanaryResult
   | ContactImportStatusResult
   | BroadcastPreflightResult
   | ProductionDraftResult

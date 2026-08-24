@@ -49,6 +49,9 @@ fonte broadcast authorize --workspace <slug> --environment production \
 fonte broadcast status --workspace <slug> --environment production \
   --broadcast-id <uuid> [--watch]
 
+fonte broadcast canary --workspace <slug> --environment production \
+  --broadcast-id <uuid> --release-ceiling <n> --idempotency-key <key>
+
 fonte broadcast pause|resume|cancel --workspace <slug> \
   --environment production --broadcast-id <uuid>
 
@@ -81,6 +84,24 @@ The production test command cannot accept a recipient. Core resolves only the
 signed-in account's verified email. Test and progress watches poll existing
 read routes; they create no authority. Pause, resume, and cancel map only to
 Core's broadcast-scoped state-idempotent control operation.
+
+`broadcast canary` is one declared ten-minute operation under one Authorization
+Code + S256 PKCE grant and one in-memory bearer. It reads Core's production
+progress first and proceeds only for the requested workspace and broadcast when
+the baseline is fresh and its released-recipient accounting is exact. Historical
+refused, unknown, and cancelled counts are frozen, not erased. A paused
+broadcast is resumed once with the same bearer; pre-existing pending or claimed
+work must then settle without increasing any frozen safety count. The operator
+supplies an exact cumulative release ceiling; the CLI sends Core only the
+difference between that ceiling and the settled released count, under Core's
+existing idempotency key. It reads progress without mutation retries, requires
+that exact new delta to become newly accepted, preserves the historical
+non-accepted offset, and pauses. After resume begins, the first refused,
+unknown, cancelled, stale, or unavailable observation also causes one immediate
+pause attempt. The terminal receipt contains only the frozen operation ID,
+sanitized progress, completed steps, and the ended in-memory authorization
+lifetime. Cancellation, expiry, failed OAuth state, or a distinct invocation
+never inherits that bearer.
 
 When Core reports prior audience use, preflight exposes the exact non-sensitive
 audience identity. `--acknowledge-audience-reuse` sends Core's bounded v1

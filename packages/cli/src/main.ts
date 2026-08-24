@@ -12,7 +12,9 @@ const cancellation = new AbortController();
 const cancel = () => cancellation.abort();
 const authExecInvocation =
   process.argv[2] === "auth" && process.argv[3] === "exec";
-if (authExecInvocation) {
+const broadcastCanaryInvocation =
+  process.argv[2] === "broadcast" && process.argv[3] === "canary";
+if (authExecInvocation || broadcastCanaryInvocation) {
   process.once("SIGINT", cancel);
   process.once("SIGTERM", cancel);
 }
@@ -30,10 +32,11 @@ const result = await runProgram(process.argv.slice(2), {
   operator: {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
-    authorize: authorizeWithBrowser,
+    authorize: (config, signal) => authorizeWithBrowser(config, { signal }),
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
     openUrl: openBrowser,
+    signal: cancellation.signal,
   },
   hosted: {
     fetch: globalThis.fetch,
@@ -42,7 +45,7 @@ const result = await runProgram(process.argv.slice(2), {
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   },
 }).finally(() => {
-  if (authExecInvocation) {
+  if (authExecInvocation || broadcastCanaryInvocation) {
     process.removeListener("SIGINT", cancel);
     process.removeListener("SIGTERM", cancel);
   }

@@ -94,6 +94,12 @@ export function productionProgress(
   const status = progressStatus(body.status);
   const requested = count(body.requestedRecipientCount);
   const eligible = count(body.eligibleRecipientCount);
+  const released = body.releasedRecipientCount === undefined
+    ? eligible
+    : count(body.releasedRecipientCount);
+  const held = body.heldRecipientCount === undefined
+    ? 0
+    : count(body.heldRecipientCount);
   const excluded = count(body.excludedRecipientCount);
   const pending = count(body.pendingRecipientCount);
   const claimed = count(body.claimedRecipientCount);
@@ -104,8 +110,9 @@ export function productionProgress(
   const remaining = count(body.remainingRecipientCount);
   if (
     requested !== eligible + excluded ||
-    eligible !== pending + claimed + accepted + refused + unknown + cancelled ||
-    remaining !== pending + claimed ||
+    eligible !== held + pending + claimed + accepted + refused + unknown + cancelled ||
+    released + held > eligible ||
+    remaining !== held + pending + claimed ||
     (status === "terminal" && remaining !== 0)
   )
     invalid();
@@ -117,6 +124,8 @@ export function productionProgress(
     progress_version: text(body.progressVersion, 100),
     requested_recipient_count: requested,
     eligible_recipient_count: eligible,
+    released_recipient_count: released,
+    held_recipient_count: held,
     excluded_recipient_count: excluded,
     pending_recipient_count: pending,
     claimed_recipient_count: claimed,

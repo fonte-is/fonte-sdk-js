@@ -4,6 +4,7 @@ export interface CoreRequestOptions {
   readonly coreApiBaseUrl: string;
   readonly bearer: string;
   readonly fetch: typeof fetch;
+  readonly signal?: AbortSignal;
 }
 
 export interface CorePostOptions {
@@ -37,6 +38,9 @@ export function createCoreRequester(
     throw new CoreOperatorError("authorization_token_missing", null, "none");
   }
   return async (path, post) => {
+    if (options.signal?.aborted) {
+      throw new CoreOperatorError("operation_cancelled", null, "none");
+    }
     let response: Response;
     try {
       response = await options.fetch(`${baseUrl}${path}`, {
@@ -54,9 +58,14 @@ export function createCoreRequester(
             : {}),
         },
         ...(post ? { body: JSON.stringify(post.body) } : {}),
-        signal: AbortSignal.timeout(15_000),
+        signal: options.signal
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
       });
     } catch {
+      if (options.signal?.aborted) {
+        throw new CoreOperatorError("operation_cancelled", null, "none");
+      }
       throw new CoreOperatorError(
         "core_api_unavailable",
         null,
