@@ -18,8 +18,15 @@ const initial = {
   cancelled: 1,
 };
 const settled = { ...initial, accepted: 35_093, pending: 0 };
+const cancellationWindowBaseline = {
+  released: 66_100,
+  held: 56_141,
+  accepted: 65_991,
+  unknown: 106,
+  cancelled: 3,
+};
 const additionalReleaseKeys = Array.from(
-  { length: 60 },
+  { length: 120 },
   (_, index) =>
     `20000000-0000-4000-8000-${String(176 + index).padStart(12, "0")}`,
 );
@@ -120,6 +127,148 @@ test("one bearer settles queued work and reaches the exact ceiling through bound
   assert.equal(receipt.result.authorization.status, "released");
   assert.equal(receipt.result.authorization.bearer_persisted, false);
   assert.equal(result.stdout.includes(bearer), false);
+});
+
+test("a conserved 10000-recipient window completes with 9999 accepted and one newly cancelled", async () => {
+  const responses = [
+    progress({
+      ...cancellationWindowBaseline,
+      status: "paused",
+      controlState: "paused",
+    }),
+    progress(cancellationWindowBaseline),
+  ];
+  for (let index = 0; index < 100; index += 1) {
+    const released = 66_200 + index * 100;
+    const held = 56_041 - index * 100;
+    const accepted = 65_991 + index * 100;
+    responses.push(
+      progress({
+        released,
+        held,
+        accepted,
+        pending: 100,
+        unknown: 106,
+        cancelled: 3,
+      }),
+      progress({
+        released,
+        held,
+        accepted: accepted + (index === 99 ? 99 : 100),
+        unknown: 106,
+        cancelled: index === 99 ? 4 : 3,
+      }),
+    );
+  }
+  responses.push(
+    progress({
+      released: 76_100,
+      held: 46_141,
+      accepted: 75_990,
+      unknown: 106,
+      cancelled: 4,
+      status: "paused",
+      controlState: "paused",
+    }),
+  );
+  const harness = canaryHarness(responses, {
+    sleepAdvanceMilliseconds: 0,
+  });
+
+  const result = await runProgram(
+    argumentsForCanary(76_100, "release-to-76100"),
+    harness.dependencies,
+  );
+  const receipt = JSON.parse(result.stdout);
+  const releases = harness.coreRequests().filter(
+    ({ body }) => body?.operation === "release",
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(harness.authorizationCalls(), 1);
+  assert.equal(releases.length, 100);
+  assert.equal(
+    new Set(releases.map(({ body }) => body.idempotencyKey)).size,
+    100,
+  );
+  assert.deepEqual(
+    releases.map(({ body }) => body.maximumRecipientCount),
+    Array.from({ length: 100 }, (_, index) => 10_000 - index * 100),
+  );
+  assert.equal(
+    receipt.reason,
+    "broadcast_canary_ceiling_settled_with_cancellation_and_paused",
+  );
+  assert.equal(
+    receipt.result.final.accepted_recipient_count -
+      receipt.result.baseline.accepted_recipient_count,
+    9_999,
+  );
+  assert.equal(
+    receipt.result.final.cancelled_recipient_count -
+      receipt.result.baseline.cancelled_recipient_count,
+    1,
+  );
+  assert.equal(receipt.result.final.released_recipient_count, 76_100);
+  assert.equal(receipt.result.final.held_recipient_count, 46_141);
+  assert.equal(receipt.result.final.unknown_recipient_count, 106);
+  assert.equal(receipt.result.final.refused_recipient_count, 0);
+  assert.equal(receipt.result.final.control_state, "paused");
+});
+
+test("new cancellations cannot conceal a release overshoot or accepted-count regression", async () => {
+  for (const [name, unsafe, reason] of [
+    [
+      "overshoot",
+      progress({
+        released: 76_101,
+        held: 46_140,
+        accepted: 75_990,
+        pending: 1,
+        unknown: 106,
+        cancelled: 4,
+      }),
+      "broadcast_canary_release_ceiling_not_exact",
+    ],
+    [
+      "regression",
+      progress({
+        released: 76_100,
+        held: 46_141,
+        accepted: 65_990,
+        unknown: 106,
+        cancelled: 10_004,
+      }),
+      "broadcast_canary_authority_changed",
+    ],
+  ]) {
+    const harness = canaryHarness([
+      progress({
+        ...cancellationWindowBaseline,
+        status: "paused",
+        controlState: "paused",
+      }),
+      progress(cancellationWindowBaseline),
+      unsafe,
+      { ...unsafe, status: "paused", controlState: "paused" },
+    ]);
+
+    const result = await runProgram(
+      argumentsForCanary(76_100, "release-to-76100"),
+      harness.dependencies,
+    );
+    const receipt = JSON.parse(result.stdout);
+
+    assert.equal(result.exitCode, 3, name);
+    assert.equal(receipt.reason, reason, name);
+    assert.equal(receipt.result.final.control_state, "paused", name);
+    assert.equal(
+      harness.coreRequests().filter(({ body }) => body?.operation === "release")
+        .length,
+      1,
+      name,
+    );
+  }
 });
 
 test("an expired bearer is renewed after partial releases before the exact ceiling continues", async () => {
@@ -283,10 +432,15 @@ test("cancellation after an observed release renews authorization and returns a 
   );
 });
 
-test("an increase above the frozen historical unknown or cancelled count pauses immediately", async () => {
+test("unknown, refused, or authority drift still pauses immediately", async () => {
   for (const [name, change, reason] of [
     ["unknown", { unknown: 107 }, "broadcast_canary_unknown_increase"],
-    ["cancelled", { cancelled: 2 }, "broadcast_canary_cancelled_increase"],
+    ["refused", { refused: 1 }, "broadcast_canary_refused_increase"],
+    [
+      "authority",
+      { pending: 100, status: "paused", controlState: "paused" },
+      "broadcast_canary_authority_changed",
+    ],
   ]) {
     const unsafe = {
       released: 35_300,
@@ -339,7 +493,10 @@ test("a release with no positive progress pauses without retrying the mutation",
   );
 });
 
-function argumentsForCanary(releaseCeiling = 36_100) {
+function argumentsForCanary(
+  releaseCeiling = 36_100,
+  idempotencyKey = "release-to-36100",
+) {
   const argv = [
     "broadcast",
     "canary",
@@ -352,7 +509,7 @@ function argumentsForCanary(releaseCeiling = 36_100) {
     "--release-ceiling",
     String(releaseCeiling),
     "--idempotency-key",
-    "release-to-36100",
+    idempotencyKey,
     "--json",
   ];
   assert.equal(parseArguments(argv).operator.kind, "broadcast_canary");

@@ -192,7 +192,10 @@ export async function runBroadcastCanary(
       state,
       now(),
       "completed",
-      "broadcast_canary_ceiling_accepted_and_paused",
+      state.current!.cancelled_recipient_count >
+          releaseBaseline.cancelled_recipient_count
+        ? "broadcast_canary_ceiling_settled_with_cancellation_and_paused"
+        : "broadcast_canary_ceiling_accepted_and_paused",
       "controlled",
     );
   } catch (error) {
@@ -373,6 +376,10 @@ function requireTargetProgress(
   requireFresh(progress, observedAt);
   const releasedDelta =
     progress.released_recipient_count - baseline.released_recipient_count;
+  const acceptedDelta =
+    progress.accepted_recipient_count - baseline.accepted_recipient_count;
+  const cancelledDelta =
+    progress.cancelled_recipient_count - baseline.cancelled_recipient_count;
   if (releasedDelta < 1) {
     throw new HostedTestBlockedError("broadcast_canary_release_no_progress");
   }
@@ -388,9 +395,9 @@ function requireTargetProgress(
   if (
     progress.control_state !== "active" ||
     progress.status !== "processing" ||
-    progress.accepted_recipient_count < baseline.accepted_recipient_count ||
-    progress.accepted_recipient_count >
-      baseline.accepted_recipient_count + releasedDelta ||
+    acceptedDelta < 0 ||
+    cancelledDelta < 0 ||
+    acceptedDelta + cancelledDelta > releasedDelta ||
     releasedAccounting(progress) !== progress.released_recipient_count
   ) {
     throw new HostedTestBlockedError("broadcast_canary_authority_changed");
@@ -404,8 +411,9 @@ function targetAccepted(
   releasedDelta: number,
 ): boolean {
   return (
-    progress.accepted_recipient_count ===
-      baseline.accepted_recipient_count + releasedDelta &&
+    progress.accepted_recipient_count - baseline.accepted_recipient_count +
+        progress.cancelled_recipient_count -
+        baseline.cancelled_recipient_count === releasedDelta &&
     progress.pending_recipient_count === 0 &&
     progress.claimed_recipient_count === 0
   );
@@ -443,13 +451,10 @@ function requireFrozenSafetyCounts(
   if (progress.unknown_recipient_count > baseline.unknown_recipient_count) {
     throw new HostedTestBlockedError("broadcast_canary_unknown_increase");
   }
-  if (progress.cancelled_recipient_count > baseline.cancelled_recipient_count) {
-    throw new HostedTestBlockedError("broadcast_canary_cancelled_increase");
-  }
   if (
     progress.refused_recipient_count !== baseline.refused_recipient_count ||
     progress.unknown_recipient_count !== baseline.unknown_recipient_count ||
-    progress.cancelled_recipient_count !== baseline.cancelled_recipient_count
+    progress.cancelled_recipient_count < baseline.cancelled_recipient_count
   ) {
     throw new HostedTestBlockedError("broadcast_canary_authority_changed");
   }
