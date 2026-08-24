@@ -11,6 +11,7 @@ import {
 } from "../packages/cli/dist/authorized-consumer.js";
 import { AUTHORIZATION_ERROR_TEXT } from "../packages/cli/dist/constants.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
+import { listenForOAuthCallback } from "../packages/cli/dist/loopback-callback.js";
 import { authorizeWithBrowser } from "../packages/cli/dist/oauth.js";
 import { parseOAuthCallback } from "../packages/cli/dist/oauth-callback.js";
 import { runProgram } from "../packages/cli/dist/program.js";
@@ -75,6 +76,30 @@ test("browser authorization orchestrates a mocked IdP without changing callback 
       "expected-state",
     ),
   );
+});
+
+test("a preliminary loopback request cannot consume the exact authorized callback", async () => {
+  const listener = await listenForOAuthCallback("expected-state", {
+    timeoutMs: 5_000,
+  });
+  try {
+    const preliminary = await fetch(
+      "http://127.0.0.1:49671/callback?state=expected-state",
+    );
+    assert.equal(preliminary.status, 400);
+    assert.match(await preliminary.text(), /Authorization not completed/);
+
+    const accepted = await fetch(
+      "http://127.0.0.1:49671/callback?code=synthetic-code&state=expected-state",
+    );
+    assert.equal(accepted.status, 200);
+    assert.match(await accepted.text(), /Authorization complete/);
+    const callback = await listener.callback;
+    assert.equal(callback.searchParams.get("code"), "synthetic-code");
+    assert.equal(callback.searchParams.get("state"), "expected-state");
+  } finally {
+    listener.close();
+  }
 });
 
 test("browser authorization cancellation and callback timeout fail closed", async () => {

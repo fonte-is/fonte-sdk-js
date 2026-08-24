@@ -47,7 +47,8 @@ export async function listenForOAuthCallback(
       response.end(renderCallbackPage("failure"));
       if (
         error instanceof HostedTestBlockedError &&
-        error.reason === "authorization_state_invalid"
+        (error.reason === "authorization_callback_invalid" ||
+          error.reason === "authorization_state_invalid")
       )
         return;
       rejectCallback(
