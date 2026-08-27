@@ -101,6 +101,7 @@ async function handleRequest(state, server, request, response) {
     );
   }
   if (url.pathname.endsWith(`/marketing-broadcasts/${broadcastId}/control`)) {
+    assert.equal(body.expectedControlVersion, "3");
     return send(
       response,
       progress(body.operation === "pause" ? "paused" : "processing"),
@@ -108,6 +109,7 @@ async function handleRequest(state, server, request, response) {
   }
   if (url.pathname.endsWith(`/marketing-broadcasts/${cancelledId}/control`)) {
     assert.equal(body.operation, "cancel_remaining");
+    assert.equal(body.expectedControlVersion, "3");
     return send(response, progress("cancelled", cancelledId));
   }
   if (url.pathname.endsWith(`/marketing-broadcasts/${broadcastId}/results`)) {

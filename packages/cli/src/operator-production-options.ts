@@ -142,6 +142,16 @@ export function positiveInteger(value: string, field = "value"): number {
   return result;
 }
 
+export function controlVersion(value: string, field = "value"): string {
+  if (
+    !/^(0|[1-9][0-9]{0,18})$/.test(value) ||
+    BigInt(value) > 9_223_372_036_854_775_807n
+  ) {
+    invalidProductionArguments("invalid_field", field);
+  }
+  return value;
+}
+
 export function boundedText(
   value: string,
   maximum: number,

@@ -90,7 +90,13 @@ test("historical pending overlaps held release and cancellation headroom reaches
     harness.coreRequests().map(({ method, body }) => ({ method, body })),
     [
       { method: "GET", body: null },
-      { method: "POST", body: { operation: "resume" } },
+      {
+        method: "POST",
+        body: {
+          operation: "resume",
+          expectedControlVersion: "75695",
+        },
+      },
       {
         method: "POST",
         body: {
@@ -117,7 +123,13 @@ test("historical pending overlaps held release and cancellation headroom reaches
         },
       },
       { method: "GET", body: null },
-      { method: "POST", body: { operation: "pause" } },
+      {
+        method: "POST",
+        body: {
+          operation: "pause",
+          expectedControlVersion: "87380",
+        },
+      },
     ],
   );
   assert.deepEqual(
@@ -561,6 +573,7 @@ function progress({
     marketingBroadcastId: broadcastId,
     status,
     controlState,
+    controlVersion: String(released + accepted + refused + unknown + cancelled),
     progressVersion: String(
       released + accepted + refused + unknown + cancelled,
     ),

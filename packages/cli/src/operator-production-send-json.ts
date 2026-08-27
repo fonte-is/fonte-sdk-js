@@ -1,6 +1,7 @@
 import {
   boolean,
   controlStateValue,
+  controlVersion,
   count,
   instant,
   invalid,
@@ -94,12 +95,12 @@ export function productionProgress(
   const status = progressStatus(body.status);
   const requested = count(body.requestedRecipientCount);
   const eligible = count(body.eligibleRecipientCount);
-  const released = body.releasedRecipientCount === undefined
-    ? eligible
-    : count(body.releasedRecipientCount);
-  const held = body.heldRecipientCount === undefined
-    ? 0
-    : count(body.heldRecipientCount);
+  const released =
+    body.releasedRecipientCount === undefined
+      ? eligible
+      : count(body.releasedRecipientCount);
+  const held =
+    body.heldRecipientCount === undefined ? 0 : count(body.heldRecipientCount);
   const excluded = count(body.excludedRecipientCount);
   const pending = count(body.pendingRecipientCount);
   const claimed = count(body.claimedRecipientCount);
@@ -110,7 +111,8 @@ export function productionProgress(
   const remaining = count(body.remainingRecipientCount);
   if (
     requested !== eligible + excluded ||
-    eligible !== held + pending + claimed + accepted + refused + unknown + cancelled ||
+    eligible !==
+      held + pending + claimed + accepted + refused + unknown + cancelled ||
     released + held > eligible ||
     remaining !== held + pending + claimed ||
     (status === "terminal" && remaining !== 0)
@@ -121,7 +123,8 @@ export function productionProgress(
     broadcast_id: uuid(body.marketingBroadcastId),
     status,
     control_state: controlStateValue(body.controlState),
-    progress_version: text(body.progressVersion, 100),
+    control_version: controlVersion(body.controlVersion),
+    progress_version: controlVersion(body.progressVersion),
     requested_recipient_count: requested,
     eligible_recipient_count: eligible,
     released_recipient_count: released,

@@ -132,6 +132,7 @@ export async function runBroadcastCanary(
         workspace: command.workspace,
         broadcastId: command.broadcastId,
         operation: "resume",
+        expectedControlVersion: first.control_version,
       });
       state.mutationObserved = true;
       state.current = baseline;
@@ -517,11 +518,16 @@ async function pause(
   command: BroadcastCanaryCommand,
   state: CanaryState,
 ): Promise<void> {
+  const observed = state.current;
+  if (!observed) {
+    throw new HostedTestBlockedError("broadcast_canary_pause_unconfirmed");
+  }
   state.pauseAttempted = true;
   state.current = await client.controlProductionBroadcast({
     workspace: command.workspace,
     broadcastId: command.broadcastId,
     operation: "pause",
+    expectedControlVersion: observed.control_version,
   });
   state.completedSteps.add("safety_pause");
 }

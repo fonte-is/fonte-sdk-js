@@ -2,6 +2,7 @@ import { parseProductionDraftCreate } from "./operator-production-draft-argument
 import {
   content,
   boundedText,
+  controlVersion,
   idempotencyKey,
   isProduction,
   operatorArguments,
@@ -208,12 +209,19 @@ function control(
   name: "pause" | "resume" | "cancel",
   argv: readonly string[],
 ): ParsedOperatorArguments {
-  const options = productionRead(argv, ["--broadcast-id"]);
+  const options = productionRead(argv, [
+    "--broadcast-id",
+    "--expected-control-version",
+  ]);
   return operatorArguments(options, {
     kind: "broadcast_control",
     workspace: workspace(options),
     broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
     operation: name === "cancel" ? "cancel_remaining" : name,
+    expectedControlVersion: controlVersion(
+      required(options, "--expected-control-version"),
+      "--expected-control-version",
+    ),
   });
 }
 

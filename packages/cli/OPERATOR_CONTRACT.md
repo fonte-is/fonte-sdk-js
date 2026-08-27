@@ -53,7 +53,8 @@ fonte broadcast canary --workspace <slug> --environment production \
   --broadcast-id <uuid> --release-ceiling <n> --idempotency-key <key>
 
 fonte broadcast pause|resume|cancel --workspace <slug> \
-  --environment production --broadcast-id <uuid>
+  --environment production --broadcast-id <uuid> \
+  --expected-control-version <n>
 
 fonte broadcast result --workspace <slug> --environment production \
   --broadcast-id <uuid>
@@ -83,7 +84,9 @@ immutable recipient snapshot only during authorization.
 The production test command cannot accept a recipient. Core resolves only the
 signed-in account's verified email. Test and progress watches poll existing
 read routes; they create no authority. Pause, resume, and cancel map only to
-Core's broadcast-scoped state-idempotent control operation.
+Core's broadcast-scoped state-idempotent control operation. Each command binds
+the exact `control_version` returned by an authoritative status read. A stale
+opposing command fails with Core's typed conflict and is never retried.
 
 `broadcast canary` is one declared ten-minute operation under one Authorization
 Code + S256 PKCE grant and one in-memory bearer. It reads Core's production

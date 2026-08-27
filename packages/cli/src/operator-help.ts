@@ -167,9 +167,12 @@ const entries: readonly HelpEntry[] = [
   ...(["pause", "resume", "cancel"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [
-      ["--workspace <slug> --environment production --broadcast-id <uuid>"],
+      [
+        "--workspace <slug> --environment production --broadcast-id <uuid>",
+        "--expected-control-version <n>",
+      ],
     ],
-    detail: `${operation[0]!.toUpperCase()}${operation.slice(1)} is scoped to one broadcast and is state-idempotent in Core.`,
+    detail: `${operation[0]!.toUpperCase()}${operation.slice(1)} binds Core's observed control version for a state-idempotent operation; stale opposing commands fail without retry.`,
     json: true,
   })),
   {

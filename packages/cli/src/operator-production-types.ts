@@ -70,6 +70,7 @@ export interface ProductionBroadcastReadInput {
 
 export interface ProductionBroadcastControlInput extends ProductionBroadcastReadInput {
   readonly operation: "pause" | "resume" | "cancel_remaining";
+  readonly expectedControlVersion: string;
 }
 
 export interface ProductionBroadcastReleaseInput extends ProductionBroadcastReadInput {
@@ -230,8 +231,15 @@ export interface ProductionTestResult {
 export interface ProductionBroadcastProgressResult {
   readonly kind: "broadcast_progress";
   readonly broadcast_id: string;
-  readonly status: "processing" | "paused" | "cancelled" | "terminal";
+  readonly status:
+    | "processing"
+    | "pausing"
+    | "paused"
+    | "cancelling"
+    | "cancelled"
+    | "terminal";
   readonly control_state: "active" | "paused" | "cancelled";
+  readonly control_version: string;
   readonly progress_version: string;
   readonly requested_recipient_count: number;
   readonly eligible_recipient_count: number;
@@ -275,7 +283,13 @@ export interface ProductionBroadcastResult {
   readonly kind: "broadcast_result";
   readonly draft_id: string;
   readonly broadcast_id: string;
-  readonly status: "processing" | "paused" | "cancelled" | "terminal";
+  readonly status:
+    | "processing"
+    | "pausing"
+    | "paused"
+    | "cancelling"
+    | "cancelled"
+    | "terminal";
   readonly requested_recipient_count: number;
   readonly eligible_recipient_count: number;
   readonly accepted_recipient_count: number;

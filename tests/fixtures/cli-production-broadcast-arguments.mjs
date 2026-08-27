@@ -188,6 +188,8 @@ function controlArguments(operation, id) {
     "production",
     "--broadcast-id",
     id,
+    "--expected-control-version",
+    "3",
     "--json",
   ];
 }

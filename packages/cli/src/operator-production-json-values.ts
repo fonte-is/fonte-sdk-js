@@ -118,12 +118,25 @@ export function progressStatus(
 ): ProductionBroadcastProgressResult["status"] {
   if (
     value !== "processing" &&
+    value !== "pausing" &&
     value !== "paused" &&
+    value !== "cancelling" &&
     value !== "cancelled" &&
     value !== "terminal"
   )
     invalid();
   return value;
+}
+
+export function controlVersion(value: unknown): string {
+  const result = text(value, 19);
+  if (
+    !/^(0|[1-9][0-9]{0,18})$/.test(result) ||
+    BigInt(result) > 9_223_372_036_854_775_807n
+  ) {
+    invalid();
+  }
+  return result;
 }
 
 export function controlStateValue(

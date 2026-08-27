@@ -14,6 +14,7 @@ import {
   collectionId,
   draftId,
   hostedConfig,
+  progress,
   purposeId,
   testId,
   testReadback,
@@ -51,12 +52,15 @@ test("production grammar binds factual audience IDs and rejects filename or sand
       "production",
       "--broadcast-id",
       cancelledId,
+      "--expected-control-version",
+      "9",
     ]).operator,
     {
       kind: "broadcast_control",
       workspace,
       broadcastId: cancelledId,
       operation: "cancel_remaining",
+      expectedControlVersion: "9",
     },
   );
 });
@@ -80,6 +84,114 @@ test("lost production mutations remain unknown until explicit Core readback", as
   assert.equal(receipt.core_effect, "unknown");
   assert.equal(receipt.result, null);
   assert.equal(result.stdout.includes("created"), false);
+});
+
+test("versioned controls bind one exact observation and preserve settling states", async () => {
+  for (const { command, operation, id, expected, status, controlState } of [
+    {
+      command: "pause",
+      operation: "pause",
+      id: broadcastId,
+      expected: "7",
+      status: "pausing",
+      controlState: "paused",
+    },
+    {
+      command: "resume",
+      operation: "resume",
+      id: broadcastId,
+      expected: "8",
+      status: "processing",
+      controlState: "active",
+    },
+    {
+      command: "cancel",
+      operation: "cancel_remaining",
+      id: cancelledId,
+      expected: "9",
+      status: "cancelling",
+      controlState: "cancelled",
+    },
+  ]) {
+    const requests = [];
+    const result = await runProgram(
+      controlArguments(command, id, expected),
+      dependencies({
+        configUrl: "http://127.0.0.1:43111/.well-known/fonte-cli.json",
+        fetch: async (input, init = {}) => {
+          if (String(input).includes(".well-known/fonte-cli.json")) {
+            return json(hostedConfig("http://127.0.0.1:43112"));
+          }
+          requests.push({ input: String(input), body: JSON.parse(init.body) });
+          return json(
+            controlReadback(
+              id,
+              status,
+              controlState,
+              String(Number(expected) + 1),
+            ),
+          );
+        },
+      }),
+    );
+
+    assert.equal(result.exitCode, 0, command);
+    assert.equal(JSON.parse(result.stdout).result.status, status, command);
+    assert.deepEqual(
+      requests,
+      [
+        {
+          input: `http://127.0.0.1:43112/v1/workspaces/${workspace}/marketing-broadcasts/${id}/control?environment=production`,
+          body: { operation, expectedControlVersion: expected },
+        },
+      ],
+      command,
+    );
+  }
+});
+
+test("stale and lost versioned controls are never retried or opposed", async () => {
+  for (const [name, coreResponse, reason, effect] of [
+    [
+      "stale",
+      () => json({ error: "broadcast_send_control_conflict" }, 409),
+      "broadcast_send_control_conflict",
+      "none",
+    ],
+    [
+      "lost",
+      () => {
+        throw new Error("accepted response lost");
+      },
+      "core_api_unavailable",
+      "unknown",
+    ],
+  ]) {
+    let controlCalls = 0;
+    const result = await runProgram(
+      controlArguments("pause", broadcastId, "7"),
+      dependencies({
+        configUrl: "http://127.0.0.1:43111/.well-known/fonte-cli.json",
+        fetch: async (input, init = {}) => {
+          if (String(input).includes(".well-known/fonte-cli.json")) {
+            return json(hostedConfig("http://127.0.0.1:43112"));
+          }
+          controlCalls += 1;
+          assert.deepEqual(JSON.parse(init.body), {
+            operation: "pause",
+            expectedControlVersion: "7",
+          });
+          return coreResponse();
+        },
+      }),
+    );
+    const receipt = JSON.parse(result.stdout);
+
+    assert.equal(result.exitCode, 3, name);
+    assert.equal(receipt.reason, reason, name);
+    assert.equal(receipt.core_effect, effect, name);
+    assert.equal(controlCalls, 1, name);
+  }
 });
 
 test("one isolated fake-Core journey exercises every production operator route without a send", async (context) => {
@@ -184,4 +296,34 @@ function json(body, status = 200) {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function controlArguments(command, id, expectedControlVersion) {
+  return [
+    "broadcast",
+    command,
+    "--workspace",
+    workspace,
+    "--environment",
+    "production",
+    "--broadcast-id",
+    id,
+    "--expected-control-version",
+    expectedControlVersion,
+    "--json",
+  ];
+}
+
+function controlReadback(id, status, controlState, version) {
+  const settling = status === "pausing" || status === "cancelling";
+  return {
+    ...progress("processing", id),
+    status,
+    controlState,
+    controlVersion: version,
+    progressVersion: version,
+    pendingRecipientCount: settling ? 0 : 1,
+    claimedRecipientCount: settling ? 1 : 0,
+    currentRatePerSecond: controlState === "active" ? 1 : null,
+  };
 }

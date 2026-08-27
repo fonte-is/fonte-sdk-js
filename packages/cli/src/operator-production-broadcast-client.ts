@@ -131,7 +131,10 @@ export function createProductionBroadcastClient(
             `${broadcastPath(input)}/control?environment=production`,
             {
               lostResponseEffect: "unknown",
-              body: { operation: input.operation },
+              body: {
+                operation: input.operation,
+                expectedControlVersion: input.expectedControlVersion,
+              },
             },
           ),
           "unknown",

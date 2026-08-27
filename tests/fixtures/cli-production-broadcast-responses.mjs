@@ -165,6 +165,7 @@ export function progress(status, id = broadcastId) {
     marketingBroadcastId: id,
     status,
     controlState: cancelled ? "cancelled" : paused ? "paused" : "active",
+    controlVersion: "3",
     progressVersion: terminal ? "4" : "3",
     requestedRecipientCount: 3,
     eligibleRecipientCount: 2,
