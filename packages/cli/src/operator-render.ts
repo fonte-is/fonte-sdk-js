@@ -84,6 +84,21 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       "",
     ].join("\n");
   }
+  if (result.kind === "provider_placement_application") {
+    return [
+      `Fonte provider placement application: ${result.status}.`,
+      `Reason: ${result.reason_code ?? "none"}.`,
+      `Application: ${result.idempotency_key}; connection: ${result.connection_id}.`,
+      `Outgoing confirmed/remaining: ${result.outgoing.confirmed}/${result.outgoing.remaining}.`,
+      `Incoming confirmed/remaining: ${result.incoming.confirmed}/${result.incoming.remaining}.`,
+      `Provider population/target/headroom: ${result.readback.provider_population_count ?? "unavailable"}/${result.operating_targets.provider_contact_count}/${result.readback.provider_target_headroom ?? "unavailable"}.`,
+      `Fonte population/minimum: ${result.readback.fonte_population_count ?? "unavailable"}/${result.operating_targets.minimum_fonte_contact_count}.`,
+      `Provider observation: ${result.readback.provider_observation_fingerprint_sha256 ?? "unavailable"}.`,
+      `Certificate: ${result.retirement_certificate.certificate_id} (${result.retirement_certificate.certificate_checksum_sha256}).`,
+      `Core effect: ${receipt.core_effect}.`,
+      "",
+    ].join("\n");
+  }
   if (result.kind === "provider_connections") {
     return [
       `Fonte ${providerName(result.provider)} connections (${result.connections.length}):`,

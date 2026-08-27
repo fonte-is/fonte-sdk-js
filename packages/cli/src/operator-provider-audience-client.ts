@@ -9,6 +9,10 @@ import {
   providerAudienceReconciliation,
   providerCollections,
 } from "./operator-provider-audience-json.js";
+import {
+  createProviderPlacementClient,
+  type ProviderPlacementClient,
+} from "./operator-provider-audience-placement-client.js";
 import type {
   ContactImportStatusInput,
   ContactImportStatusResult,
@@ -24,7 +28,7 @@ import type {
   ProviderCollectionReferenceResult,
 } from "./operator-provider-audience-types.js";
 
-export interface ProviderAudienceClient {
+export interface ProviderAudienceClient extends ProviderPlacementClient {
   readContactImportStatus(
     input: ContactImportStatusInput,
   ): Promise<ContactImportStatusResult>;
@@ -43,6 +47,7 @@ export function createProviderAudienceClient(
   request: CoreRequester,
 ): ProviderAudienceClient {
   return {
+    ...createProviderPlacementClient(request),
     async readContactImportStatus(input) {
       const result = parseCoreReceipt(
         contactImportStatus,

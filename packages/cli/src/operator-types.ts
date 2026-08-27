@@ -8,6 +8,10 @@ import type {
   ProviderCollectionListResult,
 } from "./operator-provider-audience-types.js";
 import type {
+  ProviderPlacementApplicationResult,
+  ProviderPlacementOperatorCommand,
+} from "./operator-provider-audience-placement-types.js";
+import type {
   ProviderConnectionListResult,
   ProviderConnectionOAuthResult,
   ProviderConnectionOperatorCommand,
@@ -156,6 +160,7 @@ export type OperatorCommand =
       readonly idempotencyKey: string;
     }
   | ProviderAudienceOperatorCommand
+  | ProviderPlacementOperatorCommand
   | ProviderConnectionOperatorCommand
   | ProviderEvidenceOperatorCommand
   | { readonly kind: "unsupported" };
@@ -270,6 +275,7 @@ export type OperatorResult =
   | ProviderCollectionListResult
   | ProviderAudienceReconciliationResult
   | ProviderAudienceFreezeResult
+  | ProviderPlacementApplicationResult
   | ProviderConnectionListResult
   | ProviderConnectionOAuthResult
   | ProviderEvidenceCandidateOperationResult
@@ -292,6 +298,7 @@ export interface OperatorReceipt {
       | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"
       | "fonte.core.provider_audience.v1"
+      | "fonte.core.provider_placement_application.v1"
       | "fonte.core.provider_connections.v1"
       | "fonte.core.provider_evidence_candidate.v1"
       | "unavailable";

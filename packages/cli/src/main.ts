@@ -65,6 +65,7 @@ const result = await runProgram(process.argv.slice(2), {
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
     readProviderEvidenceCandidateFile: (path) => readFile(path, "utf8"),
+    readProviderPlacementApplicationFile: (path) => readFile(path, "utf8"),
     openUrl: openBrowser,
     signal: cancellation.signal,
   },

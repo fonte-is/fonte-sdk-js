@@ -63,6 +63,11 @@ export type {
   ProviderCollectionReferenceInput,
 } from "./operator-provider-audience-types.js";
 export type {
+  ProviderPlacementApplicationInput,
+  ProviderPlacementApplicationResult,
+  ProviderPlacementCommandInput,
+} from "./operator-provider-audience-placement-types.js";
+export type {
   ProviderConnectionListInput,
   ProviderConnectionListResult,
   ProviderConnectionMetadataResult,

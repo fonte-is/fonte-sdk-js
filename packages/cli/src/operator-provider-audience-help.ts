@@ -79,4 +79,28 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         "Explicitly freezes only the fingerprint-bound final audience into an immutable Core reference. --declare-marketing-permission confirms independent valid marketing permission; existing unsubscribe, suppression, and purpose blocks remain authoritative.",
       json: true,
     },
+    {
+      command: ["bridge", "placement", "apply"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--application-file <aggregate-certificate-application.json>",
+        ],
+      ],
+      detail:
+        "Applies or resumes one exact certificate-bound provider retirement/refill application. On response loss, read progress before deciding whether to submit the same application again; the CLI never retries automatically.",
+      json: true,
+    },
+    {
+      command: ["bridge", "placement", "progress"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--application-file <the-same-aggregate-certificate-application.json>",
+        ],
+      ],
+      detail:
+        "Reads durable aggregate reconciliation for the exact application idempotency key and verifies the complete application binding without provider contact through the CLI.",
+      json: true,
+    },
   ];

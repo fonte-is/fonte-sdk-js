@@ -11,6 +11,13 @@ import {
   providerAudienceReceiptDescriptor,
 } from "./operator-provider-audience-run.js";
 import {
+  executeProviderPlacementCommand,
+  isProviderPlacementCommand,
+  loadProviderPlacementApplication,
+  providerPlacementReceiptDescriptor,
+  type ProviderPlacementApplicationFileReader,
+} from "./operator-provider-audience-placement-run.js";
+import {
   executeProviderConnectionCommand,
   isProviderConnectionCommand,
   providerConnectionReceiptDescriptor,
@@ -45,6 +52,7 @@ export interface OperatorDependencies {
   ): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
   readProviderEvidenceCandidateFile: ProviderEvidenceCandidateFileReader;
+  readProviderPlacementApplicationFile: ProviderPlacementApplicationFileReader;
   openUrl?(url: URL): Promise<boolean>;
   readonly signal?: AbortSignal;
   now?(): Date;
@@ -65,6 +73,12 @@ export async function runOperatorCommand(
           dependencies.readProviderEvidenceCandidateFile,
         )
       : null;
+    const providerPlacementApplication = isProviderPlacementCommand(command)
+      ? await loadProviderPlacementApplication(
+          command,
+          dependencies.readProviderPlacementApplicationFile,
+        )
+      : null;
     const config = await loadHostedConfig(
       dependencies.fetch as typeof fetch,
       dependencies.configUrl,
@@ -83,6 +97,7 @@ export async function runOperatorCommand(
       dependencies.openUrl,
       dependencies.sleep,
       providerEvidenceCandidates,
+      providerPlacementApplication,
     );
     return successReceipt(command, result);
   } catch (error) {
@@ -112,6 +127,9 @@ async function execute(
   providerEvidenceCandidates: Awaited<
     ReturnType<typeof loadProviderEvidenceCandidates>
   >,
+  providerPlacementApplication: Awaited<
+    ReturnType<typeof loadProviderPlacementApplication>
+  > | null,
 ): Promise<OperatorResult> {
   if (isProviderConnectionCommand(command)) {
     return executeProviderConnectionCommand(
@@ -127,6 +145,13 @@ async function execute(
       command,
       client,
       providerEvidenceCandidates,
+    );
+  }
+  if (isProviderPlacementCommand(command)) {
+    return executeProviderPlacementCommand(
+      command,
+      client,
+      providerPlacementApplication,
     );
   }
   if (isProductionCommand(command)) {
@@ -244,6 +269,16 @@ function successReceipt(
       result.import_receipt.created ? "copied" : "none",
     );
   }
+  if (result.kind === "provider_placement_application") {
+    const placement = providerPlacementReceiptDescriptor(command, result);
+    return currentReceipt(
+      command,
+      result,
+      placement.outcome,
+      placement.reason,
+      placement.coreEffect,
+    );
+  }
   const providerAudience = providerAudienceReceiptDescriptor(result);
   if (providerAudience) {
     return currentReceipt(
@@ -334,14 +369,16 @@ function currentAuthority(
             ? "fonte.core.production_broadcast.v1"
             : command.kind === "bridge_contact_import_status"
               ? "fonte.core.contact_import.v1"
-              : command.kind.startsWith("bridge_resend_")
-                ? "fonte.core.resend_bridge.v1"
-                : command.kind.startsWith("bridge_connection_")
-                  ? "fonte.core.provider_connections.v1"
-                  : command.kind.startsWith("bridge_provider_")
-                    ? "fonte.core.provider_audience.v1"
-                    : command.kind.startsWith("provider_evidence_candidate_")
-                      ? "fonte.core.provider_evidence_candidate.v1"
-                      : "fonte.core.sandbox_canary.v1",
+              : command.kind.startsWith("bridge_provider_placement_")
+                ? "fonte.core.provider_placement_application.v1"
+                : command.kind.startsWith("bridge_resend_")
+                  ? "fonte.core.resend_bridge.v1"
+                  : command.kind.startsWith("bridge_connection_")
+                    ? "fonte.core.provider_connections.v1"
+                    : command.kind.startsWith("bridge_provider_")
+                      ? "fonte.core.provider_audience.v1"
+                      : command.kind.startsWith("provider_evidence_candidate_")
+                        ? "fonte.core.provider_evidence_candidate.v1"
+                        : "fonte.core.sandbox_canary.v1",
   };
 }

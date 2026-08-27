@@ -46,7 +46,37 @@ export function parseProviderAudienceArguments(
   if (argv[1] === "collections") return collections(argv.slice(2));
   if (argv[1] === "reconcile") return reconcile(argv.slice(2));
   if (argv[1] === "freeze") return freeze(argv.slice(2));
+  if (argv[1] === "placement" && argv[2] === "apply") {
+    return placement("apply", argv.slice(3));
+  }
+  if (argv[1] === "placement" && argv[2] === "progress") {
+    return placement("progress", argv.slice(3));
+  }
   return null;
+}
+
+function placement(
+  operation: "apply" | "progress",
+  argv: readonly string[],
+): ParsedOperatorArguments {
+  const options = parseProductionOptions(argv, [
+    "--workspace",
+    "--environment",
+    "--application-file",
+  ]);
+  return operatorArguments(options, {
+    kind:
+      operation === "apply"
+        ? "bridge_provider_placement_apply"
+        : "bridge_provider_placement_progress",
+    workspace: workspace(options),
+    environment: environment(options),
+    applicationFile: boundedText(
+      required(options, "--application-file"),
+      4_096,
+      "--application-file",
+    ),
+  });
 }
 
 function importStatus(argv: readonly string[]): ParsedOperatorArguments {
