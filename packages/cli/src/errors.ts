@@ -37,6 +37,22 @@ const admittedFields = new Set([
   "--segment-id",
   "--fingerprint",
   "--declare-marketing-permission",
+  "--connection-id",
+  "--selector-id",
+  "--selector-generation-id",
+  "--artifact-sha256",
+  "--identity-set-sha256",
+  "--candidate-count",
+  "--candidate-manifest-sha256",
+  "--operation-id",
+  "--generation-id",
+  "--expected-request-number",
+  "--candidates-file",
+  "--schema-version",
+  "--normalization-version",
+  "--identity-fingerprint-version",
+  "--identity-email-key-id",
+  "--identity-email-normalization-version",
 ]);
 
 function boundedInvocationField(field: string): string {

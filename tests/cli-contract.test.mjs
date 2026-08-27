@@ -99,6 +99,7 @@ test("help, version, and usage bytes are literal public contracts", async () => 
   );
   assert.equal(VERSION_TEXT, `@fonte-is/cli ${manifest.version}\n`);
   assert.match(USAGE_TEXT, /fonte auth exec -- <command> \[args\.\.\.\]/);
+  assert.match(USAGE_TEXT, /fonte provider-evidence resend <command>/);
 });
 
 test("program renders help, version, and invalid invocation exactly", async () => {
@@ -193,6 +194,28 @@ test("invalid JSON calls stay private and every current command help matches its
     [["bridge", "copy", "--help"], "bridge copy kit --help"],
     [["broadcast", "prepare", "--help"], "unsupported_authority"],
     [["bridge", "status", "--help"], "unsupported_authority"],
+    [["provider-evidence", "--help"], "provider-evidence resend start --help"],
+    [["provider-evidence", "resend", "--help"], "generation read --help"],
+    [
+      ["provider-evidence", "resend", "start", "--help"],
+      "--candidates-file <json-file>",
+    ],
+    [
+      ["provider-evidence", "resend", "read", "--help"],
+      "Read this before every advance",
+    ],
+    [
+      ["provider-evidence", "resend", "advance", "--help"],
+      "never retries automatically",
+    ],
+    [
+      ["provider-evidence", "resend", "seal", "--help"],
+      "--generation-id <uuid>",
+    ],
+    [
+      ["provider-evidence", "resend", "generation", "read", "--help"],
+      "seal checksums",
+    ],
   ]) {
     const result = await runProgram(argv, dependencies);
     assert.equal(result.exitCode, 0);
@@ -235,6 +258,8 @@ test("invalid JSON calls stay private and every current command help matches its
     operatorContract,
     /authoritative audience\n+preview, verified-account test, and exact-revision preflight/,
   );
+  assert.match(operatorContract, /Candidate-scoped Resend evidence/);
+  assert.match(operatorContract, /CLI adds no retry loop/);
 });
 
 test("plan sealing uses recursively canonical compact JSON", () => {

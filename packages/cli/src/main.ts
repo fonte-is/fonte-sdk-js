@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
@@ -63,6 +64,7 @@ const result = await runProgram(process.argv.slice(2), {
       : { authorize: authorizeOnce }),
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    readProviderEvidenceCandidateFile: (path) => readFile(path, "utf8"),
     openUrl: openBrowser,
     signal: cancellation.signal,
   },

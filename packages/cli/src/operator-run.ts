@@ -16,6 +16,13 @@ import {
   providerConnectionReceiptDescriptor,
 } from "./operator-provider-connection-run.js";
 import {
+  executeProviderEvidenceCommand,
+  isProviderEvidenceCommand,
+  loadProviderEvidenceCandidates,
+  providerEvidenceReceiptDescriptor,
+  type ProviderEvidenceCandidateFileReader,
+} from "./operator-provider-evidence-run.js";
+import {
   executeProductionCommand,
   isProductionCommand,
   productionReceiptDescriptor,
@@ -37,6 +44,7 @@ export interface OperatorDependencies {
     force?: boolean,
   ): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
+  readProviderEvidenceCandidateFile: ProviderEvidenceCandidateFileReader;
   openUrl?(url: URL): Promise<boolean>;
   readonly signal?: AbortSignal;
   now?(): Date;
@@ -51,6 +59,12 @@ export async function runOperatorCommand(
     return runBroadcastCanary(command, dependencies, randomUUID(), randomUUID);
   }
   try {
+    const providerEvidenceCandidates = isProviderEvidenceCommand(command)
+      ? await loadProviderEvidenceCandidates(
+          command,
+          dependencies.readProviderEvidenceCandidateFile,
+        )
+      : null;
     const config = await loadHostedConfig(
       dependencies.fetch as typeof fetch,
       dependencies.configUrl,
@@ -68,6 +82,7 @@ export async function runOperatorCommand(
       randomUUID,
       dependencies.openUrl,
       dependencies.sleep,
+      providerEvidenceCandidates,
     );
     return successReceipt(command, result);
   } catch (error) {
@@ -94,6 +109,9 @@ async function execute(
   randomUUID: () => string,
   openUrl: ((url: URL) => Promise<boolean>) | undefined,
   sleep: (milliseconds: number) => Promise<void>,
+  providerEvidenceCandidates: Awaited<
+    ReturnType<typeof loadProviderEvidenceCandidates>
+  >,
 ): Promise<OperatorResult> {
   if (isProviderConnectionCommand(command)) {
     return executeProviderConnectionCommand(
@@ -102,6 +120,13 @@ async function execute(
       randomUUID,
       openUrl,
       sleep,
+    );
+  }
+  if (isProviderEvidenceCommand(command)) {
+    return executeProviderEvidenceCommand(
+      command,
+      client,
+      providerEvidenceCandidates,
     );
   }
   if (isProductionCommand(command)) {
@@ -168,6 +193,16 @@ function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
 ): OperatorReceipt {
+  const providerEvidence = providerEvidenceReceiptDescriptor(command, result);
+  if (providerEvidence) {
+    return currentReceipt(
+      command,
+      result,
+      providerEvidence.outcome,
+      providerEvidence.reason,
+      providerEvidence.coreEffect,
+    );
+  }
   const production = productionReceiptDescriptor(command, result);
   if (production) {
     return currentReceipt(
@@ -293,18 +328,20 @@ function currentAuthority(
         ? "fonte.core.broadcast_preflight.v1"
         : command.kind === "broadcast_audience_append"
           ? "fonte.core.production_broadcast_audience_append.v1"
-        : command.kind.startsWith("broadcast_") &&
-            command.kind !== "broadcast_test_send" &&
-            command.kind !== "broadcast_test_status"
-          ? "fonte.core.production_broadcast.v1"
-          : command.kind === "bridge_contact_import_status"
-            ? "fonte.core.contact_import.v1"
-            : command.kind.startsWith("bridge_resend_")
-              ? "fonte.core.resend_bridge.v1"
-              : command.kind.startsWith("bridge_connection_")
-                ? "fonte.core.provider_connections.v1"
-                : command.kind.startsWith("bridge_provider_")
-                  ? "fonte.core.provider_audience.v1"
-                  : "fonte.core.sandbox_canary.v1",
+          : command.kind.startsWith("broadcast_") &&
+              command.kind !== "broadcast_test_send" &&
+              command.kind !== "broadcast_test_status"
+            ? "fonte.core.production_broadcast.v1"
+            : command.kind === "bridge_contact_import_status"
+              ? "fonte.core.contact_import.v1"
+              : command.kind.startsWith("bridge_resend_")
+                ? "fonte.core.resend_bridge.v1"
+                : command.kind.startsWith("bridge_connection_")
+                  ? "fonte.core.provider_connections.v1"
+                  : command.kind.startsWith("bridge_provider_")
+                    ? "fonte.core.provider_audience.v1"
+                    : command.kind.startsWith("provider_evidence_candidate_")
+                      ? "fonte.core.provider_evidence_candidate.v1"
+                      : "fonte.core.sandbox_canary.v1",
   };
 }

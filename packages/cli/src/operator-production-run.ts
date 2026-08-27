@@ -43,7 +43,8 @@ export function isProductionCommand(
     command.kind !== "bridge_contact_import_status" &&
     command.kind !== "bridge_provider_collections" &&
     command.kind !== "bridge_provider_reconcile" &&
-    command.kind !== "bridge_provider_freeze"
+    command.kind !== "bridge_provider_freeze" &&
+    !command.kind.startsWith("provider_evidence_candidate_")
   );
 }
 

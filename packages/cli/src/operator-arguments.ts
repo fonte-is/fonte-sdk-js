@@ -2,6 +2,7 @@ import { CliUsageError } from "./errors.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
 import { parseProviderAudienceArguments } from "./operator-provider-audience-arguments.js";
 import { parseProviderConnectionArguments } from "./operator-provider-connection-arguments.js";
+import { parseProviderEvidenceArguments } from "./operator-provider-evidence-arguments.js";
 import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
@@ -32,6 +33,8 @@ const bridgeDeclarations = new Set([
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const providerEvidence = parseProviderEvidenceArguments(argv);
+  if (providerEvidence) return providerEvidence;
   const production = parseProductionOperatorArguments(argv);
   if (production) return production;
   const providerConnection = parseProviderConnectionArguments(argv);

@@ -17,7 +17,11 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   }
   const command = argv[0];
   if (command === "auth") return parseAuthExecArguments(argv.slice(1));
-  if (command === "broadcast" || command === "bridge") {
+  if (
+    command === "broadcast" ||
+    command === "bridge" ||
+    command === "provider-evidence"
+  ) {
     const operator = parseOperatorArguments(argv);
     return {
       command: "operator",

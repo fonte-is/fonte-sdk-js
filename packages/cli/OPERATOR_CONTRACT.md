@@ -101,6 +101,35 @@ Core's broadcast-scoped state-idempotent control operation. Each command binds
 the exact `control_version` returned by an authoritative status read. A stale
 opposing command fails with Core's typed conflict and is never retried.
 
+## Candidate-scoped Resend evidence
+
+The installed binary exposes five fixed JSON-only commands:
+
+```text
+fonte provider-evidence resend start ... --candidates-file <json-file> --json
+fonte provider-evidence resend read ... --operation-id <uuid> --json
+fonte provider-evidence resend advance ... --operation-id <uuid> --expected-request-number <n> --json
+fonte provider-evidence resend seal ... --operation-id <uuid> --generation-id <uuid> --json
+fonte provider-evidence resend generation read ... --generation-id <uuid> --json
+```
+
+Every command binds workspace, environment, connection ID, selector ID,
+selector-generation ID, artifact SHA-256, identity-set SHA-256, candidate
+count, and candidate-manifest SHA-256. Start additionally binds operation ID,
+schema and normalization versions, the tenant-HMAC fingerprint version,
+identity-custody key/version, and a strict JSON object containing only the
+candidate array. Candidate rows and provider record IDs never enter arguments,
+help, stdout, stderr, or receipts.
+
+Read the operation before each advance. Advance accepts exactly the
+`next_request_number` from that aggregate read and issues one logical request;
+the CLI adds no retry loop. A lost start, advance, or seal response remains
+unknown until same-identity operation or generation readback resolves it.
+Core alone owns the stored Resend credential, cursor, rate/retry/throttle
+accounting, and candidate-scoped GET construction. The commands grant neither
+provider nor contact mutation authority and emit only Core's aggregate
+operation or generation receipt.
+
 `broadcast canary` is one declared ten-minute operation under one Authorization
 Code + S256 PKCE grant and one in-memory bearer. It reads Core's production
 progress first and proceeds only for the requested workspace and broadcast when

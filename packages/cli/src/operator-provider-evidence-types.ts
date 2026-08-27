@@ -19,8 +19,7 @@ export interface ProviderEvidenceCandidateScope {
   readonly selector: ProviderEvidenceCandidateSelector;
 }
 
-export interface ProviderEvidenceCandidateStartInput
-  extends ProviderEvidenceCandidateScope {
+export interface ProviderEvidenceCandidateStartInput extends ProviderEvidenceCandidateScope {
   readonly operationId: string;
   readonly candidates: readonly ProviderEvidenceCandidateTarget[];
   readonly schemaVersion: string;
@@ -32,25 +31,60 @@ export interface ProviderEvidenceCandidateStartInput
   };
 }
 
-export interface ProviderEvidenceCandidateOperationInput
-  extends ProviderEvidenceCandidateScope {
+export interface ProviderEvidenceCandidateOperationInput extends ProviderEvidenceCandidateScope {
   readonly operationId: string;
 }
 
-export interface ProviderEvidenceCandidateAdvanceInput
-  extends ProviderEvidenceCandidateOperationInput {
+export interface ProviderEvidenceCandidateAdvanceInput extends ProviderEvidenceCandidateOperationInput {
   readonly expectedRequestNumber: number;
 }
 
-export interface ProviderEvidenceCandidateSealInput
-  extends ProviderEvidenceCandidateOperationInput {
+export interface ProviderEvidenceCandidateSealInput extends ProviderEvidenceCandidateOperationInput {
   readonly generationId: string;
 }
 
-export interface ProviderEvidenceCandidateGenerationInput
-  extends ProviderEvidenceCandidateScope {
+export interface ProviderEvidenceCandidateGenerationInput extends ProviderEvidenceCandidateScope {
   readonly generationId: string;
 }
+
+interface ProviderEvidenceCandidateCommandScope {
+  readonly workspace: string;
+  readonly environment: "sandbox" | "production";
+  readonly connectionId: string;
+  readonly selector: ProviderEvidenceCandidateSelector;
+}
+
+interface ProviderEvidenceCandidateOperationCommand extends ProviderEvidenceCandidateCommandScope {
+  readonly operationId: string;
+}
+
+export type ProviderEvidenceOperatorCommand =
+  | (ProviderEvidenceCandidateOperationCommand & {
+      readonly kind: "provider_evidence_candidate_start";
+      readonly candidatesFile: string;
+      readonly schemaVersion: string;
+      readonly normalizationVersion: string;
+      readonly identityFingerprintVersion: "tenant_hmac_sha256_v1";
+      readonly identityCustody: {
+        readonly emailAddressKeyId: string;
+        readonly emailNormalizationVersion: number;
+      };
+    })
+  | (ProviderEvidenceCandidateOperationCommand & {
+      readonly kind: "provider_evidence_candidate_read";
+    })
+  | (ProviderEvidenceCandidateOperationCommand & {
+      readonly kind: "provider_evidence_candidate_advance";
+      readonly expectedRequestNumber: number;
+    })
+  | (ProviderEvidenceCandidateOperationCommand & {
+      readonly kind: "provider_evidence_candidate_seal";
+      readonly generationId: string;
+    })
+  | (ProviderEvidenceCandidateCommandScope & {
+      readonly kind: "provider_evidence_candidate_generation_read";
+      readonly generationId: string;
+    });
 
 export interface ProviderEvidenceCandidateSelectorResult {
   readonly selector_id: string;

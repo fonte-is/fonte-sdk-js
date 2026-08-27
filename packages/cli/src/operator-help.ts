@@ -1,5 +1,6 @@
 import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
-interface HelpEntry {
+import { providerEvidenceHelpEntries } from "./operator-provider-evidence-help.js";
+export interface HelpEntry {
   readonly command: readonly string[];
   readonly usage: readonly (readonly string[])[];
   readonly detail: string;
@@ -244,6 +245,7 @@ const entries: readonly HelpEntry[] = [
     },
   ]),
   ...providerAudienceHelpEntries,
+  ...providerEvidenceHelpEntries,
   ...(["prepare", "send", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({
       command: ["broadcast", operation],

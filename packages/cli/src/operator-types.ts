@@ -13,6 +13,11 @@ import type {
   ProviderConnectionOperatorCommand,
 } from "./operator-provider-connection-types.js";
 import type {
+  ProviderEvidenceCandidateGenerationResult,
+  ProviderEvidenceCandidateOperationResult,
+  ProviderEvidenceOperatorCommand,
+} from "./operator-provider-evidence-types.js";
+import type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
   ProductionAudienceAppendResult,
@@ -152,6 +157,7 @@ export type OperatorCommand =
     }
   | ProviderAudienceOperatorCommand
   | ProviderConnectionOperatorCommand
+  | ProviderEvidenceOperatorCommand
   | { readonly kind: "unsupported" };
 
 export interface ParsedOperatorArguments {
@@ -265,7 +271,9 @@ export type OperatorResult =
   | ProviderAudienceReconciliationResult
   | ProviderAudienceFreezeResult
   | ProviderConnectionListResult
-  | ProviderConnectionOAuthResult;
+  | ProviderConnectionOAuthResult
+  | ProviderEvidenceCandidateOperationResult
+  | ProviderEvidenceCandidateGenerationResult;
 
 export interface OperatorReceipt {
   readonly schema_version: "fonte.cli.operator_receipt.v1";
@@ -285,6 +293,7 @@ export interface OperatorReceipt {
       | "fonte.core.contact_import.v1"
       | "fonte.core.provider_audience.v1"
       | "fonte.core.provider_connections.v1"
+      | "fonte.core.provider_evidence_candidate.v1"
       | "unavailable";
   };
   readonly core_effect:
