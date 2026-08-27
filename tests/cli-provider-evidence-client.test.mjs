@@ -78,9 +78,13 @@ test("official client binds the exact 69,987 selector and exposes only aggregate
   assert.equal(requests[1].init.headers["idempotency-key"], `${operationId}:1`);
   assert.equal(requests[2].init.method, "GET");
   assert.equal(requests[2].init.body, undefined);
-  assert.match(requests[2].url, /selectorGenerationId=/);
+  assert.deepEqual(Object.fromEntries(new URL(requests[2].url).searchParams), {
+    environment: "production", ...guard({ candidateCount: String(candidateCount) }),
+  });
   assert.deepEqual(JSON.parse(requests[3].init.body), { generationId, ...guard() });
-  assert.match(requests[4].url, /candidate-generations/);
+  assert.deepEqual(Object.fromEntries(new URL(requests[4].url).searchParams), {
+    environment: "production", ...guard({ candidateCount: String(candidateCount) }),
+  });
 
   for (const result of [started, advanced, progress, sealed, generation]) {
     const serialized = JSON.stringify(result);
@@ -181,9 +185,11 @@ function generationReceipt() {
   };
 }
 
-function guard() {
-  return { selectorGenerationId, artifactSha256: selector.artifactSha256,
-    candidateManifestSha256: selector.candidateManifestSha256 };
+function guard(overrides = {}) {
+  return { connectionId, selectorId: selector.selectorId, selectorGenerationId,
+    artifactSha256: selector.artifactSha256,
+    identitySetSha256: selector.identitySetSha256, candidateCount,
+    candidateManifestSha256: selector.candidateManifestSha256, ...overrides };
 }
 
 function jsonResponse(value) {

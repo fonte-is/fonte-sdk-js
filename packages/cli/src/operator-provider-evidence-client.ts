@@ -68,7 +68,7 @@ export function createProviderEvidenceClient(request: CoreRequester): ProviderEv
         providerEvidenceCandidateOperation,
         await request(
           `${operationPath(input)}/requests?environment=${input.environment}`,
-          { body: { ...guard(input.selector), expectedRequestNumber },
+          { body: { ...guard(input), expectedRequestNumber },
             idempotencyKey: `${uuid(input.operationId)}:${expectedRequestNumber}`,
             lostResponseEffect: "unknown", timeoutMs: 60_000 },
         ),
@@ -91,7 +91,7 @@ export function createProviderEvidenceClient(request: CoreRequester): ProviderEv
         await request(
           `${operationPath(input)}/generations?environment=${input.environment}`,
           {
-            body: { generationId, ...guard(input.selector) },
+            body: { generationId, ...guard(input) },
             idempotencyKey: generationId,
             lostResponseEffect: "unknown",
           },
@@ -194,17 +194,22 @@ function operationPath(input: ProviderEvidenceCandidateOperationInput): string {
 }
 
 function guardQuery(input: ProviderEvidenceCandidateScope): string {
-  const query = new URLSearchParams({
-    environment: input.environment,
-    ...guard(input.selector),
-  });
+  const query = new URLSearchParams({ environment: input.environment });
+  for (const [key, value] of Object.entries(guard(input))) {
+    query.set(key, String(value));
+  }
   return `?${query}`;
 }
 
-function guard(selector: ProviderEvidenceCandidateSelector) {
+function guard(input: ProviderEvidenceCandidateScope) {
+  const selector = input.selector;
   return {
+    connectionId: uuid(input.connectionId),
+    selectorId: bounded(selector.selectorId, 500),
     selectorGenerationId: uuid(selector.selectorGenerationId),
     artifactSha256: sha256(selector.artifactSha256),
+    identitySetSha256: sha256(selector.identitySetSha256),
+    candidateCount: positiveInteger(selector.candidateCount),
     candidateManifestSha256: sha256(selector.candidateManifestSha256),
   };
 }
