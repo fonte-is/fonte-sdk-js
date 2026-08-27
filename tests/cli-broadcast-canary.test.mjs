@@ -463,6 +463,104 @@ test("a release with no positive progress pauses without retrying the mutation",
   );
 });
 
+test("a stale resume conflict stops without an opposing stale pause", async () => {
+  const paused = progress({
+    ...initial,
+    status: "paused",
+    controlState: "paused",
+  });
+  const harness = canaryHarness([
+    paused,
+    json({ error: "broadcast_send_control_conflict" }, 409),
+  ]);
+
+  const result = await runProgram(argumentsForCanary(), harness.dependencies);
+  const receipt = JSON.parse(result.stdout);
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(receipt.reason, "broadcast_send_control_conflict");
+  assert.equal(receipt.core_effect, "none");
+  assert.equal(receipt.result.final.control_state, "paused");
+  assert.deepEqual(receipt.result.completed_steps, ["authoritative_status"]);
+  assert.deepEqual(
+    harness.coreRequests().map(({ method, body }) => ({ method, body })),
+    [
+      { method: "GET", body: null },
+      {
+        method: "POST",
+        body: {
+          operation: "resume",
+          expectedControlVersion: paused.controlVersion,
+        },
+      },
+    ],
+  );
+});
+
+test("a lost resume response reads fresh authority before one version-current safety pause", async () => {
+  const initialBearer = "synthetic.canary.initial";
+  const safetyBearer = "synthetic.canary.safety";
+  const paused = progress({
+    ...initial,
+    status: "paused",
+    controlState: "paused",
+  });
+  const active = { ...progress(initial), controlVersion: "70301" };
+  const safelyPaused = {
+    ...progress({ ...initial, status: "paused", controlState: "paused" }),
+    controlVersion: "70302",
+  };
+  const harness = canaryHarness(
+    [
+      paused,
+      new TypeError("synthetic lost resume response"),
+      active,
+      safelyPaused,
+    ],
+    { bearers: [initialBearer, safetyBearer] },
+  );
+
+  const result = await runProgram(argumentsForCanary(), harness.dependencies);
+  const receipt = JSON.parse(result.stdout);
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(receipt.reason, "core_api_unavailable");
+  assert.equal(receipt.core_effect, "unknown");
+  assert.equal(receipt.result.final.control_state, "paused");
+  assert.deepEqual(receipt.result.completed_steps, [
+    "authoritative_status",
+    "authoritative_wait_read",
+    "safety_pause",
+  ]);
+  assert.deepEqual(
+    harness.coreRequests().map(({ method, body, bearer: value }) => ({
+      method,
+      body,
+      bearer: value,
+    })),
+    [
+      { method: "GET", body: null, bearer: initialBearer },
+      {
+        method: "POST",
+        body: {
+          operation: "resume",
+          expectedControlVersion: paused.controlVersion,
+        },
+        bearer: initialBearer,
+      },
+      { method: "GET", body: null, bearer: safetyBearer },
+      {
+        method: "POST",
+        body: {
+          operation: "pause",
+          expectedControlVersion: active.controlVersion,
+        },
+        bearer: safetyBearer,
+      },
+    ],
+  );
+});
+
 function argumentsForCanary(
   releaseCeiling = 36_100,
   idempotencyKey = "release-to-36100",

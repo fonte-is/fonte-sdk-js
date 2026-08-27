@@ -26,6 +26,7 @@ interface CanaryState {
   authorizationStartedAt: Date | null;
   authorizationGranted: boolean;
   mutationObserved: boolean;
+  freshSafetyReadbackRequired: boolean;
   pauseRequired: boolean;
   pauseAttempted: boolean;
   baseline: ProductionBroadcastProgressResult | null;
@@ -55,6 +56,7 @@ export async function runBroadcastCanary(
     authorizationStartedAt: null,
     authorizationGranted: false,
     mutationObserved: false,
+    freshSafetyReadbackRequired: false,
     pauseRequired: false,
     pauseAttempted: false,
     baseline: null,
@@ -128,12 +130,17 @@ export async function runBroadcastCanary(
     let baseline = first;
     if (baseline.control_state === "paused") {
       state.pauseRequired = true;
-      baseline = await client!.controlProductionBroadcast({
-        workspace: command.workspace,
-        broadcastId: command.broadcastId,
-        operation: "resume",
-        expectedControlVersion: first.control_version,
-      });
+      try {
+        baseline = await client!.controlProductionBroadcast({
+          workspace: command.workspace,
+          broadcastId: command.broadcastId,
+          operation: "resume",
+          expectedControlVersion: first.control_version,
+        });
+      } catch (error) {
+        state.freshSafetyReadbackRequired = indeterminateMutation(error);
+        throw error;
+      }
       state.mutationObserved = true;
       state.current = baseline;
       state.completedSteps.add("safe_resume");
@@ -223,15 +230,17 @@ export async function runBroadcastCanary(
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
     let coreEffect: OperatorReceipt["core_effect"] = core?.coreEffect ?? "none";
-    const freshSafetyAuthorization =
-      state.mutationObserved && requiresFreshSafetyAuthorization(error);
+    const freshSafetyReadback =
+      state.freshSafetyReadbackRequired ||
+      (state.mutationObserved && requiresFreshSafetyAuthorization(error));
     if (
       config &&
       state.pauseRequired &&
-      (freshSafetyAuthorization || (client && !state.pauseAttempted))
+      !unambiguousControlConflict(error) &&
+      (freshSafetyReadback || (client && !state.pauseAttempted))
     ) {
       try {
-        if (freshSafetyAuthorization) {
+        if (freshSafetyReadback) {
           await freshSafetyPause(config, command, state, dependencies, now);
         } else {
           await pause(client!, command, state);
@@ -329,6 +338,15 @@ function unambiguousHumanAuthInvalidRead(error: unknown): boolean {
     error instanceof CoreOperatorError &&
     error.reason === "human_auth_invalid" &&
     error.statusCode === 401 &&
+    error.coreEffect === "none"
+  );
+}
+
+function unambiguousControlConflict(error: unknown): boolean {
+  return (
+    error instanceof CoreOperatorError &&
+    error.reason === "broadcast_send_control_conflict" &&
+    error.statusCode === 409 &&
     error.coreEffect === "none"
   );
 }
