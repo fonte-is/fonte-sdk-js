@@ -18,6 +18,10 @@ import {
   type ProviderConnectionClient,
 } from "./operator-provider-connection-client.js";
 import {
+  createWorkspaceInvitationClient,
+  type WorkspaceInvitationClient,
+} from "./operator-workspace-invitation-client.js";
+import {
   requestBroadcastPreflight,
   type BroadcastPreflightInput,
 } from "./operator-preflight-client.js";
@@ -88,6 +92,18 @@ export type {
   RecipientExpressionInput,
   RecipientReferenceInput,
 } from "./operator-production-types.js";
+export type {
+  WorkspaceContextResult,
+  WorkspaceInvitationClaimInput,
+  WorkspaceInvitationClaimResult,
+  WorkspaceInvitationCreateInput,
+  WorkspaceInvitationCreateResult,
+  WorkspaceInvitationEnvironment,
+  WorkspaceInvitationResult,
+  WorkspaceInvitationRole,
+  WorkspaceInvitationStatus,
+  WorkspaceInvitationWorkspaceResult,
+} from "./operator-workspace-invitation-client.js";
 export { CoreOperatorError } from "./operator-core-request.js";
 
 export interface CoreOperatorClientOptions {
@@ -101,7 +117,8 @@ export interface CoreOperatorClient
   extends
     ProductionOperatorClient,
     ProviderAudienceClient,
-    ProviderConnectionClient {
+    ProviderConnectionClient,
+    WorkspaceInvitationClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -146,6 +163,7 @@ export function createCoreOperatorClient(
     ...createProductionOperatorClient(request),
     ...createProviderAudienceClient(request),
     ...createProviderConnectionClient(request),
+    ...createWorkspaceInvitationClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,
