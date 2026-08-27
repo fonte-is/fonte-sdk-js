@@ -276,16 +276,14 @@ test("a preliminary loopback request cannot consume the exact authorized callbac
       "/callback?state=expected-state",
     );
     assert.equal(preliminary.status, 400);
-    assert.match(preliminary.body, /data-outcome="failure"/);
-    assert.match(preliminary.body, /role="alert"/);
+    assert.match(preliminary.body, /Authorization not completed/);
 
     const accepted = await requestCallback(
       listener.boundPort,
       "/callback?code=synthetic-code&state=expected-state",
     );
     assert.equal(accepted.status, 200);
-    assert.match(accepted.body, /data-outcome="success"/);
-    assert.match(accepted.body, /role="status"/);
+    assert.match(accepted.body, /Authorization complete/);
     const callback = await listener.callback;
     assert.equal(callback.searchParams.get("code"), "synthetic-code");
     assert.equal(callback.searchParams.get("state"), "expected-state");
