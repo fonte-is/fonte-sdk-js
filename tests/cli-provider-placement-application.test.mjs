@@ -124,6 +124,10 @@ test("malformed input and mismatched readback fail closed without recipient disc
   for (const response of [
     {
       ...receipt("complete"),
+      workspaceId: "10000000-0000-4000-8000-000000000698",
+    },
+    {
+      ...receipt("complete"),
       connectionId: "10000000-0000-4000-8000-000000000699",
     },
     {

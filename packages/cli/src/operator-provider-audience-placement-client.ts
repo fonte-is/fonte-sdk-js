@@ -5,6 +5,7 @@ import {
 } from "./operator-core-request.js";
 import { providerPlacementApplicationFile } from "./operator-provider-audience-placement-input.js";
 import { providerPlacementApplicationReceipt } from "./operator-provider-audience-placement-json.js";
+import { uuid } from "./operator-provider-audience-placement-values.js";
 import type {
   ProviderPlacementApplicationResult,
   ProviderPlacementCommandInput,
@@ -86,7 +87,11 @@ function matchingPlacement(
   effect: "none" | "unknown",
 ): ProviderPlacementApplicationResult {
   const source = application.placement.source;
+  const certificateScope = application.retirementCertificate.scope as Readonly<
+    Record<string, unknown>
+  >;
   if (
+    result.workspace_id !== uuid(certificateScope.workspaceId) ||
     result.environment !== input.environment ||
     result.provider !== "resend" ||
     result.connection_id !== source.connectionId ||
