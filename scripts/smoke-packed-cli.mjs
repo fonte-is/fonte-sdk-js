@@ -70,7 +70,13 @@ try {
   const localManifest = JSON.parse(await readFile(localManifestPath, "utf8"));
   assert.equal(localManifest.cli_version, cliVersion);
   assert.equal(receipt(cli, fixture, ["doctor", "--json"]).outcome, "verified");
-  for (const compatibleVersion of ["0.1.0", "0.1.1", "0.1.2", "0.1.3"]) {
+  for (const compatibleVersion of [
+    "0.1.0",
+    "0.1.1",
+    "0.1.2",
+    "0.1.3",
+    "0.1.4",
+  ]) {
     localManifest.cli_version = compatibleVersion;
     await writeFile(
       localManifestPath,
@@ -112,7 +118,7 @@ try {
       lifecycle: ["version", "init", "doctor", "remove"],
       manifestVersions: {
         created: cliVersion,
-        compatible: ["0.1.0", "0.1.1", "0.1.2", "0.1.3"],
+        compatible: ["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4"],
       },
       packedProviderOAuthCommands: true,
       packedFonteAudienceSource: true,
