@@ -5,6 +5,7 @@ import {
   createCoreOperatorClient,
   CoreOperatorError,
 } from "./operator-client.js";
+import { withAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
 import {
   executeProviderAudienceCommand,
   providerAudienceReceiptDescriptor,
@@ -71,7 +72,7 @@ export async function runOperatorCommand(
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
-    return {
+    return withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
       schema_version: "fonte.cli.operator_receipt.v1",
       command: command.kind,
       outcome: "blocked",
@@ -84,7 +85,7 @@ export async function runOperatorCommand(
       authority: currentAuthority(command),
       core_effect: core?.coreEffect ?? "none",
       result: null,
-    };
+    });
   }
 }
 async function execute(

@@ -5,6 +5,7 @@ import {
   CoreOperatorError,
   type CoreOperatorClient,
 } from "./operator-client.js";
+import { withAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
 import type { ProductionBroadcastProgressResult } from "./operator-production-types.js";
 import type { OperatorDependencies } from "./operator-run.js";
 import type {
@@ -618,7 +619,7 @@ function receipt(
   reason: string,
   coreEffect: OperatorReceipt["core_effect"],
 ): OperatorReceipt {
-  return {
+  return withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
     schema_version: "fonte.cli.operator_receipt.v1",
     command: command.kind,
     outcome,
@@ -645,5 +646,5 @@ function receipt(
       baseline: state.baseline,
       final: state.current,
     },
-  };
+  });
 }

@@ -1,3 +1,4 @@
+import { renderAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
 import type { OperatorReceipt } from "./operator-types.js";
 
 export function renderProductionOperatorHuman(
@@ -88,6 +89,8 @@ export function renderProductionOperatorHuman(
       `Control state: ${final?.control_state ?? "unavailable"}.`,
       `Authorization: ${result.authorization.status}; bearer persisted: no.`,
       `Reason: ${receipt.reason}.`,
+      `Core effect: ${receipt.core_effect}.`,
+      ...renderAmbiguousBroadcastRecovery(receipt),
       "",
     ].join("\n");
   }

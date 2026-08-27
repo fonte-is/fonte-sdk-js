@@ -106,6 +106,13 @@ sanitized progress, completed steps, and the ended in-memory authorization
 lifetime. Cancellation, expiry, failed OAuth state, or a distinct invocation
 never inherits that bearer.
 
+When a canary or control mutation response is ambiguous, the receipt keeps
+`core_effect: "unknown"` and adds a `next_action` containing the exact
+`fonte broadcast status ... --json` readback plus `retry_mutation: false`.
+The human receipt renders the same authoritative command and explicitly says
+not to retry the mutation. Status readback is the only sanctioned next step;
+an absent response never becomes evidence that the mutation had no effect.
+
 When Core reports prior audience use, preflight exposes the exact non-sensitive
 audience identity. `--acknowledge-audience-reuse` sends Core's bounded v1
 override and waives only that warning. It does not waive any other authority.

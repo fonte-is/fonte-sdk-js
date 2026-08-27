@@ -1,4 +1,5 @@
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+import type { OperatorNextAction } from "./operator-broadcast-recovery.js";
 import type {
   ContactImportStatusResult,
   ProviderAudienceFreezeResult,
@@ -293,5 +294,6 @@ export interface OperatorReceipt {
     | "controlled"
     | "copied"
     | "unknown";
+  readonly next_action?: OperatorNextAction;
   readonly result: OperatorResult | null;
 }
