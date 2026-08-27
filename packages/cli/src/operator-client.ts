@@ -18,6 +18,10 @@ import {
   type ProviderConnectionClient,
 } from "./operator-provider-connection-client.js";
 import {
+  createProviderEvidenceClient,
+  type ProviderEvidenceClient,
+} from "./operator-provider-evidence-client.js";
+import {
   createWorkspaceInvitationClient,
   type WorkspaceInvitationClient,
 } from "./operator-workspace-invitation-client.js";
@@ -67,6 +71,17 @@ export type {
   ProviderConnectionOAuthResult,
   ProviderConnectionProvider,
 } from "./operator-provider-connection-types.js";
+export type {
+  ProviderEvidenceCandidateAdvanceInput,
+  ProviderEvidenceCandidateGenerationInput,
+  ProviderEvidenceCandidateGenerationResult,
+  ProviderEvidenceCandidateOperationInput,
+  ProviderEvidenceCandidateOperationResult,
+  ProviderEvidenceCandidateSealInput,
+  ProviderEvidenceCandidateSelector,
+  ProviderEvidenceCandidateStartInput,
+  ProviderEvidenceCandidateTarget,
+} from "./operator-provider-evidence-types.js";
 export type {
   AudienceReuseOverrideInput,
   ProductionAudienceAppendBaselineResult,
@@ -118,6 +133,7 @@ export interface CoreOperatorClient
     ProductionOperatorClient,
     ProviderAudienceClient,
     ProviderConnectionClient,
+    ProviderEvidenceClient,
     WorkspaceInvitationClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
@@ -163,6 +179,7 @@ export function createCoreOperatorClient(
     ...createProductionOperatorClient(request),
     ...createProviderAudienceClient(request),
     ...createProviderConnectionClient(request),
+    ...createProviderEvidenceClient(request),
     ...createWorkspaceInvitationClient(request),
     async sendSandboxTest(input) {
       const response = await request(
