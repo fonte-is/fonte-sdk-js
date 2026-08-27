@@ -2,14 +2,15 @@ export type CallbackPageOutcome = "success" | "failure";
 
 const content = {
   success: {
-    title: "Authorization complete",
-    description: "Return to your terminal to continue.",
-    detail: "You can close this tab.",
+    title: "You’re almost there",
+    description: "Fonte received your approval.",
+    detail: "Head back to your terminal to finish connecting.",
   },
   failure: {
-    title: "Authorization not completed",
-    description: "Return to your terminal for the reason, then try again.",
-    detail: "No credential was stored by this page.",
+    title: "Fonte couldn’t connect",
+    description: "The sign-in attempt couldn’t be confirmed.",
+    detail:
+      "Head back to your terminal to see what happened. Nothing was saved.",
   },
 } as const;
 

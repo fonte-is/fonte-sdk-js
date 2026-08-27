@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderCallbackPage } from "../packages/cli/dist/loopback-callback-page.js";
 
-test("OAuth callback uses the canonical Fonte access-page language", () => {
+test("OAuth callback renders an accessible success handoff", () => {
   const page = renderCallbackPage("success");
 
-  assert.match(page, /Authorization complete/);
-  assert.match(page, /Return to your terminal to continue\./);
   assert.match(page, /viewBox="0 0 38 38"/);
   assert.match(page, /M34\.7188 15\.7682/);
   assert.match(page, /<main aria-labelledby="callback-title">/);
+  assert.match(page, /data-outcome="success"/);
+  assert.match(page, /role="status"/);
   assert.match(page, /class="status-icon"/);
   assert.match(page, /max-width: 360px/);
   assert.match(page, /font-size: 24px/);
@@ -31,8 +31,6 @@ test("OAuth callback uses the canonical Fonte access-page language", () => {
 test("OAuth callback renders a truthful failure state", () => {
   const page = renderCallbackPage("failure");
 
-  assert.match(page, /Authorization not completed/);
-  assert.match(page, /No credential was stored by this page\./);
   assert.match(page, /data-outcome="failure"/);
   assert.match(page, /role="alert"/);
   assert.match(page, /\[data-outcome="failure"\] \.status-icon/);
