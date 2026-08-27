@@ -8,6 +8,7 @@ import {
   nullableCount,
   nullableInstant,
   nullableNumber,
+  nullableText,
   object,
   progressStatus,
   requireProduction,
@@ -71,6 +72,22 @@ export function productionTest(value: unknown): ProductionTestResult {
   const refused = count(body.refusedCount);
   const unknown = count(body.unknownCount);
   if (accepted + refused + unknown !== submitted) invalid();
+  const billing = object(body.billing);
+  const outbox = object(body.outbox);
+  const providerMessageId = nullableText(outbox.providerMessageId, 1_000);
+  const acceptedUsage = count(billing.acceptedUsageQuantity);
+  const usageRecords = count(billing.usageRecordCount);
+  if (
+    submitted !== 1 ||
+    (accepted === 1 &&
+      (status !== "terminal" ||
+        providerMessageId === null ||
+        acceptedUsage !== 1 ||
+        usageRecords !== 1)) ||
+    (accepted === 0 &&
+      (providerMessageId !== null || acceptedUsage !== 0 || usageRecords !== 0))
+  )
+    invalid();
   return {
     kind: "production_test",
     draft_id: uuid(body.broadcastDraftId),
@@ -81,9 +98,9 @@ export function productionTest(value: unknown): ProductionTestResult {
     accepted_count: accepted,
     refused_count: refused,
     unknown_count: unknown,
-    accepted_email_usage_quantity: count(
-      object(body.billing).acceptedUsageQuantity,
-    ),
+    provider_message_id: providerMessageId,
+    accepted_email_usage_quantity: acceptedUsage,
+    accepted_email_usage_record_count: usageRecords,
   };
 }
 

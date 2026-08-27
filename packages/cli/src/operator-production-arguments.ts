@@ -121,6 +121,8 @@ function productionTestSend(argv: readonly string[]): ParsedOperatorArguments {
     "--revision",
     "--postal-address",
     "--idempotency-key",
+    "--text-body",
+    "--html-body",
   ]);
   return operatorArguments(options, {
     kind: "broadcast_production_test_send",
@@ -133,6 +135,8 @@ function productionTestSend(argv: readonly string[]): ParsedOperatorArguments {
       "--postal-address",
     ),
     idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
+    textBody: content(required(options, "--text-body"), 750_000, "--text-body"),
+    htmlBody: content(required(options, "--html-body"), 750_000, "--html-body"),
   });
 }
 

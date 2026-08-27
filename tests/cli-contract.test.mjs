@@ -208,6 +208,8 @@ test("invalid JSON calls stay private and every current command help matches its
   assert.match(productionTestHelp.stdout, /--environment sandbox/);
   assert.match(productionTestHelp.stdout, /--environment production/);
   assert.match(productionTestHelp.stdout, /--postal-address <address>/);
+  assert.match(productionTestHelp.stdout, /--text-body <text>/);
+  assert.match(productionTestHelp.stdout, /--html-body <html>/);
   const contract = await readFile(
     path.join(root, "packages/cli/CONTRACT.md"),
     "utf8",

@@ -8,6 +8,9 @@ export const bearer = "synthetic.header.signature";
 export const workspace = "northstar";
 export const postalAddress = "1 Synthetic Way";
 export const reuseIdentity = `sha256:${"a".repeat(64)}`;
+export const textBody = "Hello synthetic subscribers";
+export const htmlBody = "<p>Hello synthetic subscribers</p>";
+export const providerMessageId = "provider-message-synthetic";
 
 export function hostedConfig(coreApiBaseUrl) {
   return {
@@ -20,7 +23,7 @@ export function hostedConfig(coreApiBaseUrl) {
   };
 }
 
-export function draftEnvelope(outcome) {
+export function draftEnvelope(outcome, latestTestId = null) {
   return bound({
     outcome,
     draft: {
@@ -39,6 +42,7 @@ export function draftEnvelope(outcome) {
       version: 1,
       createdAt: "2026-08-20T18:00:00.000Z",
       updatedAt: "2026-08-20T18:00:00.000Z",
+      latestTestMarketingBroadcastId: latestTestId,
     },
   });
 }
@@ -99,9 +103,13 @@ export function testReadback(status) {
     acceptedCount: terminal ? 1 : 0,
     refusedCount: 0,
     unknownCount: terminal ? 0 : 1,
-    billing: { acceptedUsageQuantity: terminal ? 1 : 0 },
-    recipient: "verified@example.test",
-    providerMessageId: "provider-secret",
+    billing: {
+      acceptedUsageQuantity: terminal ? 1 : 0,
+      usageRecordCount: terminal ? 1 : 0,
+    },
+    outbox: {
+      providerMessageId: terminal ? providerMessageId : null,
+    },
   });
 }
 

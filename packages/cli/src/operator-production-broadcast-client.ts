@@ -74,6 +74,8 @@ export function createProductionBroadcastClient(
             postalAddress: input.postalAddress,
             idempotencyKey: input.idempotencyKey,
             clickTrackingEnabled: false,
+            textBody: input.textBody,
+            htmlBody: input.htmlBody,
           },
         }),
         "unknown",

@@ -32,7 +32,7 @@ fonte broadcast audience preview --workspace <slug> --environment production \
 
 fonte broadcast test send --workspace <slug> --environment production \
   --draft-id <uuid> --revision <n> --postal-address <address> \
-  --idempotency-key <key>
+  --idempotency-key <key> --text-body <text> --html-body <html>
 
 fonte broadcast test status --workspace <slug> --environment production \
   --draft-id <uuid> --test-id <uuid> [--watch]
@@ -82,8 +82,21 @@ selection identity. Core computes live preview counts and freezes the exact
 immutable recipient snapshot only during authorization.
 
 The production test command cannot accept a recipient. Core resolves only the
-signed-in account's verified email. Test and progress watches poll existing
-read routes; they create no authority. Pause, resume, and cancel map only to
+signed-in account's verified email. Both MIME bodies are required explicitly;
+Core requires `--html-body` to equal the persisted draft body and commits the
+separate `--text-body` in the same immutable send authorization. Neither body
+is derived, substituted, or retained as local CLI truth.
+
+Before the one permitted test-send mutation, read the draft and freeze its
+`latest_test_id` baseline. If the mutation response is lost, do not repeat the
+mutation. Read the draft again and proceed to `broadcast test status` only when
+Core returns one exact new `latest_test_id` and the operation had exclusive
+test-send authority; an unchanged or otherwise ambiguous ID remains unknown.
+The terminal accepted receipt includes Core's durably reconciled provider
+MessageId plus accepted usage quantity and usage-record count. Processing,
+refused, or unknown outcomes keep the MessageId null and never authorize a
+mutation retry. Test and progress watches poll existing read routes; they
+create no authority. Pause, resume, and cancel map only to
 Core's broadcast-scoped state-idempotent control operation. Each command binds
 the exact `control_version` returned by an authoritative status read. A stale
 opposing command fails with Core's typed conflict and is never retried.

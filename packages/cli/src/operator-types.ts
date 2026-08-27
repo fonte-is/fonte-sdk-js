@@ -82,6 +82,8 @@ export type OperatorCommand =
       readonly revision: number;
       readonly postalAddress: string;
       readonly idempotencyKey: string;
+      readonly textBody: string;
+      readonly htmlBody: string;
     }
   | {
       readonly kind: "broadcast_production_test_status";

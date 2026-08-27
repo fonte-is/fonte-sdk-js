@@ -11,6 +11,7 @@ import {
   draftId,
   finalResult,
   hostedConfig,
+  htmlBody,
   preflight,
   progress,
   purposeId,
@@ -18,10 +19,16 @@ import {
   reuseOverride,
   testId,
   testReadback,
+  textBody,
 } from "./cli-production-broadcast-responses.mjs";
 
 export async function openFakeCore(context) {
-  const state = { requests: [], testReads: 0, progressReads: 0 };
+  const state = {
+    requests: [],
+    testReads: 0,
+    progressReads: 0,
+    latestTestId: null,
+  };
   const server = createServer((request, response) =>
     handleRequest(state, server, request, response),
   );
@@ -58,7 +65,7 @@ async function handleRequest(state, server, request, response) {
     return send(response, draftEnvelope("applied"), 201);
   }
   if (url.pathname.endsWith(`/broadcast-drafts/${draftId}`)) {
-    return send(response, draftEnvelope(null));
+    return send(response, draftEnvelope(null, state.latestTestId));
   }
   if (url.pathname.endsWith("/audience-options")) {
     return send(response, audienceOptions());
@@ -75,6 +82,9 @@ async function handleRequest(state, server, request, response) {
   ) {
     if (body.operation === "send_test_to_verified_account") {
       assert.equal("recipients" in body, false);
+      assert.equal(body.textBody, textBody);
+      assert.equal(body.htmlBody, htmlBody);
+      state.latestTestId = testId;
       return send(response, queued("test"), 201);
     }
     assert.equal(body.operation, "authorize_persisted_production");

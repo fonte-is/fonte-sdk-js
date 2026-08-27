@@ -5,6 +5,7 @@ import {
   productionAudiencePreview,
   productionDraft,
 } from "./operator-production-json.js";
+import { object, uuid } from "./operator-production-json-values.js";
 import type {
   ProductionAudienceOptionsResult,
   ProductionAudiencePreviewInput,
@@ -60,15 +61,13 @@ export function createProductionDraftClient(
       return result;
     },
     async readProductionDraft(input) {
-      const result = parse(
-        productionDraft,
-        await request(
-          `${workspacePath(input.workspace)}/broadcast-drafts/${segment(input.draftId)}?environment=production`,
-        ),
+      const value = await request(
+        `${workspacePath(input.workspace)}/broadcast-drafts/${segment(input.draftId)}?environment=production`,
       );
+      const result = parse(productionDraft, value);
       if (result.draft_id !== input.draftId || result.outcome !== null)
         invalid("none");
-      return result;
+      return { ...result, latest_test_id: latestTestId(value) };
     },
     async listProductionAudienceOptions(input) {
       return parse(
@@ -89,6 +88,15 @@ export function createProductionDraftClient(
       return result;
     },
   };
+}
+
+function latestTestId(value: unknown): string | null {
+  try {
+    const id = object(object(value).draft).latestTestMarketingBroadcastId;
+    return id === null ? null : uuid(id);
+  } catch {
+    return invalid("none");
+  }
 }
 
 function workspacePath(workspace: string): string {

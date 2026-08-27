@@ -7,6 +7,8 @@ import {
   purposeId,
   reuseIdentity,
   testId,
+  textBody,
+  htmlBody,
   workspace,
 } from "./cli-production-broadcast-responses.mjs";
 
@@ -76,24 +78,7 @@ export function productionJourneyArguments() {
       draftId,
       "--json",
     ],
-    [
-      "broadcast",
-      "test",
-      "send",
-      "--workspace",
-      workspace,
-      "--environment",
-      "production",
-      "--draft-id",
-      draftId,
-      "--revision",
-      "1",
-      "--postal-address",
-      postalAddress,
-      "--idempotency-key",
-      "test-once",
-      "--json",
-    ],
+    productionTestSendArguments("--json"),
     [
       "broadcast",
       "test",
@@ -155,6 +140,31 @@ export function productionJourneyArguments() {
       broadcastId,
       "--json",
     ],
+  ];
+}
+
+export function productionTestSendArguments(extra) {
+  return [
+    "broadcast",
+    "test",
+    "send",
+    "--workspace",
+    workspace,
+    "--environment",
+    "production",
+    "--draft-id",
+    draftId,
+    "--revision",
+    "1",
+    "--postal-address",
+    postalAddress,
+    "--idempotency-key",
+    "test-once",
+    "--text-body",
+    textBody,
+    "--html-body",
+    htmlBody,
+    ...(extra ? [extra] : []),
   ];
 }
 

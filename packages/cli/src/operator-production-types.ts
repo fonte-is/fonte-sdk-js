@@ -50,6 +50,8 @@ export interface ProductionTestSendInput extends ProductionDraftReadInput {
   readonly revision: number;
   readonly postalAddress: string;
   readonly idempotencyKey: string;
+  readonly textBody: string;
+  readonly htmlBody: string;
 }
 
 export interface ProductionTestReadInput extends ProductionDraftReadInput {
@@ -174,6 +176,7 @@ export interface ProductionDraftResult {
   readonly recipient_expression: PreflightRecipientExpression | null;
   readonly created_at: string;
   readonly updated_at: string;
+  readonly latest_test_id?: string | null;
 }
 
 export interface ProductionAudienceOptionsResult {
@@ -225,7 +228,9 @@ export interface ProductionTestResult {
   readonly accepted_count: number;
   readonly refused_count: number;
   readonly unknown_count: number;
+  readonly provider_message_id: string | null;
   readonly accepted_email_usage_quantity: number;
+  readonly accepted_email_usage_record_count: number;
 }
 
 export interface ProductionBroadcastProgressResult {

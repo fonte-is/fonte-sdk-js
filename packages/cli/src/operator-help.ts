@@ -98,10 +98,11 @@ const entries: readonly HelpEntry[] = [
       [
         "--workspace <slug> --environment production --draft-id <uuid>",
         "--revision <n> --postal-address <address> --idempotency-key <key>",
+        "--text-body <text> --html-body <html>",
       ],
     ],
     detail:
-      "Sandbox uses the fixed canary; production uses the signed-in account's verified address.",
+      "Sandbox uses the fixed canary; production sends explicit text and HTML to the signed-in account's verified address.",
     json: true,
   },
   {
