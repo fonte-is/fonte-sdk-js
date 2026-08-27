@@ -120,6 +120,9 @@ test("audience append alone receives the bounded longer Core timeout", async () 
           "http://127.0.0.1:49671/callback?code=synthetic-code&state=synthetic-state",
         ),
       ),
+      boundPort: 49671,
+      transition: () => {},
+      finish: () => {},
       close: () => {},
     }),
     openBrowser: async () => {

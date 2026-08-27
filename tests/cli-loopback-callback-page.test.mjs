@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderCallbackPage } from "../packages/cli/dist/loopback-callback-page.js";
 
-test("OAuth callback uses the canonical Fonte access-page language", () => {
-  const page = renderCallbackPage("success");
+test("OAuth status page renders pending without claiming completion", () => {
+  const page = renderCallbackPage("pending");
 
-  assert.match(page, /Authorization complete/);
-  assert.match(page, /Return to your terminal to continue\./);
+  assert.match(page, /Completing authorization/);
+  assert.match(page, /Your terminal is validating the grant\./);
+  assert.match(page, /http-equiv="refresh" content="1"/);
+  assert.doesNotMatch(page, /Authorization complete|You’re almost there/);
   assert.match(page, /viewBox="0 0 38 38"/);
   assert.match(page, /M34\.7188 15\.7682/);
   assert.match(page, /<main aria-labelledby="callback-title">/);
@@ -28,12 +30,27 @@ test("OAuth callback uses the canonical Fonte access-page language", () => {
   );
 });
 
-test("OAuth callback renders a truthful failure state", () => {
-  const page = renderCallbackPage("failure");
+test("OAuth status page renders completion only as a final projection", () => {
+  const page = renderCallbackPage("complete");
 
-  assert.match(page, /Authorization not completed/);
-  assert.match(page, /No credential was stored by this page\./);
-  assert.match(page, /data-outcome="failure"/);
-  assert.match(page, /role="alert"/);
-  assert.match(page, /\[data-outcome="failure"\] \.status-icon/);
+  assert.match(page, /Authorization complete/);
+  assert.match(page, /The authorization grant is ready in your terminal\./);
+  assert.doesNotMatch(page, /http-equiv="refresh"/);
+  assert.match(page, /data-outcome="complete"/);
+  assert.match(page, /role="status"/);
+});
+
+test("OAuth status page keeps failure and expiry generic", () => {
+  const failed = renderCallbackPage("failed");
+  const expired = renderCallbackPage("expired");
+
+  assert.match(failed, /Authorization not completed/);
+  assert.match(expired, /Authorization expired/);
+  for (const page of [failed, expired]) {
+    assert.match(page, /No credential was stored by this page\./);
+    assert.match(page, /role="alert"/);
+    assert.doesNotMatch(page, /http-equiv="refresh"/);
+  }
+  assert.match(failed, /data-outcome="failed"/);
+  assert.match(expired, /data-outcome="expired"/);
 });

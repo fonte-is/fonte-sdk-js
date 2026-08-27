@@ -22,6 +22,7 @@ export interface BrowserAuthorizationTokenResponse {
 }
 
 export interface BrowserAuthorizationDependencies {
+  commitGrant?(): void;
   prepare(hosted: HostedConfig): Promise<PreparedBrowserAuthorization>;
   openBrowser(url: URL): Promise<boolean>;
   listenForOAuthCallback(
@@ -59,6 +60,10 @@ export async function authorizeWithBrowser(
       options,
       dependencies,
       dependencies.now ?? Date.now,
+      (candidate) => {
+        dependencies.commitGrant?.();
+        return candidate;
+      },
     )
   ).accessToken;
 }
@@ -92,7 +97,8 @@ export function createBrowserAuthorizationSession(
     }
     if (refreshFailure) throw new HostedTestBlockedError(refreshFailure);
     if (!refreshing) {
-      refreshing = grant.refresh()
+      refreshing = grant
+        .refresh()
         .then((next) => {
           grant = next;
           refreshFailure = null;
@@ -131,10 +137,12 @@ export function createBrowserAuthorizationSession(
           { signal },
           dependencies,
           now,
-        ).then((initial) => {
-          grant = initial;
-          return initial;
-        }).finally(() => {
+          (candidate) => {
+            dependencies.commitGrant?.();
+            grant = candidate;
+            return candidate;
+          },
+        ).finally(() => {
           authorizing = null;
         });
       }
@@ -151,6 +159,9 @@ async function authorizeGrantWithBrowser(
   options: BrowserAuthorizationOptions,
   dependencies: BrowserAuthorizationDependencies,
   now: () => number,
+  commitGrant: (
+    candidate: MemoryAuthorizationGrant,
+  ) => MemoryAuthorizationGrant,
 ): Promise<MemoryAuthorizationGrant> {
   assertActive(options.signal);
   let listener: Awaited<ReturnType<typeof listenForOAuthCallback>> | undefined;
@@ -164,18 +175,31 @@ async function authorizeGrantWithBrowser(
       throw new HostedTestBlockedError("browser_open_failed");
     const callback = await listener.callback;
     assertActive(options.signal);
-    return grant(
-      await prepared.exchange(callback),
-      prepared.refresh,
-      null,
-      now,
-    );
+    listener.transition("exchanging");
+    const exchanged = await prepared.exchange(callback);
+    assertActive(options.signal);
+    listener.transition("validating");
+    const candidate = grant(exchanged, prepared.refresh, null, now);
+    listener.transition("committing_grant");
+    const committed = commitGrant(candidate);
+    listener.finish("complete");
+    return committed;
   } catch (error) {
-    if (error instanceof HostedTestBlockedError) throw error;
-    throw new HostedTestBlockedError("authorization_failed");
-  } finally {
-    listener?.close();
+    const blocked =
+      error instanceof HostedTestBlockedError
+        ? error
+        : new HostedTestBlockedError("authorization_failed");
+    listener?.finish(terminalPhase(blocked));
+    throw blocked;
   }
+}
+
+function terminalPhase(
+  error: HostedTestBlockedError,
+): "expired" | "cancelled" | "failed" {
+  if (error.reason === "authorization_timeout") return "expired";
+  if (error.reason === "authorization_cancelled") return "cancelled";
+  return "failed";
 }
 
 function grant(
@@ -186,9 +210,10 @@ function grant(
 ): MemoryAuthorizationGrant {
   const response = tokenResponse(value);
   const refreshToken = response.refreshToken ?? retainedRefreshToken;
-  const expiresAt = response.expiresInSeconds === undefined
-    ? null
-    : now() + response.expiresInSeconds * 1_000;
+  const expiresAt =
+    response.expiresInSeconds === undefined
+      ? null
+      : now() + response.expiresInSeconds * 1_000;
   return {
     accessToken: response.accessToken,
     expiresAt,
@@ -196,12 +221,7 @@ function grant(
       if (!refreshToken || !refresh) {
         throw new HostedTestBlockedError("authorization_refresh_unavailable");
       }
-      return grant(
-        await refresh(refreshToken),
-        refresh,
-        refreshToken,
-        now,
-      );
+      return grant(await refresh(refreshToken), refresh, refreshToken, now);
     },
   };
 }

@@ -1,14 +1,24 @@
-export type CallbackPageOutcome = "success" | "failure";
+export type CallbackPageOutcome = "pending" | "complete" | "failed" | "expired";
 
 const content = {
-  success: {
+  pending: {
+    title: "Completing authorization",
+    description: "Fonte received the authorization response.",
+    detail: "Your terminal is validating the grant.",
+  },
+  complete: {
     title: "Authorization complete",
-    description: "Return to your terminal to continue.",
+    description: "The authorization grant is ready in your terminal.",
     detail: "You can close this tab.",
   },
-  failure: {
+  failed: {
     title: "Authorization not completed",
     description: "Return to your terminal for the reason, then try again.",
+    detail: "No credential was stored by this page.",
+  },
+  expired: {
+    title: "Authorization expired",
+    description: "Return to your terminal to start a fresh authorization.",
     detail: "No credential was stored by this page.",
   },
 } as const;
@@ -31,11 +41,20 @@ const fonteFavicon = fonteMark
 const fonteFaviconHref = `data:image/svg+xml,${encodeURIComponent(fonteFavicon)}`;
 
 const statusIcons = {
-  success: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+  pending: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>
+    <path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`,
+  complete: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
     <path d="m7.25 12.25 3 3 6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`,
-  failure: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+  failed: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
     <path d="m8.5 8.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>`,
+  expired: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>
+    <path d="M12 8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="12" cy="16" r="1" fill="currentColor"/>
   </svg>`,
 } as const;
 
@@ -49,6 +68,7 @@ const styles = `
     --text: #252921;
     --text-secondary: #687066;
     --brand: #006edb;
+    --pending: #006edb;
     --success: #079455;
     --failure: #d92d20;
   }
@@ -60,6 +80,7 @@ const styles = `
       --text: #f2efe8;
       --text-secondary: #a8afa7;
       --brand: #53a0ff;
+      --pending: #53a0ff;
       --success: #47cd89;
       --failure: #f97066;
     }
@@ -135,21 +156,27 @@ const styles = `
     flex: 0 0 auto;
     color: var(--success);
   }
-  [data-outcome="failure"] .status-icon {
-    color: var(--failure);
-  }
+  [data-outcome="pending"] .status-icon { color: var(--pending); }
+  [data-outcome="failed"] .status-icon,
+  [data-outcome="expired"] .status-icon { color: var(--failure); }
 `;
 
 export function renderCallbackPage(outcome: CallbackPageOutcome): string {
   const copy = content[outcome];
+  const refresh =
+    outcome === "pending" ? '<meta http-equiv="refresh" content="1">' : "";
+  const role =
+    outcome === "failed" || outcome === "expired" ? "alert" : "status";
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#141915" media="(prefers-color-scheme: dark)">
+    ${refresh}
     <link rel="icon" type="image/svg+xml" sizes="any" href="${fonteFaviconHref}">
     <title>${copy.title} · Fonte</title>
     <style>${styles}</style>
@@ -161,7 +188,7 @@ export function renderCallbackPage(outcome: CallbackPageOutcome): string {
         <h1 id="callback-title">${copy.title}</h1>
         <p class="description">${copy.description}</p>
       </header>
-      <p class="status" role="${outcome === "failure" ? "alert" : "status"}" aria-live="polite">
+      <p class="status" role="${role}" aria-live="polite">
         <span class="status-icon">${statusIcons[outcome]}</span>
         <span>${copy.detail}</span>
       </p>
