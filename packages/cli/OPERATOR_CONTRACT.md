@@ -17,6 +17,9 @@ authoritative read command resolves it.
 ## Production journey
 
 ```text
+fonte broadcast marketing-settings read --workspace <slug> \
+  --environment <sandbox|production>
+
 fonte broadcast audience options --workspace <slug> --environment production
 
 fonte broadcast draft create --workspace <slug> --environment production \
@@ -59,6 +62,11 @@ fonte broadcast pause|resume|cancel --workspace <slug> \
 fonte broadcast result --workspace <slug> --environment production \
   --broadcast-id <uuid>
 ```
+
+Marketing-settings read is one authenticated Core GET with no request body or
+retry. It returns only the exact workspace ID, environment, nonempty normalized
+postal address, and update time; missing, extra, blank, malformed, or
+environment-mismatched readback fails closed with no Core effect.
 
 Draft creation uses the UUID idempotency key as Core's stable draft identity.
 An exact replay is a no-op; changed material under the same key is a conflict.

@@ -34,6 +34,10 @@ import {
   isProductionCommand,
   productionReceiptDescriptor,
 } from "./operator-production-run.js";
+import {
+  executeWorkspaceMarketingSettingsCommand,
+  workspaceMarketingSettingsReceiptDescriptor,
+} from "./operator-marketing-settings-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import type {
   OperatorCommand,
@@ -131,6 +135,11 @@ async function execute(
     ReturnType<typeof loadProviderPlacementApplication>
   > | null,
 ): Promise<OperatorResult> {
+  const marketingSettings = executeWorkspaceMarketingSettingsCommand(
+    command,
+    client,
+  );
+  if (marketingSettings) return marketingSettings;
   if (isProviderConnectionCommand(command)) {
     return executeProviderConnectionCommand(
       command,
@@ -249,6 +258,19 @@ function successReceipt(
       "none",
     );
   }
+  const marketingSettings = workspaceMarketingSettingsReceiptDescriptor(
+    command,
+    result,
+  );
+  if (marketingSettings) {
+    return currentReceipt(
+      marketingSettings.command,
+      marketingSettings.result,
+      "completed",
+      "workspace_marketing_settings_read",
+      "none",
+    );
+  }
   if (result.kind === "resend_bridge_preview") {
     return currentReceipt(
       command,
@@ -359,7 +381,9 @@ function currentAuthority(
   return {
     status: "current",
     contract_id:
-      command.kind === "broadcast_preflight"
+      command.kind === "workspace_marketing_settings_read"
+        ? "fonte.core.workspace_marketing_settings.v1"
+        : command.kind === "broadcast_preflight"
         ? "fonte.core.broadcast_preflight.v1"
         : command.kind === "broadcast_audience_append"
           ? "fonte.core.production_broadcast_audience_append.v1"

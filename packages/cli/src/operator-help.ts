@@ -1,5 +1,6 @@
 import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
 import { providerEvidenceHelpEntries } from "./operator-provider-evidence-help.js";
+import { workspaceMarketingSettingsHelpEntries } from "./operator-marketing-settings-help.js";
 export interface HelpEntry {
   readonly command: readonly string[];
   readonly usage: readonly (readonly string[])[];
@@ -42,6 +43,7 @@ const entries: readonly HelpEntry[] = [
     detail: "Plans or applies removal of Fonte-owned local installation state.",
     json: true,
   },
+  ...workspaceMarketingSettingsHelpEntries,
   {
     command: ["broadcast", "draft", "create"],
     usage: [

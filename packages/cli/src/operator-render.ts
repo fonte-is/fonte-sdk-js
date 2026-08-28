@@ -1,4 +1,5 @@
 import { renderProductionOperatorHuman } from "./operator-production-render.js";
+import { renderWorkspaceMarketingSettings } from "./operator-marketing-settings-render.js";
 import { renderBlockedOperator } from "./operator-blocked-render.js";
 import type {
   ProviderAudienceUnavailableInputResult as UnavailableInput,
@@ -20,6 +21,8 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   }
   const production = renderProductionOperatorHuman(receipt);
   if (production !== null) return production;
+  const marketingSettings = renderWorkspaceMarketingSettings(receipt);
+  if (marketingSettings !== null) return marketingSettings;
   const result = receipt.result!;
   if (result.kind === "contact_import_status") {
     return [

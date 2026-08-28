@@ -33,8 +33,13 @@ import type {
   ProductionTestResult,
   QueuedBroadcastResult,
 } from "./operator-production-types.js";
+import type {
+  WorkspaceMarketingSettingsOperatorCommand,
+  WorkspaceMarketingSettingsResult,
+} from "./operator-marketing-settings-types.js";
 
 export type OperatorCommand =
+  | WorkspaceMarketingSettingsOperatorCommand
   | {
       readonly kind: "broadcast_test_send";
       readonly workspace: string;
@@ -258,6 +263,7 @@ export interface ResendBridgeCopyResult extends Omit<
 }
 
 export type OperatorResult =
+  | WorkspaceMarketingSettingsResult
   | SandboxTestResult
   | BroadcastCanaryResult
   | ProductionAudienceAppendResult
@@ -301,6 +307,7 @@ export interface OperatorReceipt {
       | "fonte.core.provider_placement_application.v1"
       | "fonte.core.provider_connections.v1"
       | "fonte.core.provider_evidence_candidate.v1"
+      | "fonte.core.workspace_marketing_settings.v1"
       | "unavailable";
   };
   readonly core_effect:
