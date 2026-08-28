@@ -121,7 +121,7 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         ],
       ],
       detail:
-        "Starts one fresh private two-pass Resend population and exact named-broadcast recipient acquisition through Core's stored GET-only credential, bound to the placement segment used by the sealed Fonte intake. The CLI emits aggregate receipts only and never accepts candidate rows or provider credentials.",
+        "Starts one fresh private two-pass Resend population and exact named-broadcast recipient acquisition through Core's stored GET-only credential, bound to the placement segment used by the sealed Fonte intake. Next run rotation read; the CLI emits aggregate receipts only and never accepts candidate rows or provider credentials.",
       json: true,
     },
     {
@@ -145,7 +145,7 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         ],
       ],
       detail:
-        "Reads only aggregate population, checkpoint, classification, selector, and checksum receipts for one exact iteration.",
+        "Reads only aggregate population, checkpoint, E/W/X/U classification, selector, and checksum receipts for one exact iteration. Follow its next page/stage: advance once with that page guard, read again, and seal only when ready.",
       json: true,
     },
     {
@@ -160,7 +160,7 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         ],
       ],
       detail:
-        "Seals the fresh exhaustive E/W/X/U partition from Core-held evidence. Any unknown category blocks the outgoing selector; response loss requires rotation read before another seal.",
+        "Seals the fresh exhaustive E/W/X/U partition from Core-held evidence, then requires a final rotation read. Any U identity blocks the outgoing selector; response loss requires rotation read and never permits another blind seal.",
       json: true,
     },
   ];

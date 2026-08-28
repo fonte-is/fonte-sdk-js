@@ -29,6 +29,8 @@ npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbo
 npx @fonte-is/cli bridge import status --workspace my-workspace --environment sandbox --contact-import-batch-id <uuid>
 npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-import-batch-id <uuid> --source-identity-set-sha256 <64-lower-hex> --max-age-seconds 300 --exclude-provider resend --exclude-connection-id <uuid> --exclude-collection-id <provider-id> --exclude-display-name "Protected"
 npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
+npx @fonte-is/cli provider-evidence resend --help
+npx @fonte-is/cli bridge rotation --help
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
@@ -146,5 +148,25 @@ Preflight observes one exact persisted draft revision. Authorization reuses
 Core's existing authority and immutable recipient freeze. Lost mutation
 responses remain unknown until explicit readback. Unexposed declarations return
 `unsupported_authority` before OAuth or network access.
+
+The candidate evidence journey is JSON-only and the rotation journey is
+aggregate-only. Rotation follows one closed sequence: `start`, `read`, then
+`advance` once with the exact page number reported by the latest read and
+`read` again as directed; when Core reports readiness, run `seal`, then one
+final `read`. Never repeat `start`, `advance`, or `seal` after an ambiguous
+response. The receipt keeps `core_effect: unknown`, sets
+`retry_mutation: false`, and supplies the exact readback command when all
+guards are known.
+
+Core classifies the fresh live population into four disjoint private sealed
+sets whose union must equal the population root. `E` is eligible now after
+current safety, positive qualifying-broadcast, created-at, portability, and
+Fonte-custody checks. `W` has no qualifying-broadcast recipient history and
+must remain for warming. `X` is excluded by current unsubscribe, bounce,
+complaint, suppression, or protected Fonte custody. `U` has unknown or missing
+custody, broadcast, created-at, or portability evidence; any `U` blocks the
+outgoing selector. The CLI renders only category counts, sealed identities,
+checksums, and progress—not contact or provider rows.
+
 See [OPERATOR_CONTRACT.md](./OPERATOR_CONTRACT.md) for the exact command,
 authority, receipt, and future MCP boundary.

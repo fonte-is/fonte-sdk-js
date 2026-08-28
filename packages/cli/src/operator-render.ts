@@ -1,6 +1,7 @@
 import { renderProductionOperatorHuman } from "./operator-production-render.js";
 import { renderWorkspaceMarketingSettings } from "./operator-marketing-settings-render.js";
 import { renderBlockedOperator } from "./operator-blocked-render.js";
+import { renderProviderRotation } from "./operator-provider-rotation-render.js";
 import type {
   ProviderAudienceUnavailableInputResult as UnavailableInput,
   ProviderAudienceSourceReferenceResult,
@@ -103,6 +104,9 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       `Core effect: ${receipt.core_effect}.`,
       "",
     ].join("\n");
+  }
+  if (result.kind === "provider_rotation_partition") {
+    return renderProviderRotation(receipt, result);
   }
   if (result.kind === "provider_connections") {
     return [

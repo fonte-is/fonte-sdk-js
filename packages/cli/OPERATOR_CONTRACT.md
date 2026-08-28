@@ -133,10 +133,61 @@ Read the operation before each advance. Advance accepts exactly the
 `next_request_number` from that aggregate read and issues one logical request;
 the CLI adds no retry loop. A lost start, advance, or seal response remains
 unknown until same-identity operation or generation readback resolves it.
+The structured ambiguous receipt preserves `core_effect: "unknown"`, sets
+`retry_mutation: false`, and gives the complete guarded read or generation-read
+command in `next_action`. Human rendering prints that same command, prints
+`Retry mutation: false`, and says not to retry. For a frozen-CSV start, Core
+derives the candidate-manifest hash. If that start response is lost before the
+hash is observed, the CLI cannot truthfully construct the strict read command;
+`next_action` is therefore a typed `candidate_manifest_unavailable` stop with
+`retry_mutation: false`, never a guessed guard or repeated start.
 Core alone owns the stored Resend credential, cursor, rate/retry/throttle
 accounting, and candidate-scoped GET construction. The commands grant neither
 provider nor contact mutation authority and emit only Core's aggregate
 operation or generation receipt.
+
+## Fresh rotation partition journey
+
+The four fixed commands are one closed, Core-authoritative journey:
+
+```text
+fonte bridge rotation start <exact iteration and evidence flags> [--json]
+fonte bridge rotation read --workspace <slug> --environment <environment> \
+  --iteration-id <uuid> [--json]
+fonte bridge rotation advance --workspace <slug> --environment <environment> \
+  --iteration-id <uuid> --expected-page-number <latest-read-value> [--json]
+fonte bridge rotation seal <exact iteration and generation flags> [--json]
+```
+
+Run `start`, then `read`. While the read receipt supplies another population or
+broadcast page, run exactly one `advance` with its `nextPageNumber`, then
+`read` again. When Core reports the evidence ready, run `seal`, followed by a
+final `read`. Start, advance, and seal are never automatically retried. An
+ambiguous response preserves `core_effect: "unknown"`, includes the exact
+`rotation read` command with `retry_mutation: false`, and plainly says not to
+retry the mutation.
+
+Core—not the CLI—creates an exhaustive disjoint partition whose four private
+sealed selector sets have union equality with the fresh live population root:
+
+- `E` (eligible now): current unsubscribe/protection checks pass; the named
+  qualifying broadcast has a positive accepted, delivered, opened, or clicked
+  outcome; provider `created_at` is known; portability is complete; and Fonte
+  custody is either eligible (`retirement_evidence_complete`) or absent
+  (`canonical_import_not_completed`).
+- `W` (warm first): the identity was not a recipient of the named qualifying
+  broadcast (`no_message_history`) and must remain in Resend for warming.
+- `X` (excluded): current provider unsubscribe, bounce, complaint, suppression,
+  or protected/ineligible Fonte custody applies.
+- `U` (unknown): Fonte custody is unknown, qualifying-broadcast evidence is
+  unknown or refused, provider `created_at` is missing, or portability evidence
+  is unknown. Any nonzero `U` blocks effects and the outgoing selector.
+
+Human and JSON receipts expose only aggregate progress, category/reason counts,
+private selector/generation identities, and union/partition checksums. They do
+not expose contact rows, email addresses, provider record IDs, or credentials.
+Successful and blocked partition receipts are both human-renderable; an
+already-attempted Core operation never becomes an output-format failure.
 
 `broadcast canary` is one declared ten-minute operation under one Authorization
 Code + S256 PKCE grant and one in-memory bearer. It reads Core's production

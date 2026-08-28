@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseArguments } from "../packages/cli/dist/arguments.js";
+import { renderOperatorHuman } from "../packages/cli/dist/operator-render.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 import { hostedConfig } from "./fixtures/cli-production-broadcast-responses.mjs";
 
@@ -169,24 +170,63 @@ test("malformed candidate files fail before OAuth or Core", async () => {
   assert.equal(fetchCount, 0);
 });
 
-test("advance loss remains unknown and is never retried", async () => {
-  let coreCalls = 0;
-  const result = await runProgram(
-    operationArguments("advance", ["--expected-request-number", "7"]),
-    dependencies({
-      response: operationReceipt(),
-      requests: [],
-      failCore: true,
-      onCore: () => {
-        coreCalls += 1;
-      },
-    }),
-  );
-  const receipt = JSON.parse(result.stdout);
-  assert.equal(result.exitCode, 3);
-  assert.equal(receipt.reason, "core_api_unavailable");
-  assert.equal(receipt.core_effect, "unknown");
-  assert.equal(coreCalls, 1);
+test("ambiguous mutations name exact readback and forbid retry", async () => {
+  const readScope = [
+    "--workspace evidence-proof",
+    "--environment production",
+    `--connection-id ${connectionId}`,
+    `--selector-id ${selector.selectorId}`,
+    `--selector-generation-id ${selector.selectorGenerationId}`,
+    `--artifact-sha256 ${selector.artifactSha256}`,
+    `--identity-set-sha256 ${selector.identitySetSha256}`,
+    `--candidate-count ${selector.candidateCount}`,
+    `--candidate-manifest-sha256 ${selector.candidateManifestSha256}`,
+  ].join(" ");
+  const cases = [
+    [
+      startArguments(),
+      `fonte provider-evidence resend read ${readScope} --operation-id ${operationId} --json`,
+    ],
+    [
+      operationArguments("advance", ["--expected-request-number", "7"]),
+      `fonte provider-evidence resend read ${readScope} --operation-id ${operationId} --json`,
+    ],
+    [
+      operationArguments("seal", ["--generation-id", generationId]),
+      `fonte provider-evidence resend generation read ${readScope} --generation-id ${generationId} --json`,
+    ],
+  ];
+  for (const [argv, readback] of cases) {
+    let coreCalls = 0;
+    const result = await runProgram(
+      argv,
+      dependencies({
+        response: operationReceipt(),
+        requests: [],
+        failCore: true,
+        onCore: () => {
+          coreCalls += 1;
+        },
+      }),
+    );
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(result.exitCode, 3);
+    assert.equal(receipt.reason, "core_api_unavailable");
+    assert.equal(receipt.core_effect, "unknown");
+    assert.deepEqual(receipt.next_action, {
+      kind: "run_command",
+      command: readback,
+      retry_mutation: false,
+    });
+    assert.equal(coreCalls, 1);
+
+    const human = renderOperatorHuman(result.receipt);
+    assert.match(human, /Fonte provider evidence operation/);
+    assert.equal(human.includes("production broadcast operation"), false);
+    assert.match(human, new RegExp(readback));
+    assert.match(human, /Retry mutation: false\./);
+    assert.match(human, /Do not retry the mutation\./);
+  }
 });
 
 function dependencies(options) {

@@ -33,7 +33,7 @@ export const providerEvidenceHelpEntries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Starts one exact candidate-scoped GET-only acquisition. Strict candidate JSON or the exact frozen CSV pair is transported without being echoed; only Core derives tenant-HMAC fingerprints.",
+      "Starts one exact candidate-scoped GET-only acquisition. Strict candidate JSON or the exact frozen CSV pair is transported without being echoed; only Core derives tenant-HMAC fingerprints. A lost response is never mutation-retried; read the same operation when its manifest guard is known, otherwise stop.",
   },
   {
     command: ["provider-evidence", "resend", "read"],
@@ -47,13 +47,13 @@ export const providerEvidenceHelpEntries: readonly HelpEntry[] = [
       [...scope, "--operation-id <uuid> --expected-request-number <n> --json"],
     ],
     detail:
-      "Advances exactly one logical GET request using the request number from the latest valid read; it never retries automatically.",
+      "Advances exactly one logical GET request using the request number from the latest valid read. A lost response stays unknown; run the exact read command in next_action and never retry the mutation.",
   },
   {
     command: ["provider-evidence", "resend", "seal"],
     usage: [[...scope, "--operation-id <uuid> --generation-id <uuid> --json"]],
     detail:
-      "Seals the ready operation under one frozen generation identity without provider or contact mutation authority.",
+      "Seals the ready operation under one frozen generation identity without provider or contact mutation authority. A lost response stays unknown; run the exact generation read in next_action and never retry the mutation.",
   },
   {
     command: ["provider-evidence", "resend", "generation", "read"],

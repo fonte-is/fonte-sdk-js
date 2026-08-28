@@ -124,6 +124,16 @@ test("official runner forwards exact Core operations and emits aggregate receipt
       assert.equal("credential" in request.body, false);
     }
     assertAggregateOnly(result.stdout);
+
+    const human = await runProgram(
+      argv.filter((value) => value !== "--json"),
+      dependencies([], response),
+    );
+    assert.equal(human.exitCode, 0);
+    assert.match(human.stdout, /Fonte Bridge rotation:/);
+    assert.match(human.stdout, /Partition E\/W\/X\/U:/);
+    assert.doesNotMatch(human.stdout, /operator_receipt_unrenderable/);
+    assertAggregateOnly(human.stdout);
   }
 });
 
@@ -137,6 +147,18 @@ test("unknown and malformed evidence fail closed; advance loss is not retried", 
   assert.equal(blocked.receipt.result.partition.counts.U, 1);
   assert.equal(blocked.receipt.result.partition.outgoing, null);
   assertAggregateOnly(blocked.stdout);
+
+  for (const argv of [startArgs(), advanceArgs(1), readArgs(), sealArgs()]) {
+    const human = await runProgram(
+      argv.filter((value) => value !== "--json"),
+      dependencies([], terminalReceipt({ blocked: true })),
+    );
+    assert.equal(human.exitCode, 3);
+    assert.match(human.stdout, /Fonte Bridge rotation: blocked_unknown/);
+    assert.match(human.stdout, /Partition E\/W\/X\/U: 1\/1\/0\/1/);
+    assert.doesNotMatch(human.stdout, /operator_receipt_unrenderable/);
+    assertAggregateOnly(human.stdout);
+  }
 
   const malformed = await runProgram(
     readArgs(),
@@ -166,17 +188,43 @@ test("unknown and malformed evidence fail closed; advance loss is not retried", 
   assert.equal(unknownReason.receipt.core_effect, "none");
   assertAggregateOnly(unknownReason.stdout);
 
-  let calls = 0;
-  const lost = await runProgram(
-    advanceArgs(7),
-    dependencies([], populationReceipt(), () => {
-      calls += 1;
-      throw new Error("synthetic response loss");
-    }),
-  );
-  assert.equal(calls, 1);
-  assert.equal(lost.receipt.reason, "core_api_unavailable");
-  assert.equal(lost.receipt.core_effect, "unknown");
+  const readback = `fonte bridge rotation read --workspace northstar --environment production --iteration-id ${iterationId} --json`;
+  for (const argv of [startArgs(), advanceArgs(7), sealArgs()]) {
+    for (const jsonOutput of [true, false]) {
+      let calls = 0;
+      const invocation = jsonOutput
+        ? argv
+        : argv.filter((value) => value !== "--json");
+      const lost = await runProgram(
+        invocation,
+        dependencies([], populationReceipt(), () => {
+          calls += 1;
+          throw new Error("synthetic response loss");
+        }),
+      );
+      assert.equal(calls, 1);
+      assert.equal(lost.receipt.reason, "core_api_unavailable");
+      assert.equal(lost.receipt.core_effect, "unknown");
+      assert.deepEqual(lost.receipt.next_action, {
+        kind: "run_command",
+        command: readback,
+        retry_mutation: false,
+      });
+      if (jsonOutput) {
+        assert.deepEqual(JSON.parse(lost.stdout).next_action, {
+          kind: "run_command",
+          command: readback,
+          retry_mutation: false,
+        });
+      } else {
+        assert.match(lost.stdout, /Fonte Bridge rotation operation/);
+        assert.match(lost.stdout, new RegExp(readback));
+        assert.match(lost.stdout, /Retry mutation: false\./);
+        assert.match(lost.stdout, /Do not retry the mutation\./);
+      }
+      assertAggregateOnly(lost.stdout);
+    }
+  }
 });
 
 function startArgs() {

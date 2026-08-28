@@ -21,8 +21,12 @@ export function renderBlockedOperator(receipt: OperatorReceipt): string {
     ].join("\n");
   }
   return [
-    receipt.command.startsWith("bridge_")
-      ? "Fonte Bridge operation could not continue."
+    receipt.command.startsWith("provider_evidence_")
+      ? "Fonte provider evidence operation could not continue."
+      : receipt.command.startsWith("bridge_provider_rotation_")
+        ? "Fonte Bridge rotation operation could not continue."
+        : receipt.command.startsWith("bridge_")
+          ? "Fonte Bridge operation could not continue."
       : receipt.command === "broadcast_preflight"
         ? "Fonte broadcast preflight could not be observed."
         : receipt.command === "broadcast_test_send" ||

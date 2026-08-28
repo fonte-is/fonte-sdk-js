@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { parseArguments } from "../packages/cli/dist/arguments.js";
+import { renderOperatorHuman } from "../packages/cli/dist/operator-render.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
 const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
@@ -101,7 +102,19 @@ test("artifact start response loss performs one Core request without retry", asy
   assert.equal(result.exitCode, 3);
   assert.equal(result.receipt.reason, "core_api_unavailable");
   assert.equal(result.receipt.core_effect, "unknown");
+  assert.deepEqual(result.receipt.next_action, {
+    kind: "stop",
+    reason: "candidate_manifest_unavailable",
+    retry_mutation: false,
+  });
   assert.equal(requests.length, 1);
+  const human = renderOperatorHuman(result.receipt);
+  assert.match(human, /Fonte provider evidence operation/);
+  assert.match(human, /candidate manifest hash was not observed/);
+  assert.match(human, /Next action: stop \(candidate_manifest_unavailable\)/);
+  assert.match(human, /Retry mutation: false\./);
+  assert.match(human, /Do not retry the mutation\./);
+  assert.equal(human.includes("production broadcast operation"), false);
   assertAggregateOnly(result.stdout);
 });
 
