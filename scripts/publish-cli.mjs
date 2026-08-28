@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -96,6 +105,7 @@ try {
   let outcome = "dry_run_ready_after_fon_223";
   let registry = null;
   let publishInvoked = false;
+  let installVerification = plannedInstallVerification();
   if (options.publish) {
     registry = readRegistryIdentity();
     if (registry) {
@@ -132,6 +142,7 @@ try {
         outcome = "published_exact";
       }
     }
+    installVerification = await verifyInstalledPackage(temporaryDirectory);
   }
 
   process.stdout.write(
@@ -155,13 +166,7 @@ try {
         },
         registryUrl,
         registry,
-        install: {
-          command: `npm install --save-exact --registry=${registryUrl} ${packageName}@${packageVersion}`,
-          executable: "./node_modules/.bin/fonte",
-          versionCommand: "./node_modules/.bin/fonte --version",
-          expectedVersion: `${packageName} ${packageVersion}`,
-          unversionedNpxAllowed: false,
-        },
+        install: installVerification,
         publishInvocationCount: publishInvoked ? 1 : 0,
         publicationEffect:
           outcome === "published_exact"
@@ -292,4 +297,103 @@ function verifyRegistryIdentity(registry, digests) {
   ) {
     throw new Error("registry identity or digest differs from reviewed bytes");
   }
+}
+
+function plannedInstallVerification() {
+  return {
+    status: "planned_unobserved",
+    package: `${packageName}@${packageVersion}`,
+    registry: registryUrl,
+    flags: ["--ignore-scripts", "--no-audit", "--no-fund", "--save-exact"],
+    npmEnvironment: {
+      audit: false,
+      fund: false,
+      updateNotifier: false,
+    },
+    manifest: { name: packageName, version: packageVersion },
+    bin: {
+      path: "node_modules/.bin/fonte",
+      manifestTarget: "./dist/main.js",
+      resolvedTarget: "node_modules/@fonte-is/cli/dist/main.js",
+    },
+    version: {
+      command: "./node_modules/.bin/fonte --version",
+      stdout: `${packageName} ${packageVersion}\n`,
+    },
+    unversionedNpxAllowed: false,
+  };
+}
+
+async function verifyInstalledPackage(parentDirectory) {
+  const fixture = path.join(parentDirectory, "install-fixture");
+  await mkdir(fixture);
+  await writeFile(
+    path.join(fixture, "package.json"),
+    `${JSON.stringify({ name: "fonte-cli-release-verification", private: true })}\n`,
+  );
+  run(
+    "npm",
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--save-exact",
+      "--registry",
+      registryUrl,
+      `${packageName}@${packageVersion}`,
+    ],
+    fixture,
+  );
+
+  const packageRoot = path.join(fixture, "node_modules", "@fonte-is", "cli");
+  const installedManifest = JSON.parse(
+    await readFile(path.join(packageRoot, "package.json"), "utf8"),
+  );
+  if (
+    installedManifest.name !== packageName ||
+    installedManifest.version !== packageVersion ||
+    installedManifest.bin?.fonte !== "./dist/main.js"
+  ) {
+    throw new Error("installed CLI manifest identity or bin target is invalid");
+  }
+
+  const binPath = path.join(fixture, "node_modules", ".bin", "fonte");
+  const binStat = await lstat(binPath);
+  if (!binStat.isSymbolicLink()) {
+    throw new Error("installed fonte binary is not an exact package link");
+  }
+  const linkTarget = await readlink(binPath);
+  const resolvedFixture = await realpath(fixture);
+  const resolvedTarget = await realpath(binPath);
+  const expectedTarget = await realpath(
+    path.join(packageRoot, "dist", "main.js"),
+  );
+  if (resolvedTarget !== expectedTarget) {
+    throw new Error("installed fonte binary resolves outside the CLI package");
+  }
+
+  const versionStdout = run(binPath, ["--version"], fixture);
+  if (versionStdout !== `${packageName} ${packageVersion}\n`) {
+    throw new Error("installed fonte binary reported an unexpected version");
+  }
+
+  return {
+    ...plannedInstallVerification(),
+    status: "observed",
+    manifest: {
+      name: installedManifest.name,
+      version: installedManifest.version,
+    },
+    bin: {
+      path: path.relative(fixture, binPath),
+      linkTarget,
+      manifestTarget: installedManifest.bin.fonte,
+      resolvedTarget: path.relative(resolvedFixture, resolvedTarget),
+    },
+    version: {
+      command: "./node_modules/.bin/fonte --version",
+      stdout: versionStdout,
+    },
+  };
 }
