@@ -36,7 +36,7 @@ test("the public graph keeps package-specific release versions", async () => {
       "@fonte-is/core": "0.1.0",
       "@fonte-is/react": "0.1.0",
       "@fonte-is/nextjs": "0.1.0",
-      "@fonte-is/cli": "0.2.0",
+      "@fonte-is/cli": "0.2.1",
     },
   );
 });
