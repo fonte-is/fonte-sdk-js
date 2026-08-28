@@ -17,16 +17,18 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageDirectory = path.join(root, "packages", "cli");
 const packageName = "@fonte-is/cli";
-const packageVersion = "0.2.1";
+const packageVersion = "0.2.0";
 const registryUrl = "https://registry.npmjs.org/";
-const reviewedPackageRef = "6704ae4910adbcc09aa05c8da56881521520f312";
-const reviewedSourceTree = "252085c07f71ee245819908a603780d5460652af";
-const reviewedCliTree = "042284f8e538b385cc7c2825436fde29fd76e6d0";
+const reviewedPackageRef = "c0e814539c2c4f1f3cba6b25101099d62021c43e";
+const reviewedSourceTree = "ba43332e1ba817b0b7a09136595f6a1994dfe0d4";
+const reviewedCliTree = "31279bf162014351b13121515a587fe538ac2f3b";
+const reviewedPackageLockBlob = "ab4b2841f02b25245b4fb7274ff9cb5ce9814cb7";
+const reviewedManifestBlob = "28b092ceddfc4d9afad2922a2d5b62e5d00ee4c0";
 const reviewedTarballDigests = {
-  sha1: "f6d3b757a7d792839c8d98f996136b834454f984",
-  sha256: "c33b47739844e2e5bf63733a7ad0ed31a8933acd2dab6f6efab82ecce21786b1",
+  sha1: "fbb616dd0978dd75b1f83f518b19d18d33d759b7",
+  sha256: "26da9e7cdbfdd56a0820a70b227fabcc672c56d46faeb3a3924e37ccd553c3ae",
   integrity:
-    "sha512-2G0gTfxLqSniaTlJ3wM+nVQRFS3nQrp6EvHmT8uKj+qPc6sFXJM5DFwaci3wl7wFh1MjwbGeJgrb+nVNiUkDsw==",
+    "sha512-JqkFC2dG2LyOQ9BJKnt+Lp0VmkgE3OjqNHk1iUUoEYhzyt8SGIUzqxoyTIzc4ivop6rW7sietCQt8ZGqIz9V0A==",
 };
 const receiptPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -48,9 +50,13 @@ try {
     throw new Error("release worktree must be clean");
   }
   if (
-    git(["rev-parse", `${reviewedPackageRef}^{tree}`]) !==
-      reviewedSourceTree ||
-    git(["rev-parse", `${reviewedPackageRef}:packages/cli`]) !== reviewedCliTree
+    git(["rev-parse", `${reviewedPackageRef}^{tree}`]) !== reviewedSourceTree ||
+    git(["rev-parse", `${reviewedPackageRef}:packages/cli`]) !==
+      reviewedCliTree ||
+    git(["rev-parse", `${reviewedPackageRef}:package-lock.json`]) !==
+      reviewedPackageLockBlob ||
+    git(["rev-parse", `${reviewedPackageRef}:packages/cli/package.json`]) !==
+      reviewedManifestBlob
   ) {
     throw new Error("reviewed CLI source identity is not exact");
   }
@@ -178,6 +184,8 @@ try {
           reviewedPackageRef,
           reviewedSourceTree,
           reviewedCliTree,
+          reviewedPackageLockBlob,
+          reviewedManifestBlob,
         },
         package: {
           name: packageName,
