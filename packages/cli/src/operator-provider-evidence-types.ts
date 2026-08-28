@@ -1,9 +1,13 @@
-export interface ProviderEvidenceCandidateSelector {
+export interface ProviderEvidenceCandidateSelectorInput {
   readonly selectorId: string;
   readonly selectorGenerationId: string;
   readonly artifactSha256: string;
   readonly identitySetSha256: string;
   readonly candidateCount: number;
+}
+
+export interface ProviderEvidenceCandidateSelector
+  extends ProviderEvidenceCandidateSelectorInput {
   readonly candidateManifestSha256: string;
 }
 
@@ -22,6 +26,23 @@ export interface ProviderEvidenceCandidateScope {
 export interface ProviderEvidenceCandidateStartInput extends ProviderEvidenceCandidateScope {
   readonly operationId: string;
   readonly candidates: readonly ProviderEvidenceCandidateTarget[];
+  readonly schemaVersion: string;
+  readonly normalizationVersion: string;
+  readonly identityFingerprintVersion: "tenant_hmac_sha256_v1";
+  readonly identityCustody: {
+    readonly emailAddressKeyId: string;
+    readonly emailNormalizationVersion: number;
+  };
+}
+
+export interface ProviderEvidenceCandidateArtifactStartInput {
+  readonly workspace: string;
+  readonly environment: "sandbox" | "production";
+  readonly connectionId: string;
+  readonly selector: ProviderEvidenceCandidateSelectorInput;
+  readonly operationId: string;
+  readonly candidateArtifact: string;
+  readonly identitySetArtifact: string;
   readonly schemaVersion: string;
   readonly normalizationVersion: string;
   readonly identityFingerprintVersion: "tenant_hmac_sha256_v1";
@@ -62,6 +83,19 @@ export type ProviderEvidenceOperatorCommand =
   | (ProviderEvidenceCandidateOperationCommand & {
       readonly kind: "provider_evidence_candidate_start";
       readonly candidatesFile: string;
+      readonly schemaVersion: string;
+      readonly normalizationVersion: string;
+      readonly identityFingerprintVersion: "tenant_hmac_sha256_v1";
+      readonly identityCustody: {
+        readonly emailAddressKeyId: string;
+        readonly emailNormalizationVersion: number;
+      };
+    })
+  | (Omit<ProviderEvidenceCandidateOperationCommand, "selector"> & {
+      readonly kind: "provider_evidence_candidate_start";
+      readonly selector: ProviderEvidenceCandidateSelectorInput;
+      readonly candidateArtifactFile: string;
+      readonly identitySetArtifactFile: string;
       readonly schemaVersion: string;
       readonly normalizationVersion: string;
       readonly identityFingerprintVersion: "tenant_hmac_sha256_v1";

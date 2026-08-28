@@ -2,10 +2,11 @@ import { CliUsageError } from "./errors.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 import type {
   ProviderEvidenceCandidateSelector,
+  ProviderEvidenceCandidateSelectorInput,
   ProviderEvidenceOperatorCommand,
 } from "./operator-provider-evidence-types.js";
 
-const COMMON = [
+const SCOPE = [
   "--workspace",
   "--environment",
   "--connection-id",
@@ -14,8 +15,8 @@ const COMMON = [
   "--artifact-sha256",
   "--identity-set-sha256",
   "--candidate-count",
-  "--candidate-manifest-sha256",
 ] as const;
+const COMMON = [...SCOPE, "--candidate-manifest-sha256"] as const;
 
 export function parseProviderEvidenceArguments(
   argv: readonly string[],
@@ -35,20 +36,23 @@ export function parseProviderEvidenceArguments(
 
 function start(argv: readonly string[]): ParsedOperatorArguments {
   const options = parseOptions(argv, [
-    ...COMMON,
+    ...SCOPE,
     "--operation-id",
-    "--candidates-file",
     "--schema-version",
     "--normalization-version",
     "--identity-fingerprint-version",
     "--identity-email-key-id",
     "--identity-email-normalization-version",
+  ], [
+    "--candidates-file",
+    "--candidate-manifest-sha256",
+    "--candidate-artifact-file",
+    "--identity-set-artifact-file",
   ]);
-  return result({
+  const base = {
     kind: "provider_evidence_candidate_start",
-    ...scope(options),
+    ...scopeInput(options),
     operationId: uuid(options, "--operation-id"),
-    candidatesFile: bounded(options, "--candidates-file", 4_096),
     schemaVersion: version(options, "--schema-version"),
     normalizationVersion: version(options, "--normalization-version"),
     identityFingerprintVersion: fingerprintVersion(options),
@@ -59,6 +63,26 @@ function start(argv: readonly string[]): ParsedOperatorArguments {
         "--identity-email-normalization-version",
       ),
     },
+  } as const;
+  if (options.values.has("--candidates-file")) {
+    if (options.values.has("--candidate-artifact-file")
+      || options.values.has("--identity-set-artifact-file")
+      || !options.values.has("--candidate-manifest-sha256")) invalid();
+    return result({
+      ...base,
+      selector: selector(options),
+      candidatesFile: bounded(options, "--candidates-file", 4_096),
+    });
+  }
+  if (options.values.has("--candidate-manifest-sha256")
+    || !options.values.has("--candidate-artifact-file")
+    || !options.values.has("--identity-set-artifact-file")) invalid();
+  return result({
+    ...base,
+    candidateArtifactFile: bounded(options, "--candidate-artifact-file", 4_096),
+    identitySetArtifactFile: bounded(
+      options, "--identity-set-artifact-file", 4_096,
+    ),
   });
 }
 
@@ -114,21 +138,34 @@ function result(
 
 function scope(options: Options) {
   return {
-    workspace: workspace(options),
-    environment: environment(options),
-    connectionId: uuid(options, "--connection-id"),
+    ...scopeInput(options),
     selector: selector(options),
   };
 }
 
+function scopeInput(options: Options) {
+  return {
+    workspace: workspace(options),
+    environment: environment(options),
+    connectionId: uuid(options, "--connection-id"),
+    selector: selectorInput(options),
+  };
+}
+
 function selector(options: Options): ProviderEvidenceCandidateSelector {
+  return {
+    ...selectorInput(options),
+    candidateManifestSha256: sha256(options, "--candidate-manifest-sha256"),
+  };
+}
+
+function selectorInput(options: Options): ProviderEvidenceCandidateSelectorInput {
   return {
     selectorId: bounded(options, "--selector-id", 500),
     selectorGenerationId: uuid(options, "--selector-generation-id"),
     artifactSha256: sha256(options, "--artifact-sha256"),
     identitySetSha256: sha256(options, "--identity-set-sha256"),
     candidateCount: positiveInteger(options, "--candidate-count"),
-    candidateManifestSha256: sha256(options, "--candidate-manifest-sha256"),
   };
 }
 
@@ -138,9 +175,10 @@ interface Options {
 
 function parseOptions(
   argv: readonly string[],
-  valueNames: readonly string[],
+  requiredNames: readonly string[],
+  optionalNames: readonly string[] = [],
 ): Options {
-  const allowed = new Set(valueNames);
+  const allowed = new Set([...requiredNames, ...optionalNames]);
   const values = new Map<string, string>();
   let json = false;
   for (let index = 0; index < argv.length; index += 1) {
@@ -156,7 +194,7 @@ function parseOptions(
     index += 1;
   }
   if (!json) missing("--json");
-  for (const name of valueNames) if (!values.has(name)) missing(name);
+  for (const name of requiredNames) if (!values.has(name)) missing(name);
   return { values };
 }
 

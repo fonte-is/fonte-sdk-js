@@ -7,6 +7,7 @@ const scope = [
   "--identity-set-sha256 <sha256> --candidate-count <n>",
   "--candidate-manifest-sha256 <sha256>",
 ] as const;
+const sourceScope = scope.slice(0, -1);
 
 export const providerEvidenceHelpEntries: readonly HelpEntry[] = [
   {
@@ -20,9 +21,19 @@ export const providerEvidenceHelpEntries: readonly HelpEntry[] = [
         "--identity-email-key-id <id> --identity-email-normalization-version <n>",
         "--json",
       ],
+      [
+        ...sourceScope,
+        "--operation-id <uuid>",
+        "--candidate-artifact-file <csv-file>",
+        "--identity-set-artifact-file <csv-file>",
+        "--schema-version <version> --normalization-version <version>",
+        "--identity-fingerprint-version tenant_hmac_sha256_v1",
+        "--identity-email-key-id <id> --identity-email-normalization-version <n>",
+        "--json",
+      ],
     ],
     detail:
-      "Starts one exact candidate-scoped GET-only acquisition. The strict JSON file contains only the candidates array and is never echoed.",
+      "Starts one exact candidate-scoped GET-only acquisition. Strict candidate JSON or the exact frozen CSV pair is transported without being echoed; only Core derives tenant-HMAC fingerprints.",
   },
   {
     command: ["provider-evidence", "resend", "read"],

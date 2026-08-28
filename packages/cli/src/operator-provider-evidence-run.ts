@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   CoreOperatorError,
   type CoreOperatorClient,
@@ -18,6 +20,18 @@ export type ProviderEvidenceCandidateFileReader = (
   path: string,
 ) => Promise<string>;
 
+type LoadedProviderEvidenceInput =
+  | {
+      readonly kind: "candidates";
+      readonly candidates: readonly ProviderEvidenceCandidateTarget[];
+    }
+  | {
+      readonly kind: "artifacts";
+      readonly candidateArtifact: string;
+      readonly identitySetArtifact: string;
+    }
+  | null;
+
 export function isProviderEvidenceCommand(
   command: OperatorCommand,
 ): command is ProviderEvidenceOperatorCommand {
@@ -27,9 +41,21 @@ export function isProviderEvidenceCommand(
 export async function loadProviderEvidenceCandidates(
   command: ProviderEvidenceOperatorCommand,
   readFile: ProviderEvidenceCandidateFileReader,
-): Promise<readonly ProviderEvidenceCandidateTarget[] | null> {
+): Promise<LoadedProviderEvidenceInput> {
   if (command.kind !== "provider_evidence_candidate_start") return null;
   try {
+    if (!("candidatesFile" in command)) {
+      const candidateArtifact = await readFile(command.candidateArtifactFile);
+      const identitySetArtifact = await readFile(command.identitySetArtifactFile);
+      if (Buffer.byteLength(JSON.stringify({
+        candidateArtifact, identitySetArtifact,
+      })) > MAXIMUM_CANDIDATE_FILE_BYTES
+        || digest(candidateArtifact) !== command.selector.artifactSha256
+        || digest(identitySetArtifact) !== command.selector.identitySetSha256) {
+        invalid();
+      }
+      return { kind: "artifacts", candidateArtifact, identitySetArtifact };
+    }
     const text = await readFile(command.candidatesFile);
     if (Buffer.byteLength(text) > MAXIMUM_CANDIDATE_FILE_BYTES) invalid();
     const root = exactRecord(JSON.parse(text), ["candidates"]);
@@ -40,7 +66,7 @@ export async function loadProviderEvidenceCandidates(
       invalid();
     const providerIds = new Set<string>();
     const fingerprints = new Set<string>();
-    return root.candidates.map((value) => {
+    const candidates = root.candidates.map((value) => {
       const candidate = exactRecord(value, [
         "providerRecordId",
         "identityFingerprintSha256",
@@ -58,6 +84,7 @@ export async function loadProviderEvidenceCandidates(
       fingerprints.add(identityFingerprintSha256);
       return { providerRecordId, identityFingerprintSha256 };
     });
+    return { kind: "candidates", candidates };
   } catch (error) {
     if (error instanceof CoreOperatorError) throw error;
     return invalid();
@@ -67,7 +94,7 @@ export async function loadProviderEvidenceCandidates(
 export async function executeProviderEvidenceCommand(
   command: ProviderEvidenceOperatorCommand,
   client: CoreOperatorClient,
-  candidates: readonly ProviderEvidenceCandidateTarget[] | null,
+  candidates: LoadedProviderEvidenceInput,
 ): Promise<
   Extract<
     OperatorResult,
@@ -78,24 +105,40 @@ export async function executeProviderEvidenceCommand(
     }
   >
 > {
-  const scope = {
+  const baseScope = {
     workspace: command.workspace,
     environment: command.environment,
     connectionId: command.connectionId,
-    selector: command.selector,
   };
   if (command.kind === "provider_evidence_candidate_start") {
     if (!candidates) invalid();
-    return client.startResendCandidateEvidence({
-      ...scope,
+    if ("candidatesFile" in command) {
+      if (candidates.kind !== "candidates") invalid();
+      return client.startResendCandidateEvidence({
+        ...baseScope,
+        selector: command.selector,
+        operationId: command.operationId,
+        candidates: candidates.candidates,
+        schemaVersion: command.schemaVersion,
+        normalizationVersion: command.normalizationVersion,
+        identityFingerprintVersion: command.identityFingerprintVersion,
+        identityCustody: command.identityCustody,
+      });
+    }
+    if (candidates.kind !== "artifacts") invalid();
+    return client.startResendCandidateEvidenceFromArtifacts({
+      ...baseScope,
+      selector: command.selector,
       operationId: command.operationId,
-      candidates,
+      candidateArtifact: candidates.candidateArtifact,
+      identitySetArtifact: candidates.identitySetArtifact,
       schemaVersion: command.schemaVersion,
       normalizationVersion: command.normalizationVersion,
       identityFingerprintVersion: command.identityFingerprintVersion,
       identityCustody: command.identityCustody,
     });
   }
+  const scope = { ...baseScope, selector: command.selector };
   if (command.kind === "provider_evidence_candidate_read") {
     return client.readResendCandidateEvidence({
       ...scope,
@@ -184,6 +227,10 @@ function bounded(value: unknown, maximum: number): string {
 function sha256(value: unknown): string {
   if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) invalid();
   return value;
+}
+
+function digest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function invalid(): never {

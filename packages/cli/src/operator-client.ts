@@ -78,12 +78,14 @@ export type {
 } from "./operator-provider-connection-types.js";
 export type {
   ProviderEvidenceCandidateAdvanceInput,
+  ProviderEvidenceCandidateArtifactStartInput,
   ProviderEvidenceCandidateGenerationInput,
   ProviderEvidenceCandidateGenerationResult,
   ProviderEvidenceCandidateOperationInput,
   ProviderEvidenceCandidateOperationResult,
   ProviderEvidenceCandidateSealInput,
   ProviderEvidenceCandidateSelector,
+  ProviderEvidenceCandidateSelectorInput,
   ProviderEvidenceCandidateStartInput,
   ProviderEvidenceCandidateTarget,
 } from "./operator-provider-evidence-types.js";

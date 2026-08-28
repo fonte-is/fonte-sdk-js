@@ -227,6 +227,7 @@ function rejectRecipientMaterial(value: unknown): void {
   if (!value || typeof value !== "object") return;
   for (const [key, item] of Object.entries(value)) {
     if (["candidates", "rows", "providerRecordId", "identityFingerprintSha256",
+      "email", "emailAddress", "candidateArtifact", "identitySetArtifact",
       "nextCursor"].includes(key)) invalid();
     rejectRecipientMaterial(item);
   }

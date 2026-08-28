@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   CoreOperatorError,
   parseCoreReceipt,
@@ -8,6 +10,7 @@ import {
   providerEvidenceCandidateOperation,
 } from "./operator-provider-evidence-json.js";
 import type {
+  ProviderEvidenceCandidateArtifactStartInput,
   ProviderEvidenceCandidateGenerationInput,
   ProviderEvidenceCandidateGenerationResult,
   ProviderEvidenceCandidateAdvanceInput,
@@ -16,12 +19,16 @@ import type {
   ProviderEvidenceCandidateScope,
   ProviderEvidenceCandidateSealInput,
   ProviderEvidenceCandidateSelector,
+  ProviderEvidenceCandidateSelectorInput,
   ProviderEvidenceCandidateStartInput,
 } from "./operator-provider-evidence-types.js";
 
 export interface ProviderEvidenceClient {
   startResendCandidateEvidence(
     input: ProviderEvidenceCandidateStartInput,
+  ): Promise<ProviderEvidenceCandidateOperationResult>;
+  startResendCandidateEvidenceFromArtifacts(
+    input: ProviderEvidenceCandidateArtifactStartInput,
   ): Promise<ProviderEvidenceCandidateOperationResult>;
   advanceResendCandidateEvidence(
     input: ProviderEvidenceCandidateAdvanceInput,
@@ -48,6 +55,30 @@ export function createProviderEvidenceClient(request: CoreRequester): ProviderEv
             connectionId: input.connectionId,
             selector: input.selector,
             candidates: input.candidates,
+            schemaVersion: input.schemaVersion,
+            normalizationVersion: input.normalizationVersion,
+            identityFingerprintVersion: input.identityFingerprintVersion,
+            identityCustody: input.identityCustody,
+          },
+          lostResponseEffect: "unknown",
+          idempotencyKey: uuid(input.operationId),
+          timeoutMs: 60_000,
+        }),
+        "unknown",
+      );
+      return matchingOperation(result, input, "unknown");
+    },
+    async startResendCandidateEvidenceFromArtifacts(input) {
+      validateArtifactStart(input);
+      const result = parseCoreReceipt(
+        providerEvidenceCandidateOperation,
+        await request(`${collectionPath(input)}?environment=${input.environment}`, {
+          body: {
+            operationId: input.operationId,
+            connectionId: input.connectionId,
+            selector: input.selector,
+            candidateArtifact: input.candidateArtifact,
+            identitySetArtifact: input.identitySetArtifact,
             schemaVersion: input.schemaVersion,
             normalizationVersion: input.normalizationVersion,
             identityFingerprintVersion: input.identityFingerprintVersion,
@@ -134,24 +165,47 @@ function validateStart(input: ProviderEvidenceCandidateStartInput): void {
   bounded(input.identityCustody.emailAddressKeyId, 200);
   positiveInteger(input.identityCustody.emailNormalizationVersion);
 }
-function validateScope(input: ProviderEvidenceCandidateScope & { readonly operationId?: string }) {
+function validateArtifactStart(
+  input: ProviderEvidenceCandidateArtifactStartInput,
+): void {
+  validateScope(input);
+  version(input.schemaVersion);
+  version(input.normalizationVersion);
+  if (input.identityFingerprintVersion !== "tenant_hmac_sha256_v1"
+    || digest(input.candidateArtifact) !== input.selector.artifactSha256
+    || digest(input.identitySetArtifact) !== input.selector.identitySetSha256) {
+    invalidRequest();
+  }
+  bounded(input.identityCustody.emailAddressKeyId, 200);
+  positiveInteger(input.identityCustody.emailNormalizationVersion);
+}
+function validateScope(input: {
+  readonly workspace: string;
+  readonly environment: "sandbox" | "production";
+  readonly connectionId: string;
+  readonly selector: ProviderEvidenceCandidateSelectorInput;
+  readonly operationId?: string;
+}) {
   if (input.environment !== "sandbox" && input.environment !== "production") invalidRequest();
   bounded(input.workspace, 200);
   uuid(input.connectionId);
   if (input.operationId !== undefined) uuid(input.operationId);
   validateSelector(input.selector);
 }
-function validateSelector(value: ProviderEvidenceCandidateSelector): void {
+function validateSelector(value: ProviderEvidenceCandidateSelectorInput): void {
   bounded(value.selectorId, 500);
   uuid(value.selectorGenerationId);
   sha256(value.artifactSha256);
   sha256(value.identitySetSha256);
   positiveInteger(value.candidateCount);
-  sha256(value.candidateManifestSha256);
+  const manifest = (value as Partial<ProviderEvidenceCandidateSelector>)
+    .candidateManifestSha256;
+  if (manifest !== undefined) sha256(manifest);
 }
 function matchingOperation(
   result: ProviderEvidenceCandidateOperationResult,
-  input: ProviderEvidenceCandidateOperationInput,
+  input: ProviderEvidenceCandidateOperationInput
+    | ProviderEvidenceCandidateArtifactStartInput,
   effect: "none" | "unknown",
 ): ProviderEvidenceCandidateOperationResult {
   if (result.operation_id !== input.operationId.toLowerCase()
@@ -175,14 +229,15 @@ function matchingGeneration(
 }
 function sameSelector(
   actual: ProviderEvidenceCandidateOperationResult["selector"],
-  expected: ProviderEvidenceCandidateSelector,
+  expected: ProviderEvidenceCandidateSelectorInput,
 ): boolean {
   return actual.selector_id === expected.selectorId
     && actual.selector_generation_id === expected.selectorGenerationId.toLowerCase()
     && actual.artifact_sha256 === expected.artifactSha256
     && actual.identity_set_sha256 === expected.identitySetSha256
     && actual.candidate_count === expected.candidateCount
-    && actual.candidate_manifest_sha256 === expected.candidateManifestSha256;
+    && (!("candidateManifestSha256" in expected)
+      || actual.candidate_manifest_sha256 === expected.candidateManifestSha256);
 }
 function collectionPath(input: { readonly workspace: string }): string {
   return `/v1/workspaces/${segment(input.workspace)}`
@@ -222,6 +277,11 @@ function uuid(value: string): string {
 function sha256(value: string): string {
   if (!/^[a-f0-9]{64}$/.test(value)) invalidRequest();
   return value;
+}
+
+function digest(value: string): string {
+  if (typeof value !== "string" || !value) invalidRequest();
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function version(value: string): string {
