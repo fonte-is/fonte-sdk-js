@@ -18,7 +18,7 @@ import {
 
 export function providerPlacementApplicationReceipt(
   value: unknown,
-  expectedCertificate: Readonly<Record<string, unknown>>,
+  expectedCertificate: Readonly<Record<string, unknown>> | null,
 ): ProviderPlacementApplicationResult {
   const body = exact(value, [
     "schemaVersion",
@@ -80,12 +80,15 @@ export function providerPlacementApplicationReceipt(
     provider: "resend",
     connection_id: uuid(body.connectionId),
     idempotency_key: uuid(body.idempotencyKey),
-    retirement_certificate: {
-      certificate_id: uuid(expectedCertificate.certificateId),
-      certificate_checksum_sha256: sha256(
-        expectedCertificate.certificateChecksumSha256,
-      ),
-    },
+    retirement_certificate:
+      expectedCertificate === null
+        ? null
+        : {
+            certificate_id: uuid(expectedCertificate.certificateId),
+            certificate_checksum_sha256: sha256(
+              expectedCertificate.certificateChecksumSha256,
+            ),
+          },
     status,
     reason_code: reason,
     plan: {

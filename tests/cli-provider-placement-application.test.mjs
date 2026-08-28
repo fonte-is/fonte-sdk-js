@@ -14,6 +14,10 @@ import {
   incomingBatchId,
   json,
   outgoingBatchId,
+  refillApplication,
+  refillApplicationId,
+  refillCoreApplication,
+  refillReceipt,
   receipt,
 } from "./fixtures/cli-provider-placement-application.mjs";
 
@@ -43,6 +47,11 @@ test("placement apply and progress use the exact aggregate application binding",
   assert.equal(apply.receipt.outcome, "blocked");
   assert.equal(apply.receipt.reason, "application_remaining");
   assert.equal(apply.receipt.core_effect, "unknown");
+  assert.equal(
+    apply.receipt.result.incoming.count,
+    apply.receipt.result.operating_targets.provider_contact_count -
+      apply.receipt.result.readback.provider_population_count,
+  );
   assert.equal(
     apply.receipt.authority.contract_id,
     "fonte.core.provider_placement_application.v1",
@@ -163,4 +172,62 @@ test("ambiguous apply performs one Core request and requires explicit GET recove
   );
   assert.equal(recovery.receipt.reason, "application_remaining");
   assert.equal(recovery.receipt.core_effect, "none");
+});
+
+test("terminal post-delete population gates a separately bound refill application", async () => {
+  const applyRequests = [];
+  const apply = await runProgram(
+    args("apply"),
+    dependencies(
+      applyRequests,
+      () => json(refillReceipt("partial")),
+      refillApplication(),
+    ),
+  );
+  assert.equal(apply.receipt.core_effect, "unknown");
+  assert.equal(applyRequests.length, 2);
+  assert.equal(
+    applyRequests[1].init.headers["idempotency-key"],
+    refillApplicationId,
+  );
+  assert.deepEqual(
+    JSON.parse(applyRequests[1].init.body),
+    refillCoreApplication(),
+  );
+  assert.equal("workspaceId" in JSON.parse(applyRequests[1].init.body), false);
+  assert.equal(
+    "retirementCertificate" in JSON.parse(applyRequests[1].init.body),
+    false,
+  );
+  assertAggregateOnly(apply.stdout);
+
+  const progress = await runProgram(
+    args("progress"),
+    dependencies(
+      [],
+      () => json(refillReceipt("complete")),
+      refillApplication(),
+    ),
+  );
+  assert.equal(progress.exitCode, 0);
+  assert.equal(progress.receipt.result.retirement_certificate, null);
+  assert.equal(progress.receipt.result.readback.provider_population_count, 10);
+  assert.equal(progress.receipt.result.incoming.count, 2);
+  assertAggregateOnly(progress.stdout);
+
+  const mismatch = await runProgram(
+    args("progress"),
+    dependencies(
+      [],
+      () =>
+        json({
+          ...refillReceipt("complete"),
+          workspaceId: "10000000-0000-4000-8000-000000000698",
+        }),
+      refillApplication(),
+    ),
+  );
+  assert.equal(mismatch.receipt.reason, "core_operator_receipt_invalid");
+  assert.equal(mismatch.receipt.core_effect, "none");
+  assertAggregateOnly(mismatch.stdout);
 });

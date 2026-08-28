@@ -94,7 +94,9 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       `Provider population/target/headroom: ${result.readback.provider_population_count ?? "unavailable"}/${result.operating_targets.provider_contact_count}/${result.readback.provider_target_headroom ?? "unavailable"}.`,
       `Fonte population/minimum: ${result.readback.fonte_population_count ?? "unavailable"}/${result.operating_targets.minimum_fonte_contact_count}.`,
       `Provider observation: ${result.readback.provider_observation_fingerprint_sha256 ?? "unavailable"}.`,
-      `Certificate: ${result.retirement_certificate.certificate_id} (${result.retirement_certificate.certificate_checksum_sha256}).`,
+      result.retirement_certificate
+        ? `Certificate: ${result.retirement_certificate.certificate_id} (${result.retirement_certificate.certificate_checksum_sha256}).`
+        : "Certificate: not applicable (refill-only).",
       `Core effect: ${receipt.core_effect}.`,
       "",
     ].join("\n");

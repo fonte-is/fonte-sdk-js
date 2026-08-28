@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 export const coreUrl = "http://127.0.0.1:43112";
 export const applicationFile = "/operator-input/provider-placement.json";
 export const applicationId = "10000000-0000-4000-8000-000000000603";
+export const refillApplicationId = "10000000-0000-4000-8000-000000000614";
 export const outgoingBatchId = "10000000-0000-4000-8000-000000000604";
 export const incomingBatchId = "10000000-0000-4000-8000-000000000605";
 const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
@@ -102,6 +103,28 @@ export function application() {
       certificateChecksumSha256: "5".repeat(64),
     },
   };
+}
+
+export function refillApplication() {
+  const retirement = application();
+  return {
+    workspaceId,
+    placement: retirement.placement,
+    currentObservationFingerprintSha256: "7".repeat(64),
+    planFingerprintSha256: "8".repeat(64),
+    outgoing: {
+      ...retirement.outgoing,
+      count: 0,
+    },
+    incoming: retirement.incoming,
+    operatingTargets: retirement.operatingTargets,
+    idempotencyKey: refillApplicationId,
+  };
+}
+
+export function refillCoreApplication() {
+  const { workspaceId: _workspaceId, ...input } = refillApplication();
+  return input;
 }
 
 function providerEvidence() {
@@ -208,6 +231,46 @@ export function receipt(status) {
       providerObservationFingerprintSha256: "6".repeat(64),
       providerObservedAt: "2026-08-27T10:01:00.000Z",
       fonteObservedAt: "2026-08-27T10:01:00.000Z",
+    },
+  };
+}
+
+export function refillReceipt(status) {
+  const input = refillApplication();
+  const complete = status === "complete";
+  return {
+    schemaVersion: "provider_placement_application.v1",
+    workspaceId,
+    environment: "production",
+    provider: "resend",
+    connectionId,
+    idempotencyKey: refillApplicationId,
+    retirementCertificate: null,
+    status,
+    reasonCode: complete ? null : "application_remaining",
+    plan: {
+      currentObservationFingerprintSha256:
+        input.currentObservationFingerprintSha256,
+      planFingerprintSha256: input.planFingerprintSha256,
+    },
+    outgoing: {
+      ...input.outgoing,
+      confirmed: 0,
+      remaining: 0,
+    },
+    incoming: {
+      ...input.incoming,
+      confirmed: complete ? input.incoming.count : 0,
+      remaining: complete ? 0 : input.incoming.count,
+    },
+    operatingTargets: input.operatingTargets,
+    readback: {
+      providerPopulationCount: complete ? 10 : 8,
+      providerTargetHeadroom: complete ? 0 : 2,
+      fontePopulationCount: 10,
+      providerObservationFingerprintSha256: "9".repeat(64),
+      providerObservedAt: "2026-08-27T10:02:00.000Z",
+      fonteObservedAt: "2026-08-27T10:02:00.000Z",
     },
   };
 }

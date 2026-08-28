@@ -242,6 +242,18 @@ freeze response is `core_effect: unknown`; the CLI never infers success or
 reconciles eligibility itself. None of these commands deletes or mutates a
 provider collection.
 
+Certificate-bound retirement and refill are two distinct placement
+applications. The retirement application carries the exact Core-owned
+certificate and an empty incoming cohort. Its terminal `placement progress`
+receipt supplies the settled `provider_population_count` (`P`). Only after that
+terminal readback may the operator freeze the freshly requalified incoming
+prefix of `147000 - P` and submit a refill-only application. That file carries
+the expected workspace UUID as `workspaceId`, an empty outgoing cohort, and no
+`retirementCertificate`; the CLI uses `workspaceId` only to verify Core's
+aggregate receipt and never forwards it. Both applications have distinct
+durable idempotency keys. A partial, unknown, mismatched, or unavailable
+retirement readback grants no refill authority.
+
 All other broadcast or Bridge declarations return `unsupported_authority`
 before OAuth or network access. There is no generic HTTP command, provider
 credential input, browser UI fallback, generic segment language, local

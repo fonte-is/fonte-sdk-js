@@ -27,8 +27,14 @@ export interface ProviderPlacementApplicationInput extends ProviderPlacementAppl
     >;
     readonly exclusions: readonly ProviderCollectionReferenceInput[];
   };
-  /** Exact Core-owned aggregate retirement certificate, forwarded unchanged. */
-  readonly retirementCertificate: Readonly<Record<string, unknown>>;
+  /**
+   * Exact Core-owned aggregate retirement certificate, forwarded unchanged for
+   * a non-empty outgoing cohort. Core requires no certificate for refill-only
+   * applications.
+   */
+  readonly retirementCertificate: Readonly<Record<string, unknown>> | null;
+  /** Expected Core workspace UUID; this guard is never forwarded to Core. */
+  readonly expectedWorkspaceId: string;
 }
 
 export interface ProviderPlacementCommandInput {
@@ -61,7 +67,7 @@ export interface ProviderPlacementApplicationResult {
   readonly retirement_certificate: {
     readonly certificate_id: string;
     readonly certificate_checksum_sha256: string;
-  };
+  } | null;
   readonly status:
     "pending" | "partial" | "unknown" | "blocked" | "unsupported" | "complete";
   readonly reason_code:

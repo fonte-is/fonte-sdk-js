@@ -33,6 +33,9 @@ export function providerPlacementApplicationFile(
   value: unknown,
   environment: "sandbox" | "production",
 ): ProviderPlacementApplicationInput {
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
+  const source = value as Record<string, unknown>;
+  const outgoing = cohort(source.outgoing);
   const body = exact(value, [
     "placement",
     "currentObservationFingerprintSha256",
@@ -41,24 +44,37 @@ export function providerPlacementApplicationFile(
     "incoming",
     "operatingTargets",
     "idempotencyKey",
-    "retirementCertificate",
+    ...(outgoing.count > 0 ? ["retirementCertificate"] : ["workspaceId"]),
   ]);
   assertAggregateOnly(body);
   const binding = applicationBinding(body);
   const placement = placementValue(body.placement);
-  const certificate = certificateValue(
-    body.retirementCertificate,
-    environment,
-    placement.source.connectionId,
-    binding,
-  );
   if (
     binding.outgoing.contactImportBatchId ===
     binding.incoming.contactImportBatchId
   ) {
     invalid();
   }
-  return { placement, ...binding, retirementCertificate: certificate };
+  if (binding.outgoing.count === 0) {
+    return {
+      placement,
+      ...binding,
+      retirementCertificate: null,
+      expectedWorkspaceId: uuid(body.workspaceId),
+    };
+  }
+  const certificate = certificateValue(
+    body.retirementCertificate,
+    environment,
+    placement.source.connectionId,
+    binding,
+  );
+  return {
+    placement,
+    ...binding,
+    retirementCertificate: certificate.value,
+    expectedWorkspaceId: certificate.workspaceId,
+  };
 }
 
 function applicationBinding(
@@ -115,7 +131,10 @@ function certificateValue(
   environment: "sandbox" | "production",
   connectionId: string,
   binding: ProviderPlacementApplicationBinding,
-): Readonly<Record<string, unknown>> {
+): {
+  readonly value: Readonly<Record<string, unknown>>;
+  readonly workspaceId: string;
+} {
   const body = exact(value, [
     "schemaVersion",
     "certificateId",
@@ -156,9 +175,9 @@ function certificateValue(
     invalid();
   }
   uuid(body.certificateId);
-  uuid(scope.workspaceId);
+  const workspaceId = uuid(scope.workspaceId);
   sha256(body.certificateChecksumSha256);
-  return body;
+  return { value: body, workspaceId };
 }
 
 function assertAggregateOnly(value: unknown): void {

@@ -5,7 +5,6 @@ import {
 } from "./operator-core-request.js";
 import { providerPlacementApplicationFile } from "./operator-provider-audience-placement-input.js";
 import { providerPlacementApplicationReceipt } from "./operator-provider-audience-placement-json.js";
-import { uuid } from "./operator-provider-audience-placement-values.js";
 import type {
   ProviderPlacementApplicationResult,
   ProviderPlacementCommandInput,
@@ -26,6 +25,7 @@ export function createProviderPlacementClient(
   return {
     async applyProviderPlacement(input) {
       const application = placementApplication(input);
+      const coreApplication = corePlacementApplication(application);
       const result = parseCoreReceipt(
         (value) =>
           providerPlacementApplicationReceipt(
@@ -35,7 +35,7 @@ export function createProviderPlacementClient(
         await request(
           `${placementPath(input, "apply")}?environment=${input.environment}`,
           {
-            body: { ...application },
+            body: coreApplication,
             idempotencyKey: application.idempotencyKey,
             lostResponseEffect: "unknown",
           },
@@ -67,8 +67,12 @@ function placementApplication(
   input: ProviderPlacementCommandInput,
 ): ProviderPlacementCommandInput["application"] {
   try {
+    const { expectedWorkspaceId, retirementCertificate, ...binding } =
+      input.application;
     return providerPlacementApplicationFile(
-      input.application,
+      retirementCertificate === null
+        ? { workspaceId: expectedWorkspaceId, ...binding }
+        : { ...binding, retirementCertificate },
       input.environment,
     );
   } catch {
@@ -87,11 +91,8 @@ function matchingPlacement(
   effect: "none" | "unknown",
 ): ProviderPlacementApplicationResult {
   const source = application.placement.source;
-  const certificateScope = application.retirementCertificate.scope as Readonly<
-    Record<string, unknown>
-  >;
   if (
-    result.workspace_id !== uuid(certificateScope.workspaceId) ||
+    result.workspace_id !== application.expectedWorkspaceId ||
     result.environment !== input.environment ||
     result.provider !== "resend" ||
     result.connection_id !== source.connectionId ||
@@ -105,14 +106,39 @@ function matchingPlacement(
       application.operatingTargets.providerContactCount ||
     result.operating_targets.minimum_fonte_contact_count !==
       application.operatingTargets.minimumFonteContactCount ||
-    result.retirement_certificate.certificate_id !==
-      application.retirementCertificate.certificateId ||
-    result.retirement_certificate.certificate_checksum_sha256 !==
-      application.retirementCertificate.certificateChecksumSha256
+    !sameCertificate(
+      result.retirement_certificate,
+      application.retirementCertificate,
+    )
   ) {
     throw new CoreOperatorError("core_operator_receipt_invalid", null, effect);
   }
   return result;
+}
+
+function corePlacementApplication(
+  application: ProviderPlacementCommandInput["application"],
+): Readonly<Record<string, unknown>> {
+  const {
+    expectedWorkspaceId: _expectedWorkspaceId,
+    retirementCertificate,
+    ...binding
+  } = application;
+  return retirementCertificate === null
+    ? binding
+    : { ...binding, retirementCertificate };
+}
+
+function sameCertificate(
+  actual: ProviderPlacementApplicationResult["retirement_certificate"],
+  expected: ProviderPlacementCommandInput["application"]["retirementCertificate"],
+): boolean {
+  if (expected === null) return actual === null;
+  return (
+    actual !== null &&
+    actual.certificate_id === expected.certificateId &&
+    actual.certificate_checksum_sha256 === expected.certificateChecksumSha256
+  );
 }
 
 function sameCohort(
