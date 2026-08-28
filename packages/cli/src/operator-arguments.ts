@@ -4,6 +4,7 @@ import { parseWorkspaceMarketingSettingsArguments } from "./operator-marketing-s
 import { parseProviderAudienceArguments } from "./operator-provider-audience-arguments.js";
 import { parseProviderConnectionArguments } from "./operator-provider-connection-arguments.js";
 import { parseProviderEvidenceArguments } from "./operator-provider-evidence-arguments.js";
+import { parseProviderRotationArguments } from "./operator-provider-rotation-arguments.js";
 import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
@@ -38,6 +39,8 @@ export function parseOperatorArguments(
   if (marketingSettings) return marketingSettings;
   const providerEvidence = parseProviderEvidenceArguments(argv);
   if (providerEvidence) return providerEvidence;
+  const providerRotation = parseProviderRotationArguments(argv);
+  if (providerRotation) return providerRotation;
   const production = parseProductionOperatorArguments(argv);
   if (production) return production;
   const providerConnection = parseProviderConnectionArguments(argv);

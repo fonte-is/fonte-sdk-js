@@ -5,13 +5,19 @@ import type {
   ProviderAudienceReconciliationResult,
   ProviderCollectionListResult,
 } from "./operator-provider-audience-types.js";
-import type { OperatorCommand, OperatorResult } from "./operator-types.js";
+import type { ProviderRotationResult } from "./operator-provider-rotation-types.js";
+import type {
+  OperatorCommand,
+  OperatorReceipt,
+  OperatorResult,
+} from "./operator-types.js";
 
 type ProviderAudienceResult =
   | ContactImportStatusResult
   | ProviderCollectionListResult
   | ProviderAudienceReconciliationResult
-  | ProviderAudienceFreezeResult;
+  | ProviderAudienceFreezeResult
+  | ProviderRotationResult;
 
 export function executeProviderAudienceCommand(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
@@ -29,14 +35,40 @@ export function executeProviderAudienceCommand(
   if (command.kind === "bridge_provider_freeze") {
     return client.freezeProviderAudience(command);
   }
+  if (command.kind === "bridge_provider_rotation_start") {
+    return client.startProviderRotation(command);
+  }
+  if (command.kind === "bridge_provider_rotation_advance") {
+    return client.advanceProviderRotation(command);
+  }
+  if (command.kind === "bridge_provider_rotation_read") {
+    return client.readProviderRotation(command);
+  }
+  if (command.kind === "bridge_provider_rotation_seal") {
+    return client.sealProviderRotation(command);
+  }
   return null;
 }
 
-export function providerAudienceReceiptDescriptor(result: OperatorResult): {
+export function providerAudienceReceiptDescriptor(
+  command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
+  result: OperatorResult,
+): {
   readonly outcome: "completed" | "blocked";
   readonly reason: string;
-  readonly coreEffect: "none" | "created";
+  readonly coreEffect: OperatorReceipt["core_effect"];
 } | null {
+  if (result.kind === "provider_rotation_partition") {
+    const blocked =
+      result.status === "blocked_unknown" ||
+      result.status === "population_changed";
+    return {
+      outcome: blocked ? "blocked" : "completed",
+      reason: `provider_rotation_partition_${result.status}`,
+      coreEffect:
+        command.kind === "bridge_provider_rotation_read" ? "none" : "attempted",
+    };
+  }
   if (result.kind === "contact_import_status") {
     return {
       outcome: "completed",

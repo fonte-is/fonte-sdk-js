@@ -103,4 +103,64 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         "Reads durable aggregate reconciliation for the exact application idempotency key and verifies the complete application binding without provider contact through the CLI.",
       json: true,
     },
+    {
+      command: ["bridge", "rotation", "start"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--iteration-id <uuid> --connection-id <uuid>",
+          "--candidate-operation-id <uuid>",
+          "--outgoing-candidate-operation-id <uuid>",
+          "--population-selector-generation-id <uuid>",
+          "--placement-segment-id <uuid>",
+          "--qualifying-broadcast-id <uuid>",
+          "--ordered-broadcast-id <uuid> [--ordered-broadcast-id <uuid>]...",
+          "--cold-remaining <nonnegative-integer>",
+          "--identity-key-id <Core-custody-key-id>",
+          "--identity-normalization-version <positive-integer>",
+        ],
+      ],
+      detail:
+        "Starts one fresh private two-pass Resend population and exact named-broadcast recipient acquisition through Core's stored GET-only credential, bound to the placement segment used by the sealed Fonte intake. The CLI emits aggregate receipts only and never accepts candidate rows or provider credentials.",
+      json: true,
+    },
+    {
+      command: ["bridge", "rotation", "advance"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--iteration-id <uuid> --expected-page-number <positive-integer>",
+        ],
+      ],
+      detail:
+        "Advances exactly one stored-credential population or named-broadcast GET page. On response loss, run rotation read and use its nextPageNumber before another advance; the CLI never retries automatically.",
+      json: true,
+    },
+    {
+      command: ["bridge", "rotation", "read"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--iteration-id <uuid>",
+        ],
+      ],
+      detail:
+        "Reads only aggregate population, checkpoint, classification, selector, and checksum receipts for one exact iteration.",
+      json: true,
+    },
+    {
+      command: ["bridge", "rotation", "seal"],
+      usage: [
+        [
+          "--workspace <slug> --environment <sandbox|production>",
+          "--iteration-id <uuid> --candidate-generation-id <uuid>",
+          "--partition-generation-id <uuid>",
+          "--qualifying-broadcast-id <uuid>",
+          "--ordered-broadcast-id <uuid> [--ordered-broadcast-id <uuid>]...",
+        ],
+      ],
+      detail:
+        "Seals the fresh exhaustive E/W/X/U partition from Core-held evidence. Any unknown category blocks the outgoing selector; response loss requires rotation read before another seal.",
+      json: true,
+    },
   ];

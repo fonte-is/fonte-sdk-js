@@ -13,6 +13,10 @@ import {
   createProviderPlacementClient,
   type ProviderPlacementClient,
 } from "./operator-provider-audience-placement-client.js";
+import {
+  createProviderRotationClient,
+  type ProviderRotationClient,
+} from "./operator-provider-rotation-client.js";
 import type {
   ContactImportStatusInput,
   ContactImportStatusResult,
@@ -28,7 +32,8 @@ import type {
   ProviderCollectionReferenceResult,
 } from "./operator-provider-audience-types.js";
 
-export interface ProviderAudienceClient extends ProviderPlacementClient {
+export interface ProviderAudienceClient
+  extends ProviderPlacementClient, ProviderRotationClient {
   readContactImportStatus(
     input: ContactImportStatusInput,
   ): Promise<ContactImportStatusResult>;
@@ -48,6 +53,7 @@ export function createProviderAudienceClient(
 ): ProviderAudienceClient {
   return {
     ...createProviderPlacementClient(request),
+    ...createProviderRotationClient(request),
     async readContactImportStatus(input) {
       const result = parseCoreReceipt(
         contactImportStatus,

@@ -301,7 +301,7 @@ function successReceipt(
       placement.coreEffect,
     );
   }
-  const providerAudience = providerAudienceReceiptDescriptor(result);
+  const providerAudience = providerAudienceReceiptDescriptor(command, result);
   if (providerAudience) {
     return currentReceipt(
       command,
@@ -384,25 +384,29 @@ function currentAuthority(
       command.kind === "workspace_marketing_settings_read"
         ? "fonte.core.workspace_marketing_settings.v1"
         : command.kind === "broadcast_preflight"
-        ? "fonte.core.broadcast_preflight.v1"
-        : command.kind === "broadcast_audience_append"
-          ? "fonte.core.production_broadcast_audience_append.v1"
-          : command.kind.startsWith("broadcast_") &&
-              command.kind !== "broadcast_test_send" &&
-              command.kind !== "broadcast_test_status"
-            ? "fonte.core.production_broadcast.v1"
-            : command.kind === "bridge_contact_import_status"
-              ? "fonte.core.contact_import.v1"
-              : command.kind.startsWith("bridge_provider_placement_")
-                ? "fonte.core.provider_placement_application.v1"
-                : command.kind.startsWith("bridge_resend_")
-                  ? "fonte.core.resend_bridge.v1"
-                  : command.kind.startsWith("bridge_connection_")
-                    ? "fonte.core.provider_connections.v1"
-                    : command.kind.startsWith("bridge_provider_")
-                      ? "fonte.core.provider_audience.v1"
-                      : command.kind.startsWith("provider_evidence_candidate_")
-                        ? "fonte.core.provider_evidence_candidate.v1"
-                        : "fonte.core.sandbox_canary.v1",
+          ? "fonte.core.broadcast_preflight.v1"
+          : command.kind === "broadcast_audience_append"
+            ? "fonte.core.production_broadcast_audience_append.v1"
+            : command.kind.startsWith("broadcast_") &&
+                command.kind !== "broadcast_test_send" &&
+                command.kind !== "broadcast_test_status"
+              ? "fonte.core.production_broadcast.v1"
+              : command.kind === "bridge_contact_import_status"
+                ? "fonte.core.contact_import.v1"
+                : command.kind.startsWith("bridge_provider_placement_")
+                  ? "fonte.core.provider_placement_application.v1"
+                  : command.kind.startsWith("bridge_provider_rotation_")
+                    ? "fonte.core.provider_rotation_partition.v1"
+                    : command.kind.startsWith("bridge_resend_")
+                      ? "fonte.core.resend_bridge.v1"
+                      : command.kind.startsWith("bridge_connection_")
+                        ? "fonte.core.provider_connections.v1"
+                        : command.kind.startsWith("bridge_provider_")
+                          ? "fonte.core.provider_audience.v1"
+                          : command.kind.startsWith(
+                                "provider_evidence_candidate_",
+                              )
+                            ? "fonte.core.provider_evidence_candidate.v1"
+                            : "fonte.core.sandbox_canary.v1",
   };
 }

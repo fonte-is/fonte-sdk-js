@@ -94,6 +94,14 @@ export type {
   ProviderEvidenceCandidateTarget,
 } from "./operator-provider-evidence-types.js";
 export type {
+  ProviderRotationAdvanceInput,
+  ProviderRotationReadInput,
+  ProviderRotationResult,
+  ProviderRotationSealInput,
+  ProviderRotationSelectorResult,
+  ProviderRotationStartInput,
+} from "./operator-provider-rotation-types.js";
+export type {
   AudienceReuseOverrideInput,
   ProductionAudienceAppendBaselineResult,
   ProductionAudienceAppendInput,

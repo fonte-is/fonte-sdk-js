@@ -22,6 +22,10 @@ import type {
   ProviderEvidenceOperatorCommand,
 } from "./operator-provider-evidence-types.js";
 import type {
+  ProviderRotationOperatorCommand,
+  ProviderRotationResult,
+} from "./operator-provider-rotation-types.js";
+import type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
   ProductionAudienceAppendResult,
@@ -168,6 +172,7 @@ export type OperatorCommand =
   | ProviderPlacementOperatorCommand
   | ProviderConnectionOperatorCommand
   | ProviderEvidenceOperatorCommand
+  | ProviderRotationOperatorCommand
   | { readonly kind: "unsupported" };
 
 export interface ParsedOperatorArguments {
@@ -285,7 +290,8 @@ export type OperatorResult =
   | ProviderConnectionListResult
   | ProviderConnectionOAuthResult
   | ProviderEvidenceCandidateOperationResult
-  | ProviderEvidenceCandidateGenerationResult;
+  | ProviderEvidenceCandidateGenerationResult
+  | ProviderRotationResult;
 
 export interface OperatorReceipt {
   readonly schema_version: "fonte.cli.operator_receipt.v1";
@@ -308,6 +314,7 @@ export interface OperatorReceipt {
       | "fonte.core.provider_connections.v1"
       | "fonte.core.provider_evidence_candidate.v1"
       | "fonte.core.workspace_marketing_settings.v1"
+      | "fonte.core.provider_rotation_partition.v1"
       | "unavailable";
   };
   readonly core_effect:
