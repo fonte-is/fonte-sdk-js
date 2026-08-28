@@ -19,9 +19,15 @@ const packageDirectory = path.join(root, "packages", "cli");
 const packageName = "@fonte-is/cli";
 const packageVersion = "0.2.1";
 const registryUrl = "https://registry.npmjs.org/";
-const reviewedPackageRef = "13b184e587a751ea420548fbcdb77259ec91c0df";
-const reviewedTarballSha256 =
-  "088907c260975a29523245db9e2d7a393561f9c01dad50d3b846a1f599920743";
+const reviewedPackageRef = "6704ae4910adbcc09aa05c8da56881521520f312";
+const reviewedSourceTree = "252085c07f71ee245819908a603780d5460652af";
+const reviewedCliTree = "042284f8e538b385cc7c2825436fde29fd76e6d0";
+const reviewedTarballDigests = {
+  sha1: "f6d3b757a7d792839c8d98f996136b834454f984",
+  sha256: "c33b47739844e2e5bf63733a7ad0ed31a8933acd2dab6f6efab82ecce21786b1",
+  integrity:
+    "sha512-2G0gTfxLqSniaTlJ3wM+nVQRFS3nQrp6EvHmT8uKj+qPc6sFXJM5DFwaci3wl7wFh1MjwbGeJgrb+nVNiUkDsw==",
+};
 const receiptPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -40,6 +46,13 @@ try {
   }
   if (git(["status", "--porcelain"]) !== "") {
     throw new Error("release worktree must be clean");
+  }
+  if (
+    git(["rev-parse", `${reviewedPackageRef}^{tree}`]) !==
+      reviewedSourceTree ||
+    git(["rev-parse", `${reviewedPackageRef}:packages/cli`]) !== reviewedCliTree
+  ) {
+    throw new Error("reviewed CLI source identity is not exact");
   }
   run("git", [
     "diff",
@@ -87,7 +100,11 @@ try {
     sha256: createHash("sha256").update(tarball).digest("hex"),
     integrity: `sha512-${createHash("sha512").update(tarball).digest("base64")}`,
   };
-  if (digests.sha256 !== reviewedTarballSha256) {
+  if (
+    digests.sha1 !== reviewedTarballDigests.sha1 ||
+    digests.sha256 !== reviewedTarballDigests.sha256 ||
+    digests.integrity !== reviewedTarballDigests.integrity
+  ) {
     throw new Error("packed CLI bytes do not match the reviewed tarball");
   }
 
@@ -155,7 +172,13 @@ try {
           releaseReceipt: options.fon223ReleaseReceipt,
           requiredBeforePublish: true,
         },
-        source: { ref: head, tree, reviewedPackageRef },
+        source: {
+          ref: head,
+          tree,
+          reviewedPackageRef,
+          reviewedSourceTree,
+          reviewedCliTree,
+        },
         package: {
           name: packageName,
           version: packageVersion,
