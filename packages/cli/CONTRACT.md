@@ -251,16 +251,16 @@ Its fixed values are:
 
 ```text
 schema_version  fonte.local_installation.v1
-cli_version     0.2.1
+cli_version     0.2.0
 adapter_id      next_app_router
 adapter_version v1
 sdk_package     @fonte-is/nextjs
 sdk_version     0.1.0
 ```
 
-The 0.2.1 CLI writes `cli_version` 0.2.1 and continues to accept exact
-0.1.0-, 0.1.1-, 0.1.2-, 0.1.3-, 0.1.4-, and 0.2.0-created manifests. Any
-other or unknown CLI manifest version is invalid.
+The 0.2.0 CLI writes `cli_version` 0.2.0 and continues to accept exact
+0.1.0-, 0.1.1-, 0.1.2-, 0.1.3-, and 0.1.4-created manifests. Any other or
+unknown CLI manifest version is invalid.
 
 `managed_operations` excludes `local_manifest` and contains only operations
 actually owned by Fonte. A dependency already present at the exact version and

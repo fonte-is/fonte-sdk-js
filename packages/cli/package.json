@@ -1,6 +1,6 @@
 {
   "name": "@fonte-is/cli",
-  "version": "0.2.1",
+  "version": "0.2.0",
   "description": "Manage Fonte production broadcast operator journeys and local installations",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",

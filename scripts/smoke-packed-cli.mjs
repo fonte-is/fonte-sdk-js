@@ -76,7 +76,6 @@ try {
     "0.1.2",
     "0.1.3",
     "0.1.4",
-    "0.2.0",
   ]) {
     localManifest.cli_version = compatibleVersion;
     await writeFile(
@@ -119,7 +118,7 @@ try {
       lifecycle: ["version", "init", "doctor", "remove"],
       manifestVersions: {
         created: cliVersion,
-        compatible: ["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.2.0"],
+        compatible: ["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4"],
       },
       packedProviderOAuthCommands: true,
       packedFonteAudienceSource: true,
