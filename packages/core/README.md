@@ -23,3 +23,15 @@ only that non-secret runtime receipt to `createCapture`; tenant credentials stay
 server-side. For consent-managed collection, supply the site's observed visitor
 choice without deriving it on the server. Control Plane remains
 evidence-acceptance and attribution authority.
+
+Browser retry state is deliberately narrow:
+
+- `storage` is an installation-scoped namespace. Do not share it across
+  unrelated collectors.
+- `collect` must be a same-origin application path; browser code never receives
+  the trusted server's tenant credential.
+- `page()` observes the current page and never implicitly resends pending work.
+  `retry()` is the explicit ambiguous-result retry boundary.
+- Reusing an `eventId` and `occurredAt` during retry is best-effort browser
+  convenience only. The memory fallback lasts only the current page lifetime.
+  `sessionStorage` is not durable authority or cross-reload exactly-once proof.

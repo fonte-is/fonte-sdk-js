@@ -1,18 +1,20 @@
 import type { InstallationVerificationMetadata } from "./installation-verification.js";
 import { createClientAttemptId } from "./ids.js";
-import { clean } from "./collect-contract.js";
 import {
   BROWSER_TOUCH_OBSERVATION_SCHEMA_VERSION,
   type JourneyIdentityScope,
 } from "./collect-types.js";
 import type { CollectionPostureObservation } from "./collection-posture.js";
+import {
+  parsePendingAttempt,
+  pendingAttemptKey,
+  type PendingAttempt,
+} from "./browser-pending-attempt.js";
 import type { CaptureDelivery, CaptureEventType } from "./browser-types.js";
 import type { Scope } from "./types.js";
 
 const pendingAttempts = new Map<string, PendingAttempt>();
 const completed = new Set<string>();
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface DeliveryClientConfig {
   collectPath: string;
@@ -22,34 +24,6 @@ interface DeliveryClientConfig {
   journeyIdentityScope: JourneyIdentityScope | null;
   onDelivery?: (delivery: CaptureDelivery) => void;
 }
-
-interface PendingAttempt {
-  eventId: string;
-  occurredAt: string;
-}
-
-const parsePendingAttempt = (value: string): PendingAttempt | null => {
-  if (!value.startsWith("pending:")) return null;
-  try {
-    const parsed = JSON.parse(value.slice("pending:".length)) as Record<
-      string,
-      unknown
-    >;
-    if (
-      Object.keys(parsed).length !== 2 ||
-      !uuidPattern.test(clean(parsed.eventId, 80)) ||
-      typeof parsed.occurredAt !== "string" ||
-      new Date(parsed.occurredAt).toISOString() !== parsed.occurredAt
-    )
-      return null;
-    return {
-      eventId: clean(parsed.eventId, 80).toLowerCase(),
-      occurredAt: parsed.occurredAt,
-    };
-  } catch {
-    return null;
-  }
-};
 
 export interface DeliveryClient {
   notify(delivery: CaptureDelivery): CaptureDelivery;
@@ -193,13 +167,12 @@ async function sendDelivery(
       reason: "missing_journey_id",
     });
   }
-  const key = [
+  const key = await pendingAttemptKey(
     config.sentStoragePrefix,
-    observation.policyVersion,
-    observation.visitorChoice,
+    observation,
     eventType,
-    scope.current_url.slice(0, 1000),
-  ].join(":");
+    scope,
+  );
   let status = "";
   try {
     status = window.sessionStorage.getItem(key) ?? "";
