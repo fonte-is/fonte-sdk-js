@@ -48,26 +48,18 @@ export const clean = (value: unknown, maxLength = 2048): string =>
         .slice(0, maxLength)
     : "";
 
+export function canonicalizePageUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    return new URL(`${parsed.origin}${parsed.pathname}`).href;
+  } catch {
+    return "";
+  }
+}
+
 export function canonicalizeCurrentUrl(scope: Scope): Scope {
   if (!scope.current_url) return scope;
-  try {
-    const source = new URL(scope.current_url);
-    const accepted = new URL(`${source.origin}${source.pathname}`);
-    if (scope.fonte && source.searchParams.get("fonte") === scope.fonte) {
-      accepted.searchParams.set("fonte", scope.fonte);
-    }
-    for (const key of measurementQueryKeys) {
-      if (scope[key] && source.searchParams.get(key) === scope[key]) {
-        accepted.searchParams.set(key, scope[key]);
-      }
-    }
-    for (const key of adStorageQueryKeys) {
-      if (scope[key] && source.searchParams.get(key) === scope[key]) {
-        accepted.searchParams.set(key, scope[key]);
-      }
-    }
-    return { ...scope, current_url: accepted.href };
-  } catch {
-    return scope;
-  }
+  const currentUrl = canonicalizePageUrl(scope.current_url);
+  return currentUrl ? { ...scope, current_url: currentUrl } : scope;
 }

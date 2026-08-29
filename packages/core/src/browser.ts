@@ -15,6 +15,7 @@ import type {
 } from "./browser-types.js";
 import { clean } from "./collect-contract.js";
 import { normalizeInstallationVerification } from "./installation-verification.js";
+import { resolveBrowserCollectionPosture } from "./collection-posture.js";
 
 const eventTypes = ["page_view", "source_touch"] as const;
 
@@ -44,19 +45,23 @@ export function createCapture(config: CaptureConfig): Capture {
   if (mode !== "source_touch" && mode !== "all") {
     throw new Error("fonte_invalid_capture_policy_mode");
   }
+  const posture = resolveBrowserCollectionPosture(config.collectionPosture);
 
   const currentScope = createScopeReader({
     deviceStorageKey: `${storagePrefix}:fonte-device-id`,
     journeyStorageKey: `${storagePrefix}:fonte-journey-id`,
+    persistentIdentityAllowed: posture?.persistentIdentityAllowed ?? false,
+    adStorageAllowed: posture?.adStorageAllowed ?? false,
   });
-  const attribution = createAttributionStore(
-    `${storagePrefix}:fonte-attribution`,
-    maxAgeDays,
-  );
+  const attribution = posture?.persistentIdentityAllowed
+    ? createAttributionStore(`${storagePrefix}:fonte-attribution`, maxAgeDays)
+    : { read: () => null, write: () => undefined };
   const delivery = createDeliveryClient({
     collectPath,
     sentStoragePrefix: `${storagePrefix}:fonte-touch`,
     verification,
+    collectionPostureObservation: posture?.observation ?? null,
+    journeyIdentityScope: posture?.journeyIdentityScope ?? null,
     onDelivery: config.onDelivery,
   });
 
@@ -69,6 +74,16 @@ export function createCapture(config: CaptureConfig): Capture {
   const capturePage = async (
     retryPending: boolean,
   ): Promise<CapturePageResult> => {
+    if (!posture) {
+      const reason = config.collectionPosture
+        ? "visitor_choice_unavailable"
+        : "collection_posture_unavailable";
+      return {
+        deliveries: eventTypes.map((eventType) =>
+          delivery.notify({ eventType, status: "unavailable", reason }),
+        ),
+      };
+    }
     const scope = currentScope();
     if (!scope) return skipped("browser_unavailable");
     const stored = attribution.read();

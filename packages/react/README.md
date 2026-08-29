@@ -11,8 +11,11 @@ import { createCapture } from "@fonte-is/core";
 import { FonteProvider } from "@fonte-is/react";
 import { useMemo } from "react";
 
-export function App() {
-  const capture = useMemo(() => createCapture({ storage: "my-app" }), []);
+export function App({ collectionPosture }) {
+  const capture = useMemo(
+    () => createCapture({ storage: "my-app", collectionPosture }),
+    [collectionPosture],
+  );
   return <FonteProvider capture={capture}>...</FonteProvider>;
 }
 ```

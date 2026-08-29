@@ -3,6 +3,7 @@ export type {
   CollectBody,
   CollectEventType,
   Evidence,
+  JourneyIdentityScope,
   ParseOptions,
   SourceTouchClassification,
   TouchPayload,

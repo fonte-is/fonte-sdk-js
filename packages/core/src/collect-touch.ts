@@ -1,11 +1,17 @@
 import { classifySourceTouch, platformForSource } from "./collect-classify.js";
-import type { TouchPayload } from "./collect-types.js";
+import type { CollectBody, TouchPayload } from "./collect-types.js";
+import type { TouchInput } from "./server.js";
 import type { Scope } from "./types.js";
 
-export function toTouch(scope: Scope, journeyId: string): TouchPayload {
+export function toTouch(
+  scope: Scope,
+  journeyId?: string,
+  journeyIdentityScope: TouchPayload["journeyIdentityScope"] = "persistent_first_party",
+): TouchPayload {
   const classification = classifySourceTouch(scope);
   return {
-    journeyId,
+    ...(journeyId ? { journeyId } : {}),
+    journeyIdentityScope,
     platform: platformForSource(classification.sourcePlatform.toLowerCase()),
     isPaid: classification.channelType === "paid",
     fonteLinkToken: scope.fonte,
@@ -25,5 +31,35 @@ export function toTouch(scope: Scope, journeyId: string): TouchPayload {
     fbc: scope.fbc,
     fbp: scope.fbp,
     clientUserAgent: scope.client_user_agent,
+  };
+}
+
+export function toTouchInput(
+  body: CollectBody,
+  acceptedScope: Scope,
+  source: string,
+): TouchInput {
+  const requestOrigin = new URL(acceptedScope.current_url).origin;
+  return {
+    idempotencyKey: body.eventId,
+    occurredAt: body.occurredAt,
+    source,
+    requestOrigin,
+    eventId: body.eventId,
+    event: body.eventType,
+    raw: {
+      browserObservation: {
+        schemaVersion: body.schemaVersion,
+        eventId: body.eventId,
+        eventType: body.eventType,
+        occurredAt: body.occurredAt,
+        ...(body.journeyId ? { journeyId: body.journeyId } : {}),
+        journeyIdentityScope: body.journeyIdentityScope,
+        scope: acceptedScope,
+      },
+      collectionPostureObservation: body.collectionPostureObservation,
+      ...(body.verification ? { verification: body.verification } : {}),
+    },
+    touch: toTouch(acceptedScope, body.journeyId, body.journeyIdentityScope),
   };
 }

@@ -13,11 +13,20 @@ test("Next server is the exact Core collection primitive", () => {
 });
 
 const validBody = {
+  schemaVersion: "fonte.browser_touch_observation.v1",
   eventId: "10000000-0000-4000-8000-000000000001",
   eventType: "source_touch",
+  occurredAt: "2026-08-29T00:00:00.000Z",
   journeyId: "10000000-0000-4000-8000-000000000002",
+  journeyIdentityScope: "persistent_first_party",
+  collectionPostureObservation: {
+    schemaVersion: "fonte.collection_posture_observation.v0",
+    visitorChoice: "not_present",
+    policyVersion: "10000000-0000-4000-8000-000000000010",
+  },
   scope: {
     fonte_journey_id: "10000000-0000-4000-8000-000000000002",
+    canonical_route: "/launch",
     current_url:
       "https://example.test/launch?utm_source=demo&utm_medium=paid_social&secret=drop",
     utm_source: "demo",

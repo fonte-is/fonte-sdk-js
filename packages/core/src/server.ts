@@ -1,4 +1,8 @@
 import { diagnosticCode, FonteApiError } from "./server-errors.js";
+import type { CollectionPostureRuntimeConfig } from "./collection-posture.js";
+import type { JourneyIdentityScope } from "./collect-types.js";
+import { readCollectionPosture } from "./server-collection-posture.js";
+import { serializeTouchBody } from "./server-touch-body.js";
 import type { WriteResult } from "./types.js";
 
 export type Environment = "sandbox" | "production";
@@ -22,7 +26,8 @@ export interface TouchInput {
   event?: "page_view" | "source_touch";
   raw?: Record<string, unknown>;
   touch: {
-    journeyId: string;
+    journeyId?: string;
+    journeyIdentityScope?: JourneyIdentityScope;
     platform: "meta" | "google" | "other";
     isPaid: boolean;
     utmSource?: string;
@@ -54,6 +59,7 @@ export interface TouchInput {
 
 export interface Client {
   touch(input: TouchInput): Promise<WriteResult>;
+  collectionPosture(): Promise<CollectionPostureRuntimeConfig>;
 }
 
 const uuidPattern =
@@ -106,29 +112,6 @@ const requireOrigin = (
   return parsed.origin;
 };
 
-const touchBody = (input: TouchInput): TouchInput["touch"] => ({
-  journeyId: input.touch.journeyId,
-  platform: input.touch.platform,
-  isPaid: input.touch.isPaid,
-  utmSource: input.touch.utmSource,
-  utmMedium: input.touch.utmMedium,
-  utmCampaign: input.touch.utmCampaign,
-  utmContent: input.touch.utmContent,
-  utmTerm: input.touch.utmTerm,
-  fonteLinkToken: input.touch.fonteLinkToken,
-  channelType: input.touch.channelType,
-  sourcePlatform: input.touch.sourcePlatform,
-  referrer: input.touch.referrer,
-  landingUrl: input.touch.landingUrl,
-  gclid: input.touch.gclid,
-  gbraid: input.touch.gbraid,
-  wbraid: input.touch.wbraid,
-  fbclid: input.touch.fbclid,
-  fbc: input.touch.fbc,
-  fbp: input.touch.fbp,
-  clientUserAgent: input.touch.clientUserAgent,
-});
-
 export function createClient(config: ClientConfig): Client {
   const environment = config.environment ?? "production";
   if (environment !== "sandbox" && environment !== "production") {
@@ -169,6 +152,16 @@ export function createClient(config: ClientConfig): Client {
   return {
     async touch(input) {
       const requestOrigin = requireOrigin(input.requestOrigin, environment);
+      if (
+        !input.touch.journeyId &&
+        input.touch.journeyIdentityScope !== "event_ephemeral"
+      ) {
+        throw new Error(
+          "fonte_touch_journey_required: only event_ephemeral observations may omit journeyId",
+        );
+      }
+      const journeyId =
+        input.touch.journeyId ?? requireUuid("eventId", input.eventId ?? "");
       const path = "/v1/touches";
       const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
@@ -186,7 +179,7 @@ export function createClient(config: ClientConfig): Client {
           logicalEventId: input.eventId,
           eventType: input.event,
           rawPayload: input.raw,
-          touch: touchBody(input),
+          touch: serializeTouchBody(input, journeyId),
         }),
         signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
@@ -195,25 +188,49 @@ export function createClient(config: ClientConfig): Client {
         string,
         unknown
       > | null;
-      if (!response.ok || body?.blocked === true) {
+      if (!response.ok) {
         throw new FonteApiError({
           path,
           status: response.status,
           code: diagnosticCode(body),
         });
       }
+      if (body?.blocked === true) {
+        if (
+          body.reason !== "visitor_choice_denies" &&
+          body.reason !== "collection_policy_withholds"
+        ) {
+          throw new FonteApiError({
+            path,
+            status: response.status,
+            code: diagnosticCode(body),
+          });
+        }
+        return { blocked: true, reason: body.reason };
+      }
       return (body ?? {}) as WriteResult;
+    },
+    async collectionPosture() {
+      return readCollectionPosture({
+        baseUrl,
+        environment,
+        headers,
+        tenantId,
+        timeoutMs,
+      });
     },
   };
 }
 
 export { FonteApiError } from "./server-errors.js";
+export type { CollectionPostureRuntimeConfig } from "./collection-posture.js";
 export type { WriteResult } from "./types.js";
 export { collect } from "./collect.js";
 export type {
   CollectBody,
   CollectEventType,
   Evidence,
+  JourneyIdentityScope,
   ParseOptions,
   SourceTouchClassification,
   TouchPayload,

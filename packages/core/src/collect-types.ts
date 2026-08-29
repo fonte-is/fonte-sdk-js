@@ -1,5 +1,9 @@
 import type { InstallationVerificationMetadata } from "./installation-verification.js";
+import type { CollectionPostureObservation } from "./collection-posture.js";
 import type { Scope } from "./types.js";
+
+export const BROWSER_TOUCH_OBSERVATION_SCHEMA_VERSION =
+  "fonte.browser_touch_observation.v1";
 
 export interface Evidence {
   siteUrl: string | null | undefined;
@@ -8,11 +12,16 @@ export interface Evidence {
 }
 
 export type CollectEventType = "page_view" | "source_touch";
+export type JourneyIdentityScope = "persistent_first_party" | "event_ephemeral";
 
 export interface CollectBody {
+  schemaVersion: typeof BROWSER_TOUCH_OBSERVATION_SCHEMA_VERSION;
   eventId: string;
   eventType: CollectEventType;
-  journeyId: string;
+  occurredAt: string;
+  journeyId?: string;
+  journeyIdentityScope: JourneyIdentityScope;
+  collectionPostureObservation: CollectionPostureObservation;
   verification?: InstallationVerificationMetadata;
   scope: Scope;
 }
@@ -46,7 +55,8 @@ export interface SourceTouchClassification {
 }
 
 export interface TouchPayload {
-  journeyId: string;
+  journeyId?: string;
+  journeyIdentityScope: JourneyIdentityScope;
   platform: "meta" | "google" | "other";
   isPaid: boolean;
   fonteLinkToken?: string;

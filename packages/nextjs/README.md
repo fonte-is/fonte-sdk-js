@@ -24,16 +24,10 @@ export async function POST(request: Request) {
     });
   if (!body || !scope) return new Response(null, { status: 400 });
 
-  const result = await fonte.touch({
-    idempotencyKey: body.eventId,
-    occurredAt: new Date().toISOString(),
-    source: "next_app_router",
-    requestOrigin: request.headers.get("origin") ?? undefined,
-    eventId: body.eventId,
-    event: body.eventType,
-    touch: collect.toTouch(scope, body.journeyId),
-  });
-  return Response.json({ result });
+  const result = await fonte.touch(
+    collect.toTouchInput(body, scope, "next_app_router"),
+  );
+  return Response.json(result);
 }
 ```
 
@@ -41,4 +35,6 @@ Set `FONTE_SITE_URL` to the canonical public origin, such as
 `https://shop.example.test`; do not derive it from the incoming `Origin`
 header. The response is an ingestion result, not an attribution or
 economic-finality decision. Control Plane remains evidence-acceptance and
-attribution authority.
+attribution authority. Obtain the non-secret browser posture with
+`fonte.collectionPosture()` on the server; do not expose the tenant API key or
+invent a visitor choice in this adapter.

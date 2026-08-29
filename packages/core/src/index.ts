@@ -7,4 +7,11 @@ export type {
   CaptureEventType,
   CapturePageResult,
 } from "./browser.js";
+export type {
+  BrowserCollectionPosture,
+  CollectionMode,
+  CollectionPostureObservation,
+  CollectionPostureRuntimeConfig,
+  VisitorChoice,
+} from "./collection-posture.js";
 export type { Scope, WriteResult } from "./types.js";

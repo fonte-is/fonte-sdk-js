@@ -1,6 +1,7 @@
 import { createClientAttemptId } from "./ids.js";
 import {
   adStorageQueryKeys,
+  canonicalizePageUrl,
   canonicalizeCurrentUrl,
   clean,
   measurementQueryKeys,
@@ -51,6 +52,8 @@ const readOrCreateId = (key: string): string => {
 interface ScopeReaderConfig {
   deviceStorageKey: string;
   journeyStorageKey: string;
+  persistentIdentityAllowed: boolean;
+  adStorageAllowed: boolean;
 }
 
 export function createScopeReader(
@@ -68,25 +71,32 @@ export function createScopeReader(
 
     const fonteToken = clean(sourceUrl.searchParams.get("fonte"), 500);
     if (fonteToken) scope.fonte = fonteToken;
-    if (document.referrer) scope.referrer = clean(document.referrer);
+    if (document.referrer) {
+      const referrer = canonicalizePageUrl(clean(document.referrer));
+      if (referrer) scope.referrer = referrer;
+    }
 
-    scope.fonte_device_id = readOrCreateId(config.deviceStorageKey);
-    scope.fonte_journey_id = readOrCreateId(config.journeyStorageKey);
+    if (config.persistentIdentityAllowed) {
+      scope.fonte_device_id = readOrCreateId(config.deviceStorageKey);
+      scope.fonte_journey_id = readOrCreateId(config.journeyStorageKey);
+    }
     for (const key of measurementQueryKeys) {
       const value = clean(sourceUrl.searchParams.get(key), 500);
       if (value) scope[key] = value;
     }
 
-    for (const key of adStorageQueryKeys) {
-      const value = clean(sourceUrl.searchParams.get(key), 500);
-      if (value) scope[key] = value;
-    }
-    for (const [scopeKey, cookieName] of [
-      ["fbc", "_fbc"],
-      ["fbp", "_fbp"],
-    ] as const) {
-      const value = readCookie(cookieName);
-      if (value) scope[scopeKey] = value;
+    if (config.adStorageAllowed) {
+      for (const key of adStorageQueryKeys) {
+        const value = clean(sourceUrl.searchParams.get(key), 500);
+        if (value) scope[key] = value;
+      }
+      for (const [scopeKey, cookieName] of [
+        ["fbc", "_fbc"],
+        ["fbp", "_fbp"],
+      ] as const) {
+        const value = readCookie(cookieName);
+        if (value) scope[scopeKey] = value;
+      }
     }
 
     return compactScope(canonicalizeCurrentUrl(scope));

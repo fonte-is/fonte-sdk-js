@@ -20,6 +20,16 @@ const memoryStorage = () => {
   };
 };
 
+const collectionPosture = {
+  runtime: {
+    schemaVersion: "fonte.collection_posture_browser.v0",
+    collectionMode: "full",
+    policyVersion: "10000000-0000-4000-8000-000000000010",
+    effectiveAt: "2026-08-29T00:00:00.000Z",
+    visitorChoiceRequired: false,
+  },
+};
+
 const touchContract = JSON.parse(
   await readFile(
     new URL("./fixtures/v1-touches-contract.json", import.meta.url),
@@ -70,6 +80,7 @@ test("browser capture starts immediately", async () => {
   try {
     const capture = createCapture({
       storage: "browser-test",
+      collectionPosture,
       verification: {
         schemaVersion: "fonte.installation_verification.v2",
         installationAttemptId: "10000000-0000-4000-8000-000000000002",
@@ -126,20 +137,25 @@ test("browser capture reports failures, retries stable event IDs, and deduplicat
   globalThis.fetch = async (_path, init) => {
     requests.push(JSON.parse(init.body));
     return requests.length <= 2
-      ? { ok: false, status: 503 }
+      ? {
+          ok: false,
+          status: 409,
+          json: async () => ({ error: "collection_posture_stale" }),
+        }
       : { ok: true, status: 202 };
   };
   try {
     const capture = createCapture({
       storage: "retry-test",
+      collectionPosture,
       onDelivery: (delivery) => deliveries.push(delivery),
     });
     const failed = await capture.page();
     assert.deepEqual(
       failed.deliveries.map(({ status, reason }) => [status, reason]),
       [
-        ["failed", "http_error"],
-        ["failed", "http_error"],
+        ["unavailable", "collection_posture_unavailable"],
+        ["unavailable", "collection_posture_unavailable"],
       ],
     );
     const retried = await capture.retry();
@@ -149,6 +165,8 @@ test("browser capture reports failures, retries stable event IDs, and deduplicat
     );
     assert.equal(requests[0].eventId, requests[2].eventId);
     assert.equal(requests[1].eventId, requests[3].eventId);
+    assert.equal(requests[0].occurredAt, requests[2].occurredAt);
+    assert.equal(requests[1].occurredAt, requests[3].occurredAt);
     const duplicate = await capture.page();
     assert.equal(
       duplicate.deliveries.every(
@@ -232,7 +250,7 @@ test("server client writes only through POST /v1/touches", async () => {
     assert.equal(received.body.touch.unexpectedProviderField, undefined);
     assert.equal(
       touchContract.controlPlaneCommit,
-      "43fa22a056665424278d8db3a7bcf2ff3430f8f5",
+      "3bc9b84553bfeeb57aadca14bf332a6dac7bb14d",
     );
     assert.equal(touchContract.route, "/v1/touches");
     assert.deepEqual(result, { recordId: "touch-1" });
