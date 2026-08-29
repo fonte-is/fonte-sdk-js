@@ -9,7 +9,7 @@ import type { CollectionPostureObservation } from "./collection-posture.js";
 import type { CaptureDelivery, CaptureEventType } from "./browser-types.js";
 import type { Scope } from "./types.js";
 
-const pending = new Set<string>();
+const pendingAttempts = new Map<string, PendingAttempt>();
 const completed = new Set<string>();
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -63,6 +63,7 @@ export interface DeliveryClient {
 type Notify = (delivery: CaptureDelivery) => CaptureDelivery;
 
 const markCompleted = (key: string, eventId: string): void => {
+  pendingAttempts.delete(key);
   completed.add(key);
   try {
     window.sessionStorage.setItem(key, `sent:${eventId}`);
@@ -205,35 +206,37 @@ async function sendDelivery(
   } catch {
     // In-memory guards still apply when session storage is unavailable.
   }
-  if (completed.has(key) || status.startsWith("sent:")) {
+  if (status.startsWith("sent:"))
+    markCompleted(key, status.slice("sent:".length));
+  if (completed.has(key)) {
     return notify({ eventType, status: "skipped", reason: "duplicate" });
   }
-  if ((pending.has(key) || status.startsWith("pending:")) && !retryPending) {
+  if (
+    (pendingAttempts.has(key) || status.startsWith("pending:")) &&
+    !retryPending
+  ) {
     return notify({ eventType, status: "skipped", reason: "in_flight" });
   }
-  const attempt = parsePendingAttempt(status) ?? {
-    eventId: createClientAttemptId(),
-    occurredAt: new Date().toISOString(),
-  };
-  pending.add(key);
+  const attempt = parsePendingAttempt(status) ??
+    pendingAttempts.get(key) ?? {
+      eventId: createClientAttemptId(),
+      occurredAt: new Date().toISOString(),
+    };
+  pendingAttempts.set(key, attempt);
   try {
     window.sessionStorage.setItem(key, `pending:${JSON.stringify(attempt)}`);
   } catch {
-    // The in-memory guard prevents duplicate posts during this page life.
+    // The in-memory attempt preserves retry identity during this page life.
   }
-  try {
-    return await postDelivery(
-      config,
-      notify,
-      key,
-      eventType,
-      scope,
-      journeyId,
-      attempt,
-    );
-  } finally {
-    pending.delete(key);
-  }
+  return postDelivery(
+    config,
+    notify,
+    key,
+    eventType,
+    scope,
+    journeyId,
+    attempt,
+  );
 }
 
 export function createDeliveryClient(
