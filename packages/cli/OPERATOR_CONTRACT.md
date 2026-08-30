@@ -64,8 +64,11 @@ fonte broadcast result --workspace <slug> --environment production \
 ```
 
 Marketing-settings read is one authenticated Core GET with no request body or
-retry. It returns only the exact workspace ID, environment, nonempty normalized
-postal address, and update time; missing, extra, blank, malformed, or
+retry. It succeeds in exactly one of two coupled states: configured returns the
+exact workspace ID and environment with nonempty normalized `postalAddress`
+and canonical `updatedAt`; not configured returns the exact workspace ID and
+environment with both `postalAddress: null` and `updatedAt: null`. Missing,
+extra, partial-null, blank, malformed, workspace-mismatched, or
 environment-mismatched readback fails closed with no Core effect.
 
 Draft creation uses the UUID idempotency key as Core's stable draft identity.
