@@ -19,16 +19,16 @@ const packageDirectory = path.join(root, "packages", "cli");
 const packageName = "@fonte-is/cli";
 const packageVersion = "0.2.0";
 const registryUrl = "https://registry.npmjs.org/";
-const reviewedPackageRef = "0f9450467faf3408af3dae9bcd33e56469951bce";
-const reviewedSourceTree = "d3d34aa67eb4b9cc01dc86624e99471d52520035";
-const reviewedCliTree = "a1b6c1bece6791ebdf346f54ce86af6715fe3d72";
+const reviewedPackageRef = "a82841ef84517b2d1e397f39ec9be7c87cefec4f";
+const reviewedSourceTree = "da77d991ac989fdfebc08443be49def6f5ef16cb";
+const reviewedCliTree = "a502097c8f43452d9d9db0ecbb8993ca7fabe812";
 const reviewedPackageLockBlob = "ab4b2841f02b25245b4fb7274ff9cb5ce9814cb7";
 const reviewedManifestBlob = "28b092ceddfc4d9afad2922a2d5b62e5d00ee4c0";
 const reviewedTarballDigests = {
-  sha1: "f6b813f3e7261e401e4331052e589fab54db9fb9",
-  sha256: "fa5f35644f224a68fa7fea65711fb351ee973e8ca2e1b6f11fe776845a7a12c7",
+  sha1: "ba4603fa162a961ca3bae71101e50b78f3d42c93",
+  sha256: "cc77bc4e515d4134884d8635db5494e4943e0fef2293d845df1b4ec973f2ea71",
   integrity:
-    "sha512-z3xj5LA7lxLbWpxbphutC6zmivA/jbleHPbTwAbIIXIBVJT+hfNzv9HU7ksICzxPbmpoktcnGgmy/AD0x9pXiw==",
+    "sha512-DuZr3df/wizu9bGEeRgwpR2OHvu1xlUGIM2IPftXXGE4xc6dZ8bk9O5UyCIrwVZtb2XkMdM68zlCGPLRcbP1Tg==",
 };
 const receiptPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
