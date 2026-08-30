@@ -9,10 +9,18 @@ export interface WorkspaceMarketingSettingsInput {
   readonly environment: "sandbox" | "production";
 }
 
-export interface WorkspaceMarketingSettingsResult {
+interface WorkspaceMarketingSettingsResultBase {
   readonly kind: "workspace_marketing_settings";
   readonly workspaceId: string;
   readonly environment: "sandbox" | "production";
-  readonly postalAddress: string;
-  readonly updatedAt: string;
 }
+
+export type WorkspaceMarketingSettingsResult =
+  | (WorkspaceMarketingSettingsResultBase & {
+      readonly postalAddress: string;
+      readonly updatedAt: string;
+    })
+  | (WorkspaceMarketingSettingsResultBase & {
+      readonly postalAddress: null;
+      readonly updatedAt: null;
+    });

@@ -12,6 +12,16 @@ export function workspaceMarketingSettings(
   if (body.environment !== "sandbox" && body.environment !== "production") {
     invalid();
   }
+  if (body.postalAddress === null || body.updatedAt === null) {
+    if (body.postalAddress !== null || body.updatedAt !== null) invalid();
+    return {
+      kind: "workspace_marketing_settings",
+      workspaceId: workspaceId(body.workspaceId),
+      environment: body.environment,
+      postalAddress: null,
+      updatedAt: null,
+    };
+  }
   return {
     kind: "workspace_marketing_settings",
     workspaceId: workspaceId(body.workspaceId),

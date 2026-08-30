@@ -131,6 +131,52 @@ test("marketing settings uses one authenticated Core GET and emits aggregate fie
   assert.equal(result.stdout.includes("provider"), false);
 });
 
+test("marketing settings represents the exact unset state without inventing configuration", async () => {
+  const unset = {
+    workspaceId: settings.workspaceId,
+    environment: settings.environment,
+    postalAddress: null,
+    updatedAt: null,
+  };
+  let coreRequests = 0;
+  const result = await runProgram(
+    argumentsFor(),
+    dependencies(async (input) => {
+      if (String(input) === configUrl) return json(config);
+      coreRequests += 1;
+      return json(unset);
+    }),
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(coreRequests, 1);
+  assert.equal(result.receipt.core_effect, "none");
+  assert.deepEqual(result.receipt.result, {
+    kind: "workspace_marketing_settings",
+    ...unset,
+  });
+
+  const human = await runProgram(
+    argumentsFor().filter((value) => value !== "--json"),
+    dependencies(async (input) =>
+      String(input) === configUrl ? json(config) : json(unset),
+    ),
+  );
+  assert.equal(human.exitCode, 0);
+  assert.equal(
+    human.stdout,
+    [
+      "Fonte workspace marketing settings: not configured.",
+      `Workspace: ${settings.workspaceId}.`,
+      "Environment: production.",
+      "Postal address: not configured.",
+      "Updated: not configured.",
+      "Core effect: none.",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("marketing settings rejects malformed, extra, blank, and scope-mismatched receipts", async () => {
   const invalidReceipts = [
     { ...settings, recipient: "hidden@example.test" },
@@ -139,6 +185,10 @@ test("marketing settings rejects malformed, extra, blank, and scope-mismatched r
     { ...settings, environment: "sandbox" },
     { ...settings, postalAddress: "\t" },
     { ...settings, updatedAt: "2026-08-28 09:15:00Z" },
+    { ...settings, postalAddress: null },
+    { ...settings, updatedAt: null },
+    { ...settings, postalAddress: null, updatedAt: "" },
+    { ...settings, postalAddress: "", updatedAt: null },
   ];
   for (const body of invalidReceipts) {
     let coreRequests = 0;
