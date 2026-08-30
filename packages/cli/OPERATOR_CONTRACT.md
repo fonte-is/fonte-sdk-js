@@ -68,8 +68,8 @@ retry. It succeeds in exactly one of two coupled states: configured returns the
 exact workspace ID and environment with nonempty normalized `postalAddress`
 and canonical `updatedAt`; not configured returns the exact workspace ID and
 environment with both `postalAddress: null` and `updatedAt: null`. Missing,
-extra, partial-null, blank, malformed, workspace-mismatched, or
-environment-mismatched readback fails closed with no Core effect.
+extra, partial-null, blank, malformed, or environment-mismatched readback fails
+closed with no Core effect.
 
 Draft creation uses the UUID idempotency key as Core's stable draft identity.
 An exact replay is a no-op; changed material under the same key is a conflict.
