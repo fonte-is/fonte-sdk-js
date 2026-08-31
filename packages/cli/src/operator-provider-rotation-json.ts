@@ -261,10 +261,31 @@ function broadcastEvidenceValue(
   ) {
     invalid();
   }
+  assertNewestToOldestBroadcastOrder(broadcasts);
   return {
     broadcasts,
     evidenceChecksumSha256: sha(row.evidenceChecksumSha256),
   };
+}
+
+function assertNewestToOldestBroadcastOrder(
+  broadcasts: NonNullable<
+    ProviderRotationResult["broadcastEvidence"]
+  >["broadcasts"],
+): void {
+  for (let index = 1; index < broadcasts.length; index += 1) {
+    const previous = broadcasts[index - 1]!;
+    const current = broadcasts[index]!;
+    const previousSentAt = Date.parse(previous.sentAt);
+    const currentSentAt = Date.parse(current.sentAt);
+    if (
+      previousSentAt < currentSentAt ||
+      (previousSentAt === currentSentAt &&
+        previous.broadcastId > current.broadcastId)
+    ) {
+      invalid();
+    }
+  }
 }
 
 function progressValue(

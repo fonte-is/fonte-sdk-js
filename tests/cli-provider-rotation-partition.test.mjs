@@ -85,6 +85,34 @@ test("rotation client accepts an exact aggregate receipt", async () => {
   await client.startProviderRotation(parseArguments(startArgs()).operator);
 });
 
+test("rotation receipt rejects inverted chronology and binds equal-time order", async () => {
+  const inverted = terminalReceipt();
+  inverted.broadcastEvidence.broadcasts[0].sentAt = "2026-08-27T08:00:00.000Z";
+  inverted.broadcastEvidence.broadcasts[1].sentAt = "2026-08-28T08:00:00.000Z";
+  assert.throws(() => providerRotationReceipt(inverted));
+  const rejected = await runProgram(readArgs(), dependencies([], inverted));
+  assert.equal(rejected.receipt.reason, "core_operator_receipt_invalid");
+  assert.equal(rejected.receipt.core_effect, "none");
+  assertAggregateOnly(rejected.stdout);
+
+  const equalTime = terminalReceipt();
+  for (const broadcast of equalTime.broadcastEvidence.broadcasts) {
+    broadcast.sentAt = "2026-08-28T08:00:00.000Z";
+  }
+  assert.doesNotThrow(() => providerRotationReceipt(equalTime));
+
+  const reversedEqualTime = terminalReceipt();
+  reversedEqualTime.broadcastProgress.orderedBroadcastIds = [
+    oldestBroadcastId,
+    newestQualifyingBroadcastId,
+  ];
+  reversedEqualTime.broadcastEvidence.broadcasts.reverse();
+  for (const broadcast of reversedEqualTime.broadcastEvidence.broadcasts) {
+    broadcast.sentAt = "2026-08-28T08:00:00.000Z";
+  }
+  assert.throws(() => providerRotationReceipt(reversedEqualTime));
+});
+
 test("official runner forwards exact Core operations and emits aggregate receipts", async () => {
   const cases = [
     [startArgs(), populationReceipt(), "rotation-start", "POST"],
