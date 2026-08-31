@@ -14,8 +14,8 @@ const populationGenerationId = "40000000-0000-4000-8000-000000000231";
 const placementSegmentId = "41000000-0000-4000-8000-000000000231";
 const candidateGenerationId = "50000000-0000-4000-8000-000000000231";
 const partitionGenerationId = "60000000-0000-4000-8000-000000000231";
-const qualifyingBroadcastId = "70000000-0000-4000-8000-000000000231";
-const priorBroadcastId = "80000000-0000-4000-8000-000000000231";
+const newestQualifyingBroadcastId = "70000000-0000-4000-8000-000000000231";
+const oldestBroadcastId = "80000000-0000-4000-8000-000000000231";
 const coreUrl = "https://core.example.test";
 const bearer = "synthetic.operator.bearer";
 
@@ -46,8 +46,8 @@ test("four fixed commands parse exact iteration and recovery guards", () => {
     outgoingCandidateOperationId,
     populationSelectorGenerationId: populationGenerationId,
     placementSegmentId,
-    qualifyingBroadcastId,
-    orderedBroadcastIds: [qualifyingBroadcastId, priorBroadcastId],
+    qualifyingBroadcastId: newestQualifyingBroadcastId,
+    orderedBroadcastIds: [newestQualifyingBroadcastId, oldestBroadcastId],
     coldRemaining: 1,
     identityCustody: {
       emailAddressKeyId: "tenant-email-custody-v1",
@@ -56,13 +56,24 @@ test("four fixed commands parse exact iteration and recovery guards", () => {
   });
   assert.equal(commands[1].expectedPageNumber, 1);
   assert.deepEqual(commands[3].orderedBroadcastIds, [
-    qualifyingBroadcastId,
-    priorBroadcastId,
+    newestQualifyingBroadcastId,
+    oldestBroadcastId,
   ]);
   assert.throws(() => parseArguments(advanceArgs(0)));
   assert.throws(() =>
     parseArguments([...sealArgs(), "--recipient", "hidden@example.test"]),
   );
+});
+
+test("rotation help requires newest-to-oldest broadcast order", async () => {
+  for (const operation of ["start", "seal"]) {
+    const result = await runProgram(
+      ["bridge", "rotation", operation, "--help"],
+      {},
+    );
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /newest-to-oldest/);
+  }
 });
 
 test("rotation client accepts an exact aggregate receipt", async () => {
@@ -114,11 +125,14 @@ test("official runner forwards exact Core operations and emits aggregate receipt
       assert.equal(result.receipt.core_effect, "attempted");
     }
     if (path === "rotation-start") {
-      assert.equal(request.body.qualifyingBroadcastId, qualifyingBroadcastId);
+      assert.equal(
+        request.body.qualifyingBroadcastId,
+        newestQualifyingBroadcastId,
+      );
       assert.equal(request.body.placementSegmentId, placementSegmentId);
       assert.deepEqual(request.body.orderedBroadcastIds, [
-        qualifyingBroadcastId,
-        priorBroadcastId,
+        newestQualifyingBroadcastId,
+        oldestBroadcastId,
       ]);
       assert.equal("recipient" in request.body, false);
       assert.equal("credential" in request.body, false);
@@ -282,11 +296,11 @@ function startArgs() {
     "--placement-segment-id",
     placementSegmentId,
     "--qualifying-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    priorBroadcastId,
+    oldestBroadcastId,
     "--cold-remaining",
     "1",
     "--identity-key-id",
@@ -313,11 +327,11 @@ function sealArgs() {
     "--partition-generation-id",
     partitionGenerationId,
     "--qualifying-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    priorBroadcastId,
+    oldestBroadcastId,
     "--json",
   ];
 }
@@ -367,8 +381,8 @@ function populationReceipt(overrides = {}) {
     },
     population: null,
     broadcastProgress: {
-      qualifyingBroadcastId,
-      orderedBroadcastIds: [qualifyingBroadcastId, priorBroadcastId],
+      qualifyingBroadcastId: newestQualifyingBroadcastId,
+      orderedBroadcastIds: [newestQualifyingBroadcastId, oldestBroadcastId],
       nextBroadcastOrdinal: 1,
       nextStage: "metadata",
       nextCursorPresent: false,
@@ -417,8 +431,8 @@ function terminalReceipt(options = {}) {
     },
     population,
     broadcastProgress: {
-      qualifyingBroadcastId,
-      orderedBroadcastIds: [qualifyingBroadcastId, priorBroadcastId],
+      qualifyingBroadcastId: newestQualifyingBroadcastId,
+      orderedBroadcastIds: [newestQualifyingBroadcastId, oldestBroadcastId],
       nextBroadcastOrdinal: null,
       nextStage: null,
       nextCursorPresent: false,
@@ -429,7 +443,7 @@ function terminalReceipt(options = {}) {
       providerThrottles: 0,
     },
     broadcastEvidence: {
-      broadcasts: [qualifyingBroadcastId, priorBroadcastId].map(
+      broadcasts: [newestQualifyingBroadcastId, oldestBroadcastId].map(
         (broadcastId, index) => ({
           broadcastId,
           sentAt: `2026-08-2${8 - index}T08:00:00.000Z`,
