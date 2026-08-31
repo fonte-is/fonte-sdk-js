@@ -43,12 +43,14 @@ export function providerRotationReceipt(
     "provider",
     "providerAccess",
     "providerMutation",
+    "contactMutation",
     "unknownAllowsEffect",
   ]);
   if (
     authority.provider !== "resend" ||
     authority.providerAccess !== "get_only_stored_credential" ||
     authority.providerMutation !== "not_granted" ||
+    authority.contactMutation !== "not_granted" ||
     authority.unknownAllowsEffect !== false
   )
     invalid();
@@ -68,8 +70,7 @@ export function providerRotationReceipt(
     body.outgoingCandidateAcquisition === null
       ? null
       : acquisitionValue(body.outgoingCandidateAcquisition);
-  const outgoingIntake =
-    body.outgoingIntake === null ? null : intakeValue(body.outgoingIntake);
+  if (body.outgoingIntake !== null) invalid();
   const partition =
     body.partition === null ? null : partitionValue(body.partition);
   const result = {
@@ -90,7 +91,7 @@ export function providerRotationReceipt(
     broadcastEvidence,
     candidateAcquisition: acquisition,
     outgoingCandidateAcquisition: outgoingAcquisition,
-    outgoingIntake,
+    outgoingIntake: null,
     coldRemaining: nonnegative(body.coldRemaining),
     partition,
     candidateGenerationId: nullableUuid(body.candidateGenerationId),
@@ -119,13 +120,6 @@ export function providerRotationReceipt(
     (terminal && (!population || !acquisition)) ||
     (result.status === "acquiring_evidence" || terminal) !==
       (broadcastEvidence !== null) ||
-    (partition === null && outgoingIntake !== null) ||
-    (partition !== null &&
-      (partition.outgoing === null) !== (outgoingIntake === null)) ||
-    (outgoingIntake !== null &&
-      (!outgoingAcquisition ||
-        outgoingIntake.count !== outgoingAcquisition.candidateCount ||
-        !sameSelector(outgoingIntake.selector, outgoingAcquisition))) ||
     (result.status === "acquiring_broadcasts" &&
       broadcastProgress.nextStage === null) ||
     (result.status === "population_ready" && !population) ||
@@ -146,6 +140,8 @@ export function providerRotationReceipt(
           ? 0
           : Math.min(partition.counts.E, partition.coldRemaining)) ||
       (partition.outgoing === null) !== (partition.outgoingCount === 0) ||
+      Date.parse(partition.freshnessPolicy.evaluatedAt) <
+        Date.parse(population.observedAt.end) ||
       (partition.outgoing &&
         partition.outgoing.candidateCount !== partition.outgoingCount) ||
       (partition.outgoing === null) !== (outgoingAcquisition === null) ||
@@ -350,39 +346,6 @@ function acquisitionValue(
   return { operationId: uuid(row.operationId), ...selectorValue(row) };
 }
 
-function intakeValue(
-  value: unknown,
-): NonNullable<ProviderRotationResult["outgoingIntake"]> {
-  const row = exact(value, [
-    "schemaVersion",
-    "contactImportBatchId",
-    "sourceChecksumSha256",
-    "fonteIdentitySetSha256",
-    "count",
-    "selector",
-    "bindingChecksumSha256",
-  ]);
-  if (row.schemaVersion !== "provider_rotation_intake.v1") invalid();
-  return {
-    schemaVersion: row.schemaVersion,
-    contactImportBatchId: uuid(row.contactImportBatchId),
-    sourceChecksumSha256: sha(row.sourceChecksumSha256),
-    fonteIdentitySetSha256: sha(row.fonteIdentitySetSha256),
-    count: positive(row.count),
-    selector: selectorValue(
-      exact(row.selector, [
-        "selectorId",
-        "selectorGenerationId",
-        "artifactSha256",
-        "identitySetSha256",
-        "candidateCount",
-        "candidateManifestSha256",
-      ]),
-    ),
-    bindingChecksumSha256: sha(row.bindingChecksumSha256),
-  };
-}
-
 function partitionValue(
   value: unknown,
 ): NonNullable<ProviderRotationResult["partition"]> {
@@ -398,6 +361,7 @@ function partitionValue(
     "outgoing",
     "outgoingCount",
     "coldRemaining",
+    "freshnessPolicy",
     "unionConservationSha256",
     "partitionChecksumSha256",
   ]);
@@ -409,6 +373,7 @@ function partitionValue(
     invalid();
   const counts = categoryCounts(row.counts);
   const selectors = selectorMap(row.selectors);
+  const freshnessPolicy = freshnessPolicyValue(row.freshnessPolicy);
   if (
     (["E", "W", "X", "U"] as const).some(
       (key) => selectors[key].candidateCount !== counts[key],
@@ -464,9 +429,45 @@ function partitionValue(
           ),
     outgoingCount: nonnegative(row.outgoingCount),
     coldRemaining: nonnegative(row.coldRemaining),
+    freshnessPolicy,
     unionConservationSha256: sha(row.unionConservationSha256),
     partitionChecksumSha256: sha(row.partitionChecksumSha256),
   };
+}
+
+function freshnessPolicyValue(
+  value: unknown,
+): NonNullable<ProviderRotationResult["partition"]>["freshnessPolicy"] {
+  const row = exact(value, [
+    "evaluatedAt",
+    "populationMaxAgeSeconds",
+    "suppressionMaxAgeSeconds",
+    "broadcastObservationMaxAgeSeconds",
+    "positiveSignalMaxAgeSeconds",
+    "candidateGenerationMaxAgeSeconds",
+  ]);
+  const result = {
+    evaluatedAt: instant(row.evaluatedAt),
+    populationMaxAgeSeconds: positive(row.populationMaxAgeSeconds),
+    suppressionMaxAgeSeconds: positive(row.suppressionMaxAgeSeconds),
+    broadcastObservationMaxAgeSeconds: positive(
+      row.broadcastObservationMaxAgeSeconds,
+    ),
+    positiveSignalMaxAgeSeconds: positive(row.positiveSignalMaxAgeSeconds),
+    candidateGenerationMaxAgeSeconds: positive(
+      row.candidateGenerationMaxAgeSeconds,
+    ),
+  };
+  if (
+    result.populationMaxAgeSeconds !== 86_400 ||
+    result.suppressionMaxAgeSeconds !== 86_400 ||
+    result.broadcastObservationMaxAgeSeconds !== 86_400 ||
+    result.positiveSignalMaxAgeSeconds !== 7_776_000 ||
+    result.candidateGenerationMaxAgeSeconds !== 86_400
+  ) {
+    invalid();
+  }
+  return result;
 }
 
 function selectorMap(
@@ -565,6 +566,7 @@ function rotationReason(value: unknown): ProviderRotationReason {
     value !== "canonical_import_not_completed" &&
     value !== "no_message_history" &&
     value !== "no_recent_message_history" &&
+    value !== "no_positive_signal" &&
     value !== "provider_unsubscribe" &&
     value !== "provider_bounce" &&
     value !== "provider_complaint" &&
@@ -573,6 +575,12 @@ function rotationReason(value: unknown): ProviderRotationReason {
     value !== "provider_eligibility_unknown" &&
     value !== "identity_unknown" &&
     value !== "evidence_missing" &&
+    value !== "freshness_unbound" &&
+    value !== "population_evidence_stale" &&
+    value !== "suppression_evidence_stale" &&
+    value !== "broadcast_evidence_stale" &&
+    value !== "positive_signal_stale" &&
+    value !== "candidate_generation_stale" &&
     value !== "evidence_contradictory" &&
     value !== "relationship_evidence_not_preserved"
   )

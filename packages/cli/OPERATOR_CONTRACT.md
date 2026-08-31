@@ -174,17 +174,28 @@ Core—not the CLI—creates an exhaustive disjoint partition whose four private
 sealed selector sets have union equality with the fresh live population root:
 
 - `E` (eligible now): current unsubscribe/protection checks pass; the named
-  qualifying broadcast has a positive accepted, delivered, opened, or clicked
-  outcome; provider `created_at` is known; portability is complete; and Fonte
+  qualifying broadcast has an exact opened or clicked outcome; provider
+  `created_at` is known; portability is complete; and Fonte
   custody is either eligible (`retirement_evidence_complete`) or absent
   (`canonical_import_not_completed`).
-- `W` (warm first): the identity was not a recipient of the named qualifying
-  broadcast (`no_message_history`) and must remain in Resend for warming.
+- `W` (warm first): the identity has only accepted/delivered evidence
+  (`no_positive_signal`) or was not a recipient of the named qualifying
+  broadcast (`no_message_history`), and must remain in Resend for warming.
 - `X` (excluded): current provider unsubscribe, bounce, complaint, suppression,
   or protected/ineligible Fonte custody applies.
 - `U` (unknown): Fonte custody is unknown, qualifying-broadcast evidence is
   unknown or refused, provider `created_at` is missing, or portability evidence
-  is unknown. Any nonzero `U` blocks effects and the outgoing selector.
+  is unknown. Missing, incoherent, future, or stale population, suppression,
+  broadcast, positive-signal, or candidate-generation timestamps are also
+  `U`. Any nonzero `U` blocks effects and the outgoing selector.
+
+Core evaluates a fixed policy at seal time: population, suppression, broadcast,
+and candidate-generation windows may be at most 86,400 seconds old; the named
+positive signal may be at most 7,776,000 seconds old. The exact evaluation time
+and limits are included in the aggregate partition receipt. `rotation seal`
+creates the outgoing evidence selector but grants no Contact mutation and
+performs no Contact intake. Any later promotion requires a separate sanctioned
+Contact import journey and exact operation-specific authority.
 
 Human and JSON receipts expose only aggregate progress, category/reason counts,
 private selector/generation identities, and union/partition checksums. They do

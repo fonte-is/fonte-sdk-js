@@ -132,6 +132,7 @@ test("official runner forwards exact Core operations and emits aggregate receipt
     assert.equal(human.exitCode, 0);
     assert.match(human.stdout, /Fonte Bridge rotation:/);
     assert.match(human.stdout, /Partition E\/W\/X\/U:/);
+    assert.match(human.stdout, /Contact mutation not_granted/);
     assert.doesNotMatch(human.stdout, /operator_receipt_unrenderable/);
     assertAggregateOnly(human.stdout);
   }
@@ -187,6 +188,46 @@ test("unknown and malformed evidence fail closed; advance loss is not retried", 
   assert.equal(unknownReason.receipt.reason, "core_operator_receipt_invalid");
   assert.equal(unknownReason.receipt.core_effect, "none");
   assertAggregateOnly(unknownReason.stdout);
+
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      outgoingIntake: { count: 1 },
+    }),
+  );
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      authority: {
+        ...terminalReceipt().authority,
+        contactMutation: "granted",
+      },
+    }),
+  );
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      partition: {
+        ...terminalReceipt().partition,
+        freshnessPolicy: {
+          ...terminalReceipt().partition.freshnessPolicy,
+          evaluatedAt: "2026-08-28T08:09:00.000Z",
+        },
+      },
+    }),
+  );
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      partition: {
+        ...terminalReceipt().partition,
+        freshnessPolicy: {
+          ...terminalReceipt().partition.freshnessPolicy,
+          positiveSignalMaxAgeSeconds: 7_776_001,
+        },
+      },
+    }),
+  );
 
   const readback = `fonte bridge rotation read --workspace northstar --environment production --iteration-id ${iterationId} --json`;
   for (const argv of [startArgs(), advanceArgs(7), sealArgs()]) {
@@ -303,6 +344,7 @@ function populationReceipt(overrides = {}) {
       provider: "resend",
       providerAccess: "get_only_stored_credential",
       providerMutation: "not_granted",
+      contactMutation: "not_granted",
       unknownAllowsEffect: false,
     },
     iterationId,
@@ -425,26 +467,7 @@ function terminalReceipt(options = {}) {
             "f".repeat(64),
           ),
         },
-    outgoingIntake: blocked
-      ? null
-      : {
-          schemaVersion: "provider_rotation_intake.v1",
-          contactImportBatchId: "90000000-0000-4000-8000-000000000231",
-          sourceChecksumSha256: "6".repeat(64),
-          fonteIdentitySetSha256: "7".repeat(64),
-          count: 1,
-          selector: {
-            selectorId: `${iterationId}:D`,
-            ...selector(
-              1,
-              partitionGenerationId,
-              "d".repeat(64),
-              "e".repeat(64),
-              "f".repeat(64),
-            ),
-          },
-          bindingChecksumSha256: "8".repeat(64),
-        },
+    outgoingIntake: null,
     partition: partition(blocked),
     candidateGenerationId,
     partitionGenerationId,
@@ -484,11 +507,11 @@ function partition(blocked) {
       ? [
           { category: "E", reason: "retirement_evidence_complete", count: 1 },
           { category: "W", reason: "no_message_history", count: 1 },
-          { category: "U", reason: "evidence_missing", count: 1 },
+          { category: "U", reason: "freshness_unbound", count: 1 },
         ]
       : [
           { category: "E", reason: "retirement_evidence_complete", count: 2 },
-          { category: "W", reason: "no_message_history", count: 1 },
+          { category: "W", reason: "no_positive_signal", count: 1 },
         ],
     selectors,
     outgoing: blocked
@@ -505,6 +528,14 @@ function partition(blocked) {
         },
     outgoingCount: blocked ? 0 : 1,
     coldRemaining: 1,
+    freshnessPolicy: {
+      evaluatedAt: "2026-08-28T08:30:00.000Z",
+      populationMaxAgeSeconds: 86_400,
+      suppressionMaxAgeSeconds: 86_400,
+      broadcastObservationMaxAgeSeconds: 86_400,
+      positiveSignalMaxAgeSeconds: 7_776_000,
+      candidateGenerationMaxAgeSeconds: 86_400,
+    },
     unionConservationSha256: "a".repeat(64),
     partitionChecksumSha256: "f".repeat(64),
   };
