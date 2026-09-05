@@ -126,10 +126,15 @@ function capacityEvidence(
   const body = object(value);
   const maximum = count(body.max24HourSend);
   const effective = count(body.effectiveSentLast24Hours);
+  const reserve = count(body.protectedTransactionalReserve);
   const remaining = count(body.dailyRemaining);
   const maxRate = nonnegativeNumber(body.maxSendRate);
   const operatingRate = nonnegativeNumber(body.operatingSendsPerSecond);
-  if (remaining !== Math.max(0, maximum - effective) || operatingRate > maxRate)
+  if (
+    reserve >= maximum ||
+    remaining !== Math.max(0, maximum - effective - reserve) ||
+    operatingRate > maxRate
+  )
     invalid();
   if (body.providerHealth !== "healthy" && body.providerHealth !== "degraded")
     invalid();
@@ -138,6 +143,7 @@ function capacityEvidence(
     observed_at: instant(body.observedAt),
     max_24_hour_send: maximum,
     effective_sent_last_24_hours: effective,
+    protected_transactional_reserve: reserve,
     daily_remaining: remaining,
     max_send_rate: maxRate,
     operating_sends_per_second: operatingRate,
