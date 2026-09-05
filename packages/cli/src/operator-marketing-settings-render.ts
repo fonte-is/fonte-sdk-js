@@ -11,7 +11,9 @@ export function renderWorkspaceMarketingSettings(
       `Workspace: ${result.workspaceId}.`,
       `Environment: ${result.environment}.`,
       "Postal address: not configured.",
-      "Updated: not configured.",
+      result.updatedAt === null
+        ? "Updated: not configured."
+        : `Updated: ${result.updatedAt}.`,
       "Core effect: none.",
       "",
     ].join("\n");
