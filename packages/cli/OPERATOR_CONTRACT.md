@@ -214,7 +214,12 @@ supplies an exact cumulative release ceiling; the CLI sends Core only the
 difference between that ceiling and the settled released count, under Core's
 existing idempotency key. It reads progress without mutation retries, requires
 that exact new delta to become newly accepted, preserves the historical
-non-accepted offset, and pauses. After resume begins, the first refused,
+non-accepted offset, and pauses while the broadcast remains open. A fresh Core
+`terminal` receipt at the exact accepted ceiling, with exact recipient accounting
+and no held, pending, claimed, or remaining work, completes without an additional
+control mutation. An already-terminal baseline reports no Core effect. Terminal
+success retains the distinct receipt reason when new cancellations occurred.
+After resume begins, the first refused,
 unknown, cancelled, stale, or unavailable observation also causes one immediate
 pause attempt. The terminal receipt contains only the frozen operation ID,
 sanitized progress, completed steps, and the ended in-memory authorization
