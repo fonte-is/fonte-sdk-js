@@ -21,6 +21,7 @@ const missingBroadcast = new Set([
   "pause",
   "resume",
   "cancel",
+  "close",
   "duplicate",
 ]);
 const bridgeDeclarations = new Set([

@@ -71,7 +71,7 @@ export interface ProductionBroadcastReadInput {
 }
 
 export interface ProductionBroadcastControlInput extends ProductionBroadcastReadInput {
-  readonly operation: "pause" | "resume" | "cancel_remaining";
+  readonly operation: "pause" | "resume" | "close" | "cancel_remaining";
   readonly expectedControlVersion: string;
 }
 
@@ -240,6 +240,8 @@ export interface ProductionBroadcastProgressResult {
     | "processing"
     | "pausing"
     | "paused"
+    | "closing"
+    | "closed"
     | "cancelling"
     | "cancelled"
     | "terminal";
@@ -292,6 +294,8 @@ export interface ProductionBroadcastResult {
     | "processing"
     | "pausing"
     | "paused"
+    | "closing"
+    | "closed"
     | "cancelling"
     | "cancelled"
     | "terminal";
