@@ -168,7 +168,7 @@ const entries: readonly HelpEntry[] = [
       "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one browser authorization.",
     json: true,
   },
-  ...(["pause", "resume", "cancel"] as const).map((operation) => ({
+  ...(["pause", "resume", "close"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [
       [

@@ -38,7 +38,12 @@ export function parseProductionOperatorArguments(
   if (argv[1] === "authorize") return authorize(argv.slice(2));
   if (argv[1] === "canary") return canary(argv.slice(2));
   if (argv[1] === "status") return progress(argv.slice(2));
-  if (argv[1] === "pause" || argv[1] === "resume" || argv[1] === "cancel") {
+  if (
+    argv[1] === "pause" ||
+    argv[1] === "resume" ||
+    argv[1] === "cancel" ||
+    argv[1] === "close"
+  ) {
     return control(argv[1], argv.slice(2));
   }
   if (argv[1] === "result") return result(argv.slice(2));
@@ -210,7 +215,7 @@ function canary(argv: readonly string[]): ParsedOperatorArguments {
 }
 
 function control(
-  name: "pause" | "resume" | "cancel",
+  name: "pause" | "resume" | "cancel" | "close",
   argv: readonly string[],
 ): ParsedOperatorArguments {
   const options = productionRead(argv, [

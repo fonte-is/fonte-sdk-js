@@ -124,6 +124,14 @@ test("versioned controls bind one exact observation and preserve settling states
       controlState: "active",
     },
     {
+      command: "close",
+      operation: "close",
+      id: cancelledId,
+      expected: "9",
+      status: "closing",
+      controlState: "cancelled",
+    },
+    {
       command: "cancel",
       operation: "cancel_remaining",
       id: cancelledId,
@@ -155,7 +163,15 @@ test("versioned controls bind one exact observation and preserve settling states
     );
 
     assert.equal(result.exitCode, 0, command);
-    assert.equal(JSON.parse(result.stdout).result.status, status, command);
+    assert.equal(
+      JSON.parse(result.stdout).result.status,
+      status === "cancelling"
+        ? "closing"
+        : status === "cancelled"
+          ? "closed"
+          : status,
+      command,
+    );
     assert.deepEqual(
       requests,
       [
@@ -382,7 +398,7 @@ async function runJourney(configUrl) {
   for (const command of productionJourneyArguments()) {
     const result = await runProgram(command, dependencies({ configUrl }));
     assert.equal(result.stderr, "");
-    assert.equal(result.exitCode, 0);
+    assert.equal(result.exitCode, 0, JSON.stringify({ command, stdout: result.stdout }));
     receipts.push(JSON.parse(result.stdout));
   }
   return receipts;

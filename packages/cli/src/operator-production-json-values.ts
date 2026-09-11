@@ -120,12 +120,18 @@ export function progressStatus(
     value !== "processing" &&
     value !== "pausing" &&
     value !== "paused" &&
+    value !== "closing" &&
+    value !== "closed" &&
     value !== "cancelling" &&
     value !== "cancelled" &&
     value !== "terminal"
   )
     invalid();
-  return value;
+  return value === "cancelled"
+    ? "closed"
+    : value === "cancelling"
+      ? "closing"
+      : value;
 }
 
 export function controlVersion(value: unknown): string {
