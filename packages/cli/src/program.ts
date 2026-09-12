@@ -9,6 +9,11 @@ import {
   VERSION_TEXT,
 } from "./constants.js";
 import { runAuthorizedConsumer } from "./auth-exec.js";
+import {
+  isLoginFailure,
+  loginRecovery,
+  runAuthCommand,
+} from "./auth-commands.js";
 import { verifyInstallation } from "./doctor.js";
 import { CliBlockedError, CliExecutionError, CliUsageError } from "./errors.js";
 import { readOptional } from "./filesystem.js";
@@ -52,6 +57,15 @@ export async function runProgram(
   if (parsed.command === "auth-exec") {
     return executeAuthExec(parsed, dependencies);
   }
+  if (parsed.command === "auth-session") {
+    if (!dependencies.auth) return authorizationFailure();
+    return runAuthCommand(
+      parsed.authAction!,
+      parsed.switchAccount ?? false,
+      parsed.json,
+      dependencies.auth,
+    );
+  }
   if (parsed.command === "operator") {
     if (!dependencies.operator) return executionFailure();
     const receipt = await runOperatorCommand(
@@ -59,7 +73,20 @@ export async function runProgram(
       dependencies.operator,
       dependencies.randomUUID,
     );
-    return receiptResult(receipt, parsed.json, receiptExitCode(receipt));
+    const result =
+      receipt.core_effect === "none" &&
+      isLoginFailure(receipt.reason) &&
+      !receipt.next_action
+        ? {
+            ...receipt,
+            next_action: {
+              kind: "run_command" as const,
+              command: "fonte auth login",
+              retry_mutation: false as const,
+            },
+          }
+        : receipt;
+    return receiptResult(result, parsed.json, receiptExitCode(result));
   }
   const request = { ...parsed, command: parsed.command };
   try {
@@ -105,7 +132,12 @@ async function executeAuthExec(
     );
     return { exitCode: 0, stdout: "", stderr: "" };
   } catch (error) {
-    if (error instanceof HostedTestBlockedError) return authorizationFailure();
+    if (error instanceof HostedTestBlockedError)
+      return {
+        exitCode: 3,
+        stdout: "",
+        stderr: loginRecovery(error),
+      };
     return executionFailure();
   }
 }

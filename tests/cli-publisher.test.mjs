@@ -98,7 +98,7 @@ async function runPublisher(options = {}) {
     });
     const manifest = {
       name: "@fonte-is/cli",
-      version: "0.2.0",
+      version: "0.3.0",
       type: "module",
       bin: { fonte: "./dist/main.js" },
     };
@@ -110,11 +110,11 @@ async function runPublisher(options = {}) {
     }
     await writeFile(
       path.join(fixture, "package-lock.json"),
-      JSON.stringify({ packages: { "packages/cli": { version: "0.2.0" } } }),
+      JSON.stringify({ packages: { "packages/cli": { version: "0.3.0" } } }),
     );
     await writeFile(
       path.join(fixture, "packed/package/dist/main.js"),
-      `process.stdout.write(${JSON.stringify(`@fonte-is/cli ${options.binaryVersion ?? "0.2.0"}\n`)});\n`,
+      `process.stdout.write(${JSON.stringify(`@fonte-is/cli ${options.binaryVersion ?? "0.3.0"}\n`)});\n`,
     );
     const tarball = path.join(fixture, "fixture.tgz");
     const packed = spawnSync(
@@ -208,10 +208,10 @@ if (command === "git") {
 } else if (args[0] === "pack") {
   const destination = args[args.indexOf("--pack-destination") + 1];
   fs.copyFileSync(path.join(config.fixture, "fixture.tgz"), path.join(destination, "fixture.tgz"));
-  process.stdout.write(JSON.stringify([{ name: "@fonte-is/cli", version: "0.2.0", filename: "fixture.tgz" }]));
+  process.stdout.write(JSON.stringify([{ name: "@fonte-is/cli", version: "0.3.0", filename: "fixture.tgz" }]));
 } else if (args[0] === "view") {
   if (config.mode === "occupied" || config.mode === "already_exact" || fs.existsSync(path.join(config.fixture, "published"))) {
-    process.stdout.write(JSON.stringify({ name: "@fonte-is/cli", version: "0.2.0", dist: { integrity: config.mode === "occupied" ? "different" : config.digests.integrity, shasum: config.digests.sha1 } }));
+    process.stdout.write(JSON.stringify({ name: "@fonte-is/cli", version: "0.3.0", dist: { integrity: config.mode === "occupied" ? "different" : config.digests.integrity, shasum: config.digests.sha1 } }));
   } else { process.stderr.write("E404"); process.exit(1); }
 } else if (args[0] === "publish") {
   if (config.mode !== "ambiguous_absent") fs.writeFileSync(path.join(config.fixture, "published"), "yes");

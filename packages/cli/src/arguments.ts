@@ -2,6 +2,7 @@ import type { ParsedArguments } from "./types.js";
 import { CliUsageError } from "./errors.js";
 import { operatorHelp } from "./operator-help.js";
 import { parseOperatorArguments } from "./operator-arguments.js";
+import { AUTH_HELP_TEXT } from "./auth-commands.js";
 
 /** Implement exactly the invocation grammar in CONTRACT.md. */
 export function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -11,12 +12,26 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   if (argv.length === 1 && argv[0] === "--version") {
     return { command: "version", apply: false, json: false };
   }
+  if (
+    argv[0] === "auth" &&
+    ((argv.length === 2 && argv[1] === "--help") ||
+      (argv.length === 3 &&
+        ["login", "status", "logout"].includes(argv[1]!) &&
+        argv[2] === "--help"))
+  ) {
+    return {
+      command: "help",
+      apply: false,
+      json: false,
+      helpText: AUTH_HELP_TEXT,
+    };
+  }
   const helpText = operatorHelp(argv);
   if (helpText !== null) {
     return { command: "help", apply: false, json: false, helpText };
   }
   const command = argv[0];
-  if (command === "auth") return parseAuthExecArguments(argv.slice(1));
+  if (command === "auth") return parseAuthArguments(argv.slice(1));
   if (
     command === "broadcast" ||
     command === "bridge" ||
@@ -65,7 +80,31 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   };
 }
 
-function parseAuthExecArguments(argv: readonly string[]): ParsedArguments {
+function parseAuthArguments(argv: readonly string[]): ParsedArguments {
+  const action = argv[0];
+  if (action === "login" || action === "status" || action === "logout") {
+    const flags = argv.slice(1);
+    if (
+      new Set(flags).size !== flags.length ||
+      flags.some(
+        (flag) =>
+          flag !== "--json" &&
+          !(action === "login" && flag === "--switch-account"),
+      )
+    ) {
+      throw new CliUsageError("invalid_auth_flags", {
+        kind: "invalid_field",
+        field: "auth",
+      });
+    }
+    return {
+      command: "auth-session",
+      authAction: action,
+      apply: false,
+      json: flags.includes("--json"),
+      switchAccount: flags.includes("--switch-account"),
+    };
+  }
   const consumerCommand = argv[2];
   const consumerArguments = argv.slice(3);
   if (

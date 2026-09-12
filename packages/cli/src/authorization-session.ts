@@ -17,10 +17,12 @@ export interface BrowserAuthorizationTokenResponse {
   readonly accessToken: string;
   readonly refreshToken?: string;
   readonly expiresInSeconds?: number;
+  readonly subject?: string;
+  readonly scopes?: readonly string[];
 }
 
 export interface BrowserAuthorizationDependencies {
-  commitGrant?(): void;
+  commitGrant?(): void | Promise<void>;
   prepare(hosted: HostedConfig): Promise<PreparedBrowserAuthorization>;
   openBrowser(url: URL): Promise<boolean>;
   listenForOAuthCallback(
@@ -37,6 +39,9 @@ export interface BrowserAuthorizationOptions {
 export interface MemoryAuthorizationGrant {
   readonly accessToken: string;
   readonly expiresAt: number | null;
+  readonly refreshToken?: string;
+  readonly subject?: string;
+  readonly scopes?: readonly string[];
   refresh(): Promise<MemoryAuthorizationGrant>;
 }
 
@@ -47,7 +52,7 @@ export async function authorizeGrantWithBrowser(
   now: () => number,
   commitGrant: (
     candidate: MemoryAuthorizationGrant,
-  ) => MemoryAuthorizationGrant,
+  ) => MemoryAuthorizationGrant | Promise<MemoryAuthorizationGrant>,
 ): Promise<MemoryAuthorizationGrant> {
   assertAuthorizationActive(options.signal);
   let listener: Awaited<ReturnType<typeof listenForOAuthCallback>> | undefined;
@@ -68,7 +73,8 @@ export async function authorizeGrantWithBrowser(
     listener.transition("validating");
     const candidate = grant(exchanged, prepared.refresh, null, now);
     listener.transition("committing_grant");
-    const committed = commitGrant(candidate);
+    const committed = await commitGrant(candidate);
+    assertAuthorizationActive(options.signal);
     listener.finish("complete");
     return committed;
   } catch (error) {
@@ -109,9 +115,15 @@ function grant(
     response.expiresInSeconds === undefined
       ? null
       : now() + response.expiresInSeconds * 1_000;
+  if (expiresAt !== null && !Number.isFinite(expiresAt)) {
+    throw new HostedTestBlockedError("authorization_token_missing");
+  }
   return {
     accessToken: response.accessToken,
     expiresAt,
+    ...(refreshToken === null ? {} : { refreshToken }),
+    ...(response.subject === undefined ? {} : { subject: response.subject }),
+    ...(response.scopes === undefined ? {} : { scopes: [...response.scopes] }),
     refresh: async () => {
       if (!refreshToken || !refresh) {
         throw new HostedTestBlockedError("authorization_refresh_unavailable");
@@ -127,8 +139,19 @@ function tokenResponse(
   const response = typeof value === "string" ? { accessToken: value } : value;
   if (
     !response ||
+    typeof response.accessToken !== "string" ||
     !response.accessToken.trim() ||
-    (response.refreshToken !== undefined && !response.refreshToken.trim()) ||
+    (response.refreshToken !== undefined &&
+      (typeof response.refreshToken !== "string" ||
+        !response.refreshToken.trim())) ||
+    (response.subject !== undefined &&
+      (typeof response.subject !== "string" || !response.subject.trim())) ||
+    (response.scopes !== undefined &&
+      (!Array.isArray(response.scopes) ||
+        response.scopes.length === 0 ||
+        response.scopes.some(
+          (scope) => typeof scope !== "string" || !scope.trim(),
+        ))) ||
     (response.expiresInSeconds !== undefined &&
       (!Number.isFinite(response.expiresInSeconds) ||
         response.expiresInSeconds <= 0))

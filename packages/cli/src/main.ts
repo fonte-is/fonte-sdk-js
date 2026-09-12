@@ -2,36 +2,48 @@
 
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-
 import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
+import { productionDependencies } from "./oauth.js";
 import {
-  authorizeWithBrowser,
-  createBrowserAuthorizationSession,
-} from "./oauth.js";
+  prepareOpenIdAuthorization,
+  refreshOpenIdAuthorization,
+} from "./oauth-client.js";
+import { createPersistentLoginSession } from "./persistent-login.js";
+import { createOperatingSystemLoginStore } from "./secure-login-store.js";
+import { withLoginLock } from "./login-lock.js";
 import { systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
 
 const cancellation = new AbortController();
 const cancel = () => cancellation.abort();
-const authExecInvocation =
-  process.argv[2] === "auth" && process.argv[3] === "exec";
-const broadcastCanaryInvocation =
-  process.argv[2] === "broadcast" && process.argv[3] === "canary";
-const audienceAppendInvocation =
-  process.argv[2] === "broadcast" &&
-  process.argv[3] === "audience" &&
-  process.argv[4] === "append";
-const refreshOperatorInvocation =
-  broadcastCanaryInvocation || audienceAppendInvocation;
-const operatorAuthorization = refreshOperatorInvocation
-  ? createBrowserAuthorizationSession()
-  : null;
-const authorizeOnce = (
-  config: Parameters<typeof authorizeWithBrowser>[0],
-  signal?: AbortSignal,
-) => authorizeWithBrowser(config, { signal });
-if (authExecInvocation || refreshOperatorInvocation) {
+const login = createPersistentLoginSession({
+  store: createOperatingSystemLoginStore(),
+  withLock: async (operation, signal) => {
+    if (!handleSignals) {
+      process.once("SIGINT", cancel);
+      process.once("SIGTERM", cancel);
+    }
+    try {
+      return await withLoginLock(operation, signal);
+    } finally {
+      if (!handleSignals) {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+      }
+    }
+  },
+  browser: productionDependencies,
+  prepareLogin: (hosted, switchAccount) =>
+    prepareOpenIdAuthorization(hosted, { persistent: true, switchAccount }),
+  refreshGrant: refreshOpenIdAuthorization,
+});
+const handleSignals =
+  process.argv[2] === "auth" ||
+  (process.argv[2] === "broadcast" &&
+    (process.argv[3] === "canary" ||
+      (process.argv[3] === "audience" && process.argv[4] === "append")));
+if (handleSignals) {
   process.once("SIGINT", cancel);
   process.once("SIGTERM", cancel);
 }
@@ -39,29 +51,25 @@ const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
   runner: systemRunner,
+  auth: {
+    session: login,
+    configUrl: process.env.FONTE_CLI_CONFIG_URL,
+    fetch: globalThis.fetch,
+    signal: cancellation.signal,
+  },
   authExec: {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
-    authorize: authorizeOnce,
+    authorize: login.authorize,
     spawn: spawnAuthorizedConsumer,
     signal: cancellation.signal,
   },
   operator: {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
-    ...(operatorAuthorization
-      ? {
-          authorize: operatorAuthorization.authorize,
-          renewAuthorization: (
-            config: Parameters<typeof authorizeWithBrowser>[0],
-            signal?: AbortSignal,
-            force = false,
-          ) =>
-            force
-              ? operatorAuthorization.refresh(config, signal)
-              : operatorAuthorization.authorize(config, signal),
-        }
-      : { authorize: authorizeOnce }),
+    authorize: login.authorize,
+    renewAuthorization: (config, signal, force = false) =>
+      force ? login.refresh(config, signal) : login.authorize(config, signal),
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
     readProviderEvidenceCandidateFile: (path) => readFile(path, "utf8"),
@@ -71,12 +79,13 @@ const result = await runProgram(process.argv.slice(2), {
   },
   hosted: {
     fetch: globalThis.fetch,
-    authorize: (config) => authorizeWithBrowser(config),
+    authorize: (config) => login.authorize(config, cancellation.signal),
+    credentialPersisted: login.credentialPersisted,
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   },
 }).finally(() => {
-  if (authExecInvocation || refreshOperatorInvocation) {
+  if (handleSignals) {
     process.removeListener("SIGINT", cancel);
     process.removeListener("SIGTERM", cancel);
   }

@@ -1,10 +1,14 @@
+> FON-377 update: human CLI identity may persist only as a refresh credential in
+> native OS custody, bound to the exact issuer/client/scopes/user. Each operation
+> still obtains current Core authority. Provider credentials remain Core-owned.
+
 # Fonte CLI operator V1
 
 ## Authority boundary
 
 Operator commands reuse the existing browser OAuth flow and only call bounded
 Core routes. The bearer remains in memory and appears only in the Authorization
-header. The CLI has no database, provider, queue, AWS, credential-storage,
+header. The CLI has no database, provider, queue, AWS, provider-credential-storage,
 eligibility, billing, consent, sender, freeze, or dispatch authority.
 
 Every production command requires `--environment production`. Core still

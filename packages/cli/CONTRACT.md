@@ -52,6 +52,9 @@ Accepted invocations are exactly:
 fonte init [--yes] [--json]
 fonte doctor [--json]
 fonte test --workspace <slug> [--json]
+fonte auth login [--switch-account] [--json]
+fonte auth status [--json]
+fonte auth logout [--json]
 fonte auth exec -- <command> [args...]
 fonte broadcast <command> ... [--json]
 fonte bridge <command> ... [--json]
@@ -68,23 +71,23 @@ admitted syntax and authority. In particular, broadcast-test help distinguishes
 the fixed sandbox canary syntax from the verified-account production-test
 syntax, and Bridge help names the admitted Resend copy and provider-audience
 routes.
-There is no terminal prompt. `test` opens the system browser for an existing
-signed-in human to approve the registered public CLI client. The workspace slug
+There is no terminal prompt. Authenticated commands open the system browser
+only when a new human sign-in is needed for the registered public CLI client. The workspace slug
 is explicit, lowercase, and remains subject to server-side Fonte workspace
 membership.
 
-`auth exec` is the reusable local authority seam. It performs the same hosted
-browser OAuth Authorization Code flow with mandatory S256 PKCE, then directly
-spawns exactly the command after `--` without a shell. The access token is
-present only in the parent process memory and the direct child's
-`FONTE_HUMAN_BEARER` environment. It is never placed in process arguments,
-stdout, stderr, a receipt, a file, shell history, or persistent credential
-storage. The child inherits terminal I/O and owns its use of the bearer. The
-CLI removes no project state because it creates none.
+`auth login`, `auth status`, and `auth logout` manage persistent human identity
+through native OS credential custody as specified in README.md. `auth exec` and
+ordinary authenticated commands reuse that identity across processes and refresh
+silently. Only refresh credentials persist; each bearer stays in memory and the
+direct child's `FONTE_HUMAN_BEARER` environment. No credential enters plaintext
+files, process arguments, shell history, logs, receipts or ordinary configuration.
+A non-reusable marker is committed before refresh; interrupted rotation requires
+login. Core remains the authority for every action. Local logout removes custody
+without claiming remote revocation of an already handed-off bearer.
 
 `auth exec` does not run Doctor, create a sandbox draft, request an email,
-contact a provider, or call the Core API. Browser authorization failure or
-cancellation exits `3` with the fixed authorization failure text. A missing or
+contact a provider, or call the Core API. Sign-in failure or cancellation exits `3` with one bounded recovery instruction. A missing or
 nonzero child exits `1` with the existing execution failure text. A successful
 child exits `0` without CLI-produced stdout or stderr. The callback listener
 and browser authorization retain the fixed issuer/client discovery, loopback
@@ -102,7 +105,7 @@ production cryptography.
 The callback listener binds only `127.0.0.1:49671`, requires the exact Host,
 path, random state, and one code-or-error result. The OAuth access token remains
 in process memory. It is never rendered, copied by the user, placed in an
-installation manifest, or refreshed on disk.
+installation manifest, or persisted outside native OS credential custody.
 
 After a passing Doctor check, `test` creates fixed synthetic sandbox content,
 requests the existing signed-in sandbox canary, and polls its existing readback.
@@ -110,7 +113,7 @@ The server chooses the verified account email and platform sandbox sender. The
 CLI cannot provide an arbitrary recipient or sender. The terminal receipt uses
 schema `fonte.cli.test_receipt.v1`, preserves accepted/refused/unknown, records
 one included unit only for accepted, and always reports
-`inbox_delivery_confirmed: false`, `token_persisted: false`, and
+`inbox_delivery_confirmed: false`, the actual secure `token_persisted` state, and
 `production_email: "locked_pending_verified_domain"`.
 The fixed sandbox draft remains as a workspace audit artifact. Every test
 receipt reports `sandbox_draft_id` and `sandbox_draft_retained`; failures before
@@ -251,15 +254,15 @@ Its fixed values are:
 
 ```text
 schema_version  fonte.local_installation.v1
-cli_version     0.2.0
+cli_version     0.3.0
 adapter_id      next_app_router
 adapter_version v1
 sdk_package     @fonte-is/nextjs
 sdk_version     0.1.0
 ```
 
-The 0.2.0 CLI writes `cli_version` 0.2.0 and continues to accept exact
-0.1.0-, 0.1.1-, 0.1.2-, 0.1.3-, and 0.1.4-created manifests. Any other or
+The 0.3.0 CLI writes `cli_version` 0.3.0 and continues to accept exact
+0.1.0-, 0.1.1-, 0.1.2-, 0.1.3-, 0.1.4-, and 0.2.0-created manifests. Any other or
 unknown CLI manifest version is invalid.
 
 `managed_operations` excludes `local_manifest` and contains only operations
@@ -347,7 +350,7 @@ The implementation task may edit only paths explicitly supplied by the parent.
 It may replace `fonte_cli_frame_incomplete` bodies with code conforming to this
 contract. Hosted-test implementation may add only the declared OAuth library,
 fixed browser bridge, exact hosted calls, and test receipt. It may not add
-fallback authority, token persistence, telemetry, arbitrary recipients, or
+fallback authority, plaintext token persistence, telemetry, arbitrary recipients, or
 production/application-email claims.
 
 The fixed private module split is:

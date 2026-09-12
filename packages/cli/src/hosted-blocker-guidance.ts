@@ -1,3 +1,6 @@
+import { isLoginFailure, loginRecovery } from "./auth-commands.js";
+import { HostedTestBlockedError } from "./hosted-errors.js";
+
 interface HostedBlockerGuidance {
   readonly summary: string;
   readonly next: string;
@@ -47,6 +50,11 @@ const guidance: Record<string, HostedBlockerGuidance> = {
 };
 
 export function hostedBlockerGuidance(reason: string): HostedBlockerGuidance {
+  if (isLoginFailure(reason))
+    return {
+      summary: "Fonte sign-in could not complete.",
+      next: loginRecovery(new HostedTestBlockedError(reason)).trim(),
+    };
   return (
     guidance[reason] ?? {
       summary: "Fonte could not complete the sandbox provider proof.",

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { parseArguments } from "../packages/cli/dist/arguments.js";
@@ -77,16 +76,6 @@ test("audience append grammar is exact and production-only", async () => {
   ]) {
     assert.throws(() => parseArguments(invalid));
   }
-
-  const source = await readFile(
-    new URL("../packages/cli/src/main.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /const audienceAppendInvocation =/);
-  assert.match(
-    source,
-    /broadcastCanaryInvocation \|\| audienceAppendInvocation/,
-  );
 });
 
 test("audience append alone receives the bounded longer Core timeout", async () => {

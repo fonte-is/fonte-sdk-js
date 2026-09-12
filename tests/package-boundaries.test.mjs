@@ -36,7 +36,7 @@ test("the public graph keeps package-specific release versions", async () => {
       "@fonte-is/core": "0.1.0",
       "@fonte-is/react": "0.1.0",
       "@fonte-is/nextjs": "0.1.0",
-      "@fonte-is/cli": "0.2.0",
+      "@fonte-is/cli": "0.3.0",
     },
   );
 });
@@ -53,7 +53,10 @@ test("dependency edges point only from framework bindings to Core", async () => 
     "@fonte-is/core": "0.1.0",
     "@fonte-is/react": "0.1.0",
   });
-  assert.deepEqual(cli.dependencies, { "openid-client": "6.8.5" });
+  assert.deepEqual(cli.dependencies, {
+    "@napi-rs/keyring": "2.0.0",
+    "openid-client": "6.8.5",
+  });
   assert.deepEqual(cli.peerDependencies ?? {}, {});
 });
 

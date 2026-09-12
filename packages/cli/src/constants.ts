@@ -1,4 +1,4 @@
-export const CLI_VERSION = "0.2.0";
+export const CLI_VERSION = "0.3.0";
 export const SDK_PACKAGE = "@fonte-is/nextjs";
 export const SDK_VERSION = "0.1.0";
 export const ADAPTER_ID = "next_app_router";
@@ -58,6 +58,9 @@ export const USAGE_TEXT = [
   "  fonte doctor [--json]",
   "  fonte test --workspace <slug> [--json]",
   "  fonte auth exec -- <command> [args...]",
+  "  fonte auth login [--switch-account] [--json]",
+  "  fonte auth status [--json]",
+  "  fonte auth logout [--json]",
   "  fonte broadcast <command> ... [--json]",
   "  fonte bridge <command> ... [--json]",
   "  fonte provider-evidence resend <command> ... --json",
@@ -73,8 +76,10 @@ export const HELP_TEXT = [
   USAGE_TEXT.trimEnd(),
   "",
   "init and remove print a plan unless --yes is supplied.",
-  "test opens Fonte in your browser and requests one sandbox provider proof.",
-  "auth exec opens Fonte in your browser and runs one bearer-bound child.",
+  "auth login signs in once using your OS credential store; auth logout signs out.",
+  "Later commands refresh silently. Core checks permission for every action.",
+  "test requests one sandbox provider proof.",
+  "auth exec runs one bearer-bound child using your Fonte sign-in.",
   "Run fonte <command> --help for each command's admitted flags and authority.",
   "broadcast test help distinguishes the sandbox canary from production tests.",
   "broadcast production commands consume Core's draft, audience, test, preflight, authorization, control, and result authority.",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { request } from "node:http";
 import test from "node:test";
 
@@ -195,6 +196,13 @@ test("loopback status is opaque, read-only, one-shot, and truthful through bound
     );
     assert.equal(complete.status, 200);
     assert.match(complete.body, /Authorization complete/);
+    const script = complete.body.match(/<script>(.*?)<\/script>/)[1];
+    const hash = createHash("sha256").update(script).digest("base64");
+    assert.ok(
+      complete.headers["content-security-policy"].includes(
+        `script-src 'sha256-${hash}'`,
+      ),
+    );
     assert.doesNotMatch(complete.body, /http-equiv="refresh"/);
     const secondTab = await requestCallback(
       listener.boundPort,

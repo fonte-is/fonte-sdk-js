@@ -195,41 +195,6 @@ test("one in-memory authorization refreshes opaque tokens only at their expires-
   );
 });
 
-test("the refresh-capable session is wired only to operator runtime", async () => {
-  const source = await readFile(
-    new URL("../packages/cli/src/main.ts", import.meta.url),
-    "utf8",
-  );
-  const authExec = source.match(
-    /authExec: \{([\s\S]*?)\n  \},\n  operator:/,
-  )?.[1];
-  const operator = source.match(
-    /operator: \{([\s\S]*?)\n  \},\n  hosted:/,
-  )?.[1];
-  const hosted = source.match(
-    /hosted: \{([\s\S]*?)\n  \},\n\}\)\.finally/,
-  )?.[1];
-
-  assert.match(
-    source,
-    /const refreshOperatorInvocation =\s+broadcastCanaryInvocation \|\| audienceAppendInvocation;/,
-  );
-  assert.match(
-    source,
-    /const operatorAuthorization = refreshOperatorInvocation\s+\? createBrowserAuthorizationSession\(\)\s+: null;/,
-  );
-  assert.match(authExec ?? "", /authorize: authorizeOnce,/);
-  assert.doesNotMatch(authExec ?? "", /operatorAuthorization/);
-  assert.match(operator ?? "", /authorize: operatorAuthorization\.authorize,/);
-  assert.match(operator ?? "", /renewAuthorization:/);
-  assert.match(operator ?? "", /: \{ authorize: authorizeOnce \}/);
-  assert.match(
-    hosted ?? "",
-    /authorize: \(config\) => authorizeWithBrowser\(config\),/,
-  );
-  assert.doesNotMatch(hosted ?? "", /operatorAuthorization/);
-});
-
 test("refresh failure is cached, token-free, and never falls back to another browser", async () => {
   const refreshToken = "synthetic-refresh-secret-failure";
   let opened = 0;
@@ -505,7 +470,7 @@ test("authorization and child failures use bounded token-free results", async ()
   assert.deepEqual(authorization, {
     exitCode: 3,
     stdout: "",
-    stderr: AUTHORIZATION_ERROR_TEXT,
+    stderr: "Fonte sign-in is unavailable. Run fonte auth login.\n",
   });
 
   const child = await runProgram(["auth", "exec", "--", "missing"], {

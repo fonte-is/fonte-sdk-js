@@ -62,7 +62,7 @@ export async function runHostedTest(
       provider_error_code: result.providerErrorCode,
       accepted_email_usage_quantity: result.acceptedEmailUsageQuantity,
       inbox_delivery_confirmed: false,
-      token_persisted: false,
+      token_persisted: dependencies.credentialPersisted?.() ?? false,
     };
   } catch (error) {
     const reason =
@@ -76,6 +76,7 @@ export async function runHostedTest(
       providerSubmission,
       sandboxDraftId,
       sandboxDraftRetained,
+      dependencies.credentialPersisted?.() ?? false,
     );
   }
 }
@@ -87,6 +88,7 @@ export function testBlockedReceipt(
   providerSubmission: HostedTestReceipt["provider_submission"] = "not_requested",
   sandboxDraftId: string | null = null,
   sandboxDraftRetained: boolean | null = sandboxDraftId !== null,
+  tokenPersisted = false,
 ): HostedTestReceipt {
   return {
     schema_version: "fonte.cli.test_receipt.v1",
@@ -104,6 +106,6 @@ export function testBlockedReceipt(
     provider_error_code: null,
     accepted_email_usage_quantity: null,
     inbox_delivery_confirmed: false,
-    token_persisted: false,
+    token_persisted: tokenPersisted,
   };
 }

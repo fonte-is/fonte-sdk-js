@@ -1,16 +1,15 @@
-import * as client from "openid-client";
 import {
   assertAuthorizationActive,
   authorizeGrantWithBrowser,
   type BrowserAuthorizationDependencies,
   type BrowserAuthorizationOptions,
   type MemoryAuthorizationGrant,
-  type PreparedBrowserAuthorization,
 } from "./authorization-session.js";
 import { openBrowser } from "./browser.js";
 import type { HostedConfig } from "./hosted-config.js";
 import { HostedTestBlockedError } from "./hosted-errors.js";
 import { listenForOAuthCallback } from "./loopback-callback.js";
+import { prepareOpenIdAuthorization } from "./oauth-client.js";
 
 export type {
   BrowserAuthorizationDependencies,
@@ -37,8 +36,8 @@ export async function authorizeWithBrowser(
       options,
       dependencies,
       dependencies.now ?? Date.now,
-      (candidate) => {
-        dependencies.commitGrant?.();
+      async (candidate) => {
+        await dependencies.commitGrant?.();
         return candidate;
       },
     )
@@ -114,8 +113,9 @@ export function createBrowserAuthorizationSession(
           { signal },
           dependencies,
           now,
-          (candidate) => {
-            dependencies.commitGrant?.();
+          async (candidate) => {
+            await dependencies.commitGrant?.();
+            assertAuthorizationActive(signal);
             grant = candidate;
             return candidate;
           },
@@ -141,67 +141,8 @@ function refreshBlockedError(error: unknown): HostedTestBlockedError {
   return new HostedTestBlockedError("authorization_refresh_failed");
 }
 
-const productionDependencies: BrowserAuthorizationDependencies = {
+export const productionDependencies: BrowserAuthorizationDependencies = {
   prepare: prepareOpenIdAuthorization,
   openBrowser,
   listenForOAuthCallback,
 };
-
-async function prepareOpenIdAuthorization(
-  hosted: HostedConfig,
-): Promise<PreparedBrowserAuthorization> {
-  const verifier = client.randomPKCECodeVerifier();
-  const challenge = await client.calculatePKCECodeChallenge(verifier);
-  const state = client.randomState();
-  const configuration = await client.discovery(
-    new URL(hosted.authorizationServer),
-    hosted.clientId,
-    { token_endpoint_auth_method: "none" },
-    client.None(),
-    { algorithm: "oauth2", timeout: 10 },
-  );
-  return {
-    state,
-    authorizationUrl: client.buildAuthorizationUrl(configuration, {
-      redirect_uri: hosted.redirectUri,
-      scope: hosted.scopes.join(" "),
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-      state,
-    }),
-    exchange: async (callback) => {
-      const response = await client.authorizationCodeGrant(
-        configuration,
-        callback,
-        {
-          pkceCodeVerifier: verifier,
-          expectedState: state,
-        },
-      );
-      return {
-        accessToken: response.access_token,
-        ...(response.refresh_token
-          ? { refreshToken: response.refresh_token }
-          : {}),
-        ...(response.expires_in === undefined
-          ? {}
-          : { expiresInSeconds: response.expires_in }),
-      };
-    },
-    refresh: async (refreshToken) => {
-      const response = await client.refreshTokenGrant(
-        configuration,
-        refreshToken,
-      );
-      return {
-        accessToken: response.access_token,
-        ...(response.refresh_token
-          ? { refreshToken: response.refresh_token }
-          : {}),
-        ...(response.expires_in === undefined
-          ? {}
-          : { expiresInSeconds: response.expires_in }),
-      };
-    },
-  };
-}

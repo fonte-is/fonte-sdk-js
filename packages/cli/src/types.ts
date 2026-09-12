@@ -2,7 +2,7 @@ import type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
 
 export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand =
-  CommandName | "auth-exec" | "operator" | "help" | "version";
+  CommandName | "auth-exec" | "auth-session" | "operator" | "help" | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
@@ -12,6 +12,8 @@ export interface ParsedArguments {
   workspaceSlug?: string;
   consumerCommand?: string;
   consumerArguments?: readonly string[];
+  authAction?: "login" | "status" | "logout";
+  switchAccount?: boolean;
   operator?: OperatorCommand;
 }
 
@@ -99,7 +101,8 @@ export type ManagedOperation =
 export interface LocalManifest {
   schema_version: "fonte.local_installation.v1";
   installation_id: string;
-  cli_version: "0.1.0" | "0.1.1" | "0.1.2" | "0.1.3" | "0.1.4" | "0.2.0";
+  cli_version:
+    "0.1.0" | "0.1.1" | "0.1.2" | "0.1.3" | "0.1.4" | "0.2.0" | "0.3.0";
   adapter_id: "next_app_router";
   adapter_version: "v1";
   sdk_package: "@fonte-is/nextjs";
@@ -162,7 +165,7 @@ export interface HostedTestReceipt {
   provider_error_code: string | null;
   accepted_email_usage_quantity: number | null;
   inbox_delivery_confirmed: false;
-  token_persisted: false;
+  token_persisted: boolean;
 }
 
 export type AnyCliReceipt =
