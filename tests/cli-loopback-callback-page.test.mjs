@@ -9,6 +9,7 @@ test("OAuth status page renders pending without claiming completion", () => {
   assert.match(page, /Your terminal is validating the grant\./);
   assert.match(page, /http-equiv="refresh" content="1"/);
   assert.doesNotMatch(page, /Authorization complete|You’re almost there/);
+  assert.doesNotMatch(page, /<script|window\.close/);
   assert.match(page, /viewBox="0 0 38 38"/);
   assert.match(page, /M34\.7188 15\.7682/);
   assert.match(page, /<main aria-labelledby="callback-title">/);
@@ -38,6 +39,11 @@ test("OAuth status page renders completion only as a final projection", () => {
   assert.doesNotMatch(page, /http-equiv="refresh"/);
   assert.match(page, /data-outcome="complete"/);
   assert.match(page, /role="status"/);
+  assert.match(
+    page,
+    /<script>try \{ window\.close\(\); \} catch \{\}<\/script>/,
+  );
+  assert.match(page, /You can close this tab\./);
 });
 
 test("OAuth status page keeps failure and expiry generic", () => {
@@ -50,6 +56,7 @@ test("OAuth status page keeps failure and expiry generic", () => {
     assert.match(page, /No credential was stored by this page\./);
     assert.match(page, /role="alert"/);
     assert.doesNotMatch(page, /http-equiv="refresh"/);
+    assert.doesNotMatch(page, /<script|window\.close/);
   }
   assert.match(failed, /data-outcome="failed"/);
   assert.match(expired, /data-outcome="expired"/);

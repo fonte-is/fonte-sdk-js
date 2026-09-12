@@ -1,5 +1,7 @@
 export type CallbackPageOutcome = "pending" | "complete" | "failed" | "expired";
 
+export const callbackCompleteScript = "try { window.close(); } catch {}";
+
 const content = {
   pending: {
     title: "Completing authorization",
@@ -193,6 +195,7 @@ export function renderCallbackPage(outcome: CallbackPageOutcome): string {
         <span>${copy.detail}</span>
       </p>
     </main>
+    ${outcome === "complete" ? `<script>${callbackCompleteScript}</script>` : ""}
   </body>
 </html>`;
 }
