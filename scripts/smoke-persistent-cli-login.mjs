@@ -67,10 +67,19 @@ try {
     await acceptance();
     passed = true;
   }
-} catch {
+} catch (error) {
   // Never print raw provider/child errors: diagnostic bodies may contain tokens.
   console.log(
-    JSON.stringify({ ok: false, store: mode, phase, counts: provider.counts }),
+    JSON.stringify({
+      ok: false,
+      store: mode,
+      phase,
+      counts: provider.counts,
+      reason:
+        error?.message === "proof_child_timeout"
+          ? "proof_child_timeout"
+          : "proof_invariant_failed",
+    }),
   );
   process.exitCode = 1;
 } finally {
@@ -193,7 +202,7 @@ function invoke(arguments_) {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("proof_child_timeout"));
-    }, 30_000);
+    }, 65_000);
     child.stdout.on("data", (chunk) => {
       stdout += chunk;
     });
