@@ -221,7 +221,7 @@ test("invalid JSON calls stay private and every current command help matches its
     ],
   ]) {
     const result = await runProgram(argv, dependencies);
-    assert.equal(result.exitCode, 0);
+    assert.equal(result.exitCode, 0, argv.join(" "));
     assert.match(
       result.stdout,
       new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),

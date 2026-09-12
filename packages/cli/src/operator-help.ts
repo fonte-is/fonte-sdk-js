@@ -312,7 +312,7 @@ function render(entry: HelpEntry): string {
     ]),
     "",
     entry.detail,
-    "OAuth is ephemeral; Core remains the sole authority for admitted operations.",
+    "Access tokens stay in memory; Core authorizes every operation.",
     "",
   ].join("\n");
 }
