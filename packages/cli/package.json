@@ -24,6 +24,7 @@
   },
   "files": [
     "dist",
+    "assets",
     "LICENSE",
     "README.md",
     "OPERATOR_CONTRACT.md"
