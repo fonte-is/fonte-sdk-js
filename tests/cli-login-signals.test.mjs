@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -89,6 +90,9 @@ test(
     const committing = await waitFor(running, "committing");
     assert.equal(committing.sigintListeners, 1);
     assert.equal(committing.sigtermListeners, 1);
+    // The pending storage operation must survive after the readiness IPC drains.
+    await delay(100);
+    assert.equal(running.process.exitCode, null);
     assert.equal(running.process.kill("SIGINT"), true);
     const result = await running.closed;
     assert.equal(result.signal, null);

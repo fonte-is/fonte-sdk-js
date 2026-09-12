@@ -27,10 +27,16 @@ export function createOperatingSystemLoginStore() {
     write: async (value) => {
       stored = value;
       if (scenario === "commit") {
-        await new Promise((resolve) => {
-          releaseCommit = resolve;
-          report("committing");
-        });
+        // Model pending native I/O: a bare Promise does not keep Node alive.
+        const pendingCommit = setInterval(() => {}, 60_000);
+        try {
+          await new Promise((resolve) => {
+            releaseCommit = resolve;
+            report("committing");
+          });
+        } finally {
+          clearInterval(pendingCommit);
+        }
       }
     },
     remove: async () => {
