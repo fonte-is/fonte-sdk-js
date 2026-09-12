@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProvider } from "./login-proof/provider.mjs";
+import { summarizeFailure } from "./login-proof/result.mjs";
 
 // Usage: node scripts/smoke-persistent-cli-login.mjs /installed/@fonte-is/cli --store=native
 // Model mode is deliberately separate and never claims native credential custody.
@@ -42,6 +43,7 @@ delete env.FONTE_HUMAN_BEARER;
 delete env.NODE_OPTIONS;
 const invocations = [];
 const outputs = [];
+const failures = [];
 let phase = "native_store_probe";
 let cleanupNeeded = false;
 let passed = false;
@@ -75,6 +77,7 @@ try {
       store: mode,
       phase,
       counts: provider.counts,
+      failures,
       reason:
         error?.message === "proof_child_timeout"
           ? "proof_child_timeout"
@@ -216,6 +219,7 @@ function invoke(arguments_) {
     child.once("close", (code) => {
       clearTimeout(timer);
       outputs.push(stdout, stderr);
+      if (code !== 0) failures.push(summarizeFailure(code, stdout));
       resolveResult({ code, stdout, stderr });
     });
   });
