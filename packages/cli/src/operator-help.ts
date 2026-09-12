@@ -35,7 +35,7 @@ const entries: readonly HelpEntry[] = [
   {
     command: ["auth", "exec"],
     usage: [["-- <command> [args...]"]],
-    detail: "Browser-authorizes and directly starts one bearer-bound child.",
+    detail: "Uses your sign-in to start one bearer-bound child.",
   },
   {
     command: ["remove"],
@@ -165,7 +165,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one browser authorization.",
+      "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one bound sign-in.",
     json: true,
   },
   ...(["pause", "resume", "close"] as const).map((operation) => ({

@@ -55,20 +55,40 @@ retrying. A `rollback_failed` result means automatic restoration could not be
 proved; stop and inspect `package.json`, the lockfile, `.gitignore`, `fonte/`,
 and `.fonte/` rather than rerunning the command blindly.
 
-`fonte test` first requires a passing local installation check. It then opens
-Fonte in the browser for consent and requests one sandbox email to the verified
-email address on the signed-in account. The short-lived OAuth access token stays
-in memory for that command and is discarded when the process exits. No token is
-copied into the terminal or written to disk.
+## Persistent sign-in
 
-`fonte auth exec -- <command> [args...]` reuses that official browser flow
-without running the sandbox provider proof. It directly spawns the command
-without a shell and supplies the short-lived access token only as
-`FONTE_HUMAN_BEARER` in the child's environment. The CLI never places the
-token in command arguments, terminal output, receipts, files, or persistent
-credential storage. The child should read the value once, delete it from
-`process.env`, keep it in memory for the local bootstrap, and avoid rendering
-it:
+Run `fonte auth login` once. Later `auth exec`, broadcast, Bridge and hosted test
+commands reuse that sign-in and refresh silently. `fonte auth status` checks the
+sign-in without opening a browser; `fonte auth logout` removes this machine's
+stored CLI credential, including when the identity service is unreachable.
+All three commands support `--json`. Use `fonte auth login --switch-account`
+to discard the current CLI sign-in and open the browser again.
+
+The refresh credential is stored through the native macOS Keychain or Windows
+Credential Manager. These facilities must be available and unlocked. Linux
+sign-in currently fails closed: the native dependency can silently fall back
+from Secret Service to a different store, which does not meet this contract.
+There is no plaintext file, environment-variable, or shell-command fallback.
+Local installation commands remain available without credential storage.
+
+Each new process obtains a fresh access token and verifies the authenticated
+user through the configured issuer. Login is bound to the exact issuer, client,
+scopes, API target, redirect and user. Refresh, logout and account changes are
+serialized across processes. Interrupted or uncertain refresh requires a new
+login; no old refresh token is silently retried. Core still checks workspace,
+environment and action permission for every command. Logout removes local
+custody; it cannot revoke an already handed-off child's short-lived bearer.
+
+`fonte test` requires a passing installation check and requests one sandbox email
+to the signed-in account's verified email. It reports `token_persisted: true`
+when it used the secure persisted refresh credential; access tokens remain in
+memory and are discarded on process exit.
+
+`fonte auth exec -- <command> [args...]` directly spawns the command without a
+shell and supplies its ephemeral access token only as `FONTE_HUMAN_BEARER` in
+the child's environment. No token is placed in arguments, terminal output,
+receipts, or plaintext files. The child should read the value once, delete it
+from `process.env`, keep it in memory, and avoid rendering it:
 
 ```js
 const bearer = process.env.FONTE_HUMAN_BEARER;

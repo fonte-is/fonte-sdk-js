@@ -26,9 +26,12 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fonte-is/cli");
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.3.0");
   assert.deepEqual(manifest.bin, { fonte: "./dist/main.js" });
-  assert.deepEqual(manifest.dependencies, { "openid-client": "6.8.5" });
+  assert.deepEqual(manifest.dependencies, {
+    "@napi-rs/keyring": "2.0.0",
+    "openid-client": "6.8.5",
+  });
   assert.deepEqual(manifest.exports, {
     "./operator-client": {
       types: "./dist/operator-client.d.ts",
@@ -167,7 +170,7 @@ test("invalid JSON calls stay private and every current command help matches its
     [["init", "--help"], "[--yes] [--json]"],
     [["doctor", "--help"], "Usage: fonte doctor [--json]"],
     [["test", "--help"], "hosted sandbox proof"],
-    [["auth", "--help"], "fonte auth exec --help"],
+    [["auth", "--help"], "fonte auth login"],
     [["auth", "exec", "--help"], "bearer-bound child"],
     [["remove", "--help"], "Fonte-owned local installation state"],
     [["broadcast", "--help"], "Fonte broadcast commands"],
