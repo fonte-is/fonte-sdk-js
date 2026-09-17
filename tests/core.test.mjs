@@ -44,7 +44,7 @@ test("Core installation metadata contracts stay versioned", () => {
   );
 });
 
-test("browser capture starts immediately", async () => {
+test("browser capture starts only with permitted policy", async () => {
   const originals = {
     window: globalThis.window,
     document: globalThis.document,
@@ -65,11 +65,26 @@ test("browser capture starts immediately", async () => {
   globalThis.document = { referrer: "", cookie: "" };
   globalThis.fetch = async (path, init) => {
     requests.push({ path, body: JSON.parse(init.body) });
-    return { ok: true, status: 202 };
+    return Response.json(
+      {
+        disposition: "accepted",
+        eventId: requests.at(-1).body.eventId,
+        recordId: "receipt",
+        receivedAt: new Date().toISOString(),
+      },
+      { status: 202 },
+    );
   };
   try {
     const capture = createCapture({
       storage: "browser-test",
+      collectionPolicy: () => ({
+        status: "granted",
+        version: "test-v1",
+        expiresAt: Date.now() + 60000,
+        storage: "memory",
+        routes: ["/start"],
+      }),
       verification: {
         schemaVersion: "fonte.installation_verification.v2",
         installationAttemptId: "10000000-0000-4000-8000-000000000002",
@@ -86,7 +101,7 @@ test("browser capture starts immediately", async () => {
       ],
     );
     assert.equal(requests[0].body.scope.current_url.includes("secret="), false);
-    assert.deepEqual(Object.keys(capture).sort(), ["page", "retry"]);
+    assert.deepEqual(Object.keys(capture).sort(), ["page", "reset", "retry"]);
     assert.equal(requests[0].body.verification, undefined);
     assert.equal(requests[1].body.verification.sdkVersion, "0.1.0");
     assert.deepEqual(
@@ -126,12 +141,27 @@ test("browser capture reports failures, retries stable event IDs, and deduplicat
   globalThis.fetch = async (_path, init) => {
     requests.push(JSON.parse(init.body));
     return requests.length <= 2
-      ? { ok: false, status: 503 }
-      : { ok: true, status: 202 };
+      ? Response.json({ disposition: "unavailable" }, { status: 503 })
+      : Response.json(
+          {
+            disposition: "accepted",
+            eventId: requests.at(-1).eventId,
+            recordId: "receipt",
+            receivedAt: new Date().toISOString(),
+          },
+          { status: 202 },
+        );
   };
   try {
     const capture = createCapture({
       storage: "retry-test",
+      collectionPolicy: () => ({
+        status: "granted",
+        version: "test-v1",
+        expiresAt: Date.now() + 60000,
+        storage: "memory",
+        routes: ["/retry"],
+      }),
       onDelivery: (delivery) => deliveries.push(delivery),
     });
     const failed = await capture.page();

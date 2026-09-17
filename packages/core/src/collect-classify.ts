@@ -7,9 +7,7 @@ import type { SourceTouchClassification } from "./collect-types.js";
 import type { Scope } from "./types.js";
 
 export const sourceMatches = (value: string, source: string): boolean =>
-  value === source ||
-  value.startsWith(`${source}.`) ||
-  value.includes(`.${source}.`);
+  value === source || value.endsWith(`.${source}`);
 
 const origin = (value: string): string | null => {
   try {
@@ -36,14 +34,18 @@ const captureReasonFor = (
   signals: SourceSignals,
 ): SourceTouchClassification["captureReason"] => {
   if (scope.fonte) return "fonte_source_identity";
-  if (signals.googleClick || signals.metaClick || scope.ttclid) {
+  if (
+    signals.googleClick ||
+    signals.metaClick ||
+    scope.ttclid ||
+    scope.twclid
+  ) {
     return "platform_click_id";
   }
-  if (scope.fbp) return "platform_cookie_signal";
   if (measurementQueryKeys.some((key) => scope[key])) return "utm_parameter";
   if (signals.externalReferrer) return "external_referrer";
   if (signals.internalReferrer) return "internal_navigation";
-  if (scope.current_url) return "direct_landing";
+  if (scope.current_url) return "no_referrer";
   return "unknown";
 };
 
@@ -65,7 +67,7 @@ export function classifySourceTouch(scope: Scope): SourceTouchClassification {
   const internalReferrer = sameOrigin(scope.referrer, scope.current_url);
   const signals: SourceSignals = {
     googleClick: Boolean(scope.gclid || scope.gbraid || scope.wbraid),
-    metaClick: Boolean(scope.fbclid || scope.fbc),
+    metaClick: Boolean(scope.fbclid),
     externalReferrer: Boolean(scope.referrer && !internalReferrer),
     internalReferrer,
   };
@@ -77,8 +79,30 @@ export function classifySourceTouch(scope: Scope): SourceTouchClassification {
   if (signals.metaClick) {
     return classification("paid", "paid_social", "meta", captureReason);
   }
-  if (scope.fonte) {
-    return classification("unknown", "unknown", "fonte", captureReason);
+  if (scope.twclid)
+    return classification("paid", "paid_social", "x", captureReason);
+  if (scope.ttclid)
+    return classification("paid", "paid_social", "tiktok", captureReason);
+  let referralHost = "";
+  try {
+    referralHost = new URL(scope.referrer ?? "").hostname.toLowerCase();
+  } catch {
+    /* unknown */
+  }
+  if (
+    ["x.com", "twitter.com", "t.co"].some((host) =>
+      sourceMatches(referralHost, host),
+    )
+  ) {
+    return classification("organic", "organic_social", "x", captureReason);
+  }
+  if (["x", "twitter", "x.com", "twitter.com"].includes(source)) {
+    return classification(
+      paidMediums.has(medium) ? "paid" : "organic",
+      paidMediums.has(medium) ? "paid_social" : "organic_social",
+      "x",
+      captureReason,
+    );
   }
   if (medium === "email") {
     return classification(
@@ -140,9 +164,9 @@ export function classifySourceTouch(scope: Scope): SourceTouchClassification {
   }
   if (scope.current_url && !internalReferrer) {
     return classification(
-      "direct",
-      "direct",
-      source || "direct",
+      "unknown",
+      "unknown",
+      source || "unknown",
       captureReason,
     );
   }

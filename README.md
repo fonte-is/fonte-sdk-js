@@ -10,12 +10,15 @@ npm install @fonte-is/core
 import { createCapture } from "@fonte-is/core";
 
 export async function startFonte() {
-  const capture = createCapture({ storage: "my-app" });
+  const capture = createCapture({
+    storage: "my-app",
+    collectionPolicy: () => readApprovedSitePolicy(),
+  });
   return capture.page();
 }
 ```
 
-The package graph is deliberately small: `@fonte-is/core` owns browser capture, request validation, touch mapping, and server transport; `@fonte-is/react` adds lifecycle ergonomics; and `@fonte-is/nextjs` exposes the same server primitive for App Router installations. Delivery results report only whether the configured application route responded successfully. Evidence acceptance, attribution, and downstream decisions remain server authority.
+The package graph is deliberately small: `@fonte-is/core` owns browser capture, request validation, touch mapping, and server transport; `@fonte-is/react` adds lifecycle ergonomics; and `@fonte-is/nextjs` exposes the same server primitive for App Router installations. Delivery requires an explicit durable receipt; HTTP success alone is insufficient. Missing collection policy disables capture. See `packages/core/README.md` for the versioned acquisition contract and migration requirements. Evidence acceptance, attribution, and downstream decisions remain server authority.
 
 All packages are ESM-only. Server entry points require Node.js 20.9 or newer.
 

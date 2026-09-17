@@ -1,108 +1,133 @@
 "use client";
-
-import {
-  createAttributionStore,
-  shouldCaptureSourceTouch,
-} from "./browser-attribution.js";
+import { shouldCaptureSourceTouch } from "./browser-attribution.js";
 import { createDeliveryClient } from "./browser-delivery.js";
 import { createScopeReader } from "./browser-scope.js";
+import { clean } from "./collect-contract.js";
+import { permitted } from "./collection-policy.js";
+import { createClientAttemptId } from "./ids.js";
+import { normalizeInstallationVerification } from "./installation-verification.js";
 import type {
   Capture,
   CaptureConfig,
-  CaptureDelivery,
   CaptureDeliveryReason,
-  CapturePageResult,
+  CaptureEventType,
 } from "./browser-types.js";
-import { clean } from "./collect-contract.js";
-import { normalizeInstallationVerification } from "./installation-verification.js";
-
-const eventTypes = ["page_view", "source_touch"] as const;
-
-const requireAppPath = (value: string): string => {
-  if (!value.startsWith("/") || value.startsWith("//")) {
-    throw new Error("fonte_collect_path_must_be_same_origin_app_path");
-  }
-  return value;
-};
-
+import type { Scope } from "./types.js";
+import type { CollectionPolicy } from "./collection-policy.js";
+import type { CollectBody } from "./collect-types.js";
+const eventTypes: CaptureEventType[] = ["page_view", "source_touch"];
 export function createCapture(config: CaptureConfig): Capture {
-  const storagePrefix = clean(config.storage, 120).replace(/:+$/g, "");
-  if (!storagePrefix) throw new Error("fonte_storage_key_required");
-
-  const collectPath = requireAppPath(config.collect ?? "/api/fonte/collect");
+  const storage = clean(config.storage, 120).replace(/:+$/g, "");
+  if (!storage) throw Error("fonte_storage_key_required");
+  const collectPath = config.collect ?? "/api/fonte/collect";
+  if (
+    !collectPath.startsWith("/") ||
+    collectPath.startsWith("//") ||
+    collectPath.includes("\\")
+  )
+    throw Error("fonte_collect_path_must_be_same_origin_app_path");
   const verification = config.verification
     ? normalizeInstallationVerification(config.verification)
     : null;
-  if (config.verification && !verification) {
-    throw new Error("fonte_invalid_installation_verification");
-  }
+  if (config.verification && !verification)
+    throw Error("fonte_invalid_installation_verification");
   const maxAgeDays = config.maxAgeDays ?? 90;
-  if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
-    throw new Error("fonte_max_age_days_must_be_positive");
-  }
-  const mode = config.capturePolicy?.mode ?? "source_touch";
-  if (mode !== "source_touch" && mode !== "all") {
-    throw new Error("fonte_invalid_capture_policy_mode");
-  }
-
-  const currentScope = createScopeReader({
-    deviceStorageKey: `${storagePrefix}:fonte-device-id`,
-    journeyStorageKey: `${storagePrefix}:fonte-journey-id`,
-  });
-  const attribution = createAttributionStore(
-    `${storagePrefix}:fonte-attribution`,
+  if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0)
+    throw Error("fonte_max_age_days_must_be_positive");
+  if (
+    config.capturePolicy?.mode &&
+    !["source_touch", "all"].includes(config.capturePolicy.mode)
+  )
+    throw Error("fonte_invalid_capture_policy_mode");
+  const policy = () => {
+    try {
+      return config.collectionPolicy?.() ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const scopeReader = createScopeReader({
+    deviceStorageKey: `${storage}:fonte-device-id`,
+    journeyStorageKey: `${storage}:fonte-journey-v2`,
     maxAgeDays,
-  );
+  });
   const delivery = createDeliveryClient({
     collectPath,
-    sentStoragePrefix: `${storagePrefix}:fonte-touch`,
-    verification,
+    policy,
     onDelivery: config.onDelivery,
   });
-
-  const skipped = (reason: CaptureDeliveryReason): CapturePageResult => ({
+  let currentHref: string | undefined;
+  let currentDocument: Document | undefined;
+  const skipped = (reason: CaptureDeliveryReason) => ({
     deliveries: eventTypes.map((eventType) =>
       delivery.notify({ eventType, status: "skipped", reason }),
     ),
   });
-
-  const capturePage = async (
-    retryPending: boolean,
-  ): Promise<CapturePageResult> => {
-    const scope = currentScope();
-    if (!scope) return skipped("browser_unavailable");
-    const stored = attribution.read();
-    const deliveries: Array<Promise<CaptureDelivery>> = [
-      delivery.send("page_view", scope, retryPending),
-    ];
-    if (
-      shouldCaptureSourceTouch(scope, stored, {
-        mode,
+  return {
+    async page(options) {
+      const approved = policy();
+      if (!permitted(approved)) {
+        delivery.reset();
+        scopeReader.reset();
+        currentHref = undefined;
+        return skipped("collection_not_permitted");
+      }
+      if (typeof window === "undefined" || typeof document === "undefined")
+        return skipped("browser_unavailable");
+      const href = window.location.href;
+      if (
+        currentHref === href &&
+        currentDocument === document &&
+        !options?.navigation
+      )
+        return skipped("duplicate");
+      const scope = scopeReader.read(
+        approved,
+        currentDocument === document ? currentHref : undefined,
+      );
+      if (!scope) return skipped("route_not_permitted");
+      currentHref = href;
+      currentDocument = document;
+      const occurrenceId = createClientAttemptId();
+      const occurredAt = new Date().toISOString();
+      // Both views refer to one arrival. The source view also records no-referrer coverage.
+      const selectedEvents = shouldCaptureSourceTouch(scope, null, {
+        mode: config.capturePolicy?.mode ?? "source_touch",
         captureDirectLanding: config.capturePolicy?.captureDirectLanding,
       })
-    ) {
-      attribution.write(scope, stored);
-      deliveries.push(delivery.send("source_touch", scope, retryPending));
-    } else {
-      deliveries.push(
-        Promise.resolve(
-          delivery.notify({
-            eventType: "source_touch",
-            status: "skipped",
-            reason: "not_source_touch",
-          }),
-        ),
+        ? eventTypes
+        : (["page_view"] as const);
+      const snapshots = observations(
+        selectedEvents,
+        scope,
+        approved,
+        verification,
+        occurrenceId,
+        occurredAt,
       );
-    }
-    return { deliveries: await Promise.all(deliveries) };
-  };
-
-  return {
-    page: () => capturePage(false),
-    retry: () => capturePage(true),
+      for (const body of snapshots)
+        try {
+          config.onObservation?.(JSON.parse(JSON.stringify(body)));
+        } catch {
+          /* optional observer */
+        }
+      return {
+        deliveries: await Promise.all(
+          snapshots.map((body) => delivery.submit(body, approved)),
+        ),
+      };
+    },
+    async retry() {
+      return { deliveries: await delivery.retry() };
+    },
+    reset() {
+      delivery.reset();
+      scopeReader.reset(true);
+      currentHref = undefined;
+      currentDocument = undefined;
+    },
   };
 }
-
 export type {
   Capture,
   CaptureConfig,
@@ -110,5 +135,28 @@ export type {
   CaptureDeliveryReason,
   CaptureEventType,
   CapturePageResult,
+  CollectionPolicy,
 } from "./browser-types.js";
 export type { Scope } from "./types.js";
+
+function observations(
+  events: readonly CaptureEventType[],
+  scope: Scope,
+  policy: CollectionPolicy,
+  verification: CaptureConfig["verification"] | null,
+  occurrenceId: string,
+  occurredAt: string,
+): CollectBody[] {
+  return events.map((eventType) => ({
+    schemaVersion: "fonte.acquisition.v1",
+    classifierVersion: "source.v2",
+    collectionVersion: policy.version,
+    occurrenceId,
+    occurredAt,
+    eventId: createClientAttemptId(),
+    eventType,
+    journeyId: scope.fonte_journey_id,
+    scope,
+    ...(eventType === "source_touch" && verification ? { verification } : {}),
+  }));
+}

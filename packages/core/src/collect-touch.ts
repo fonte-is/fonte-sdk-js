@@ -22,6 +22,8 @@ export function toTouch(scope: Scope, journeyId: string): TouchPayload {
     gbraid: scope.gbraid,
     wbraid: scope.wbraid,
     fbclid: scope.fbclid,
+    twclid: scope.twclid,
+    ttclid: scope.ttclid,
     fbc: scope.fbc,
     fbp: scope.fbp,
     clientUserAgent: scope.client_user_agent,

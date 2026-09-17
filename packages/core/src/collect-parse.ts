@@ -47,6 +47,13 @@ const normalizeScope = (value: unknown): Scope | null => {
     const normalized = clean(raw, maxLength);
     if (normalized) scope[key] = normalized;
   }
+  if (scope.referrer) {
+    try {
+      scope.referrer = new URL(scope.referrer).origin;
+    } catch {
+      delete scope.referrer;
+    }
+  }
   return Object.keys(scope).length > 0 ? canonicalizeCurrentUrl(scope) : null;
 };
 
@@ -66,11 +73,28 @@ const normalizeBody = (value: unknown): CollectBody | null => {
   ) {
     return null;
   }
+  if (
+    input.schemaVersion !== "fonte.acquisition.v1" ||
+    input.classifierVersion !== "source.v2" ||
+    typeof input.occurrenceId !== "string" ||
+    !uuidPattern.test(input.occurrenceId) ||
+    typeof input.occurredAt !== "string" ||
+    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(input.occurredAt) ||
+    !Number.isFinite(Date.parse(input.occurredAt)) ||
+    typeof input.collectionVersion !== "string" ||
+    !/^[a-zA-Z0-9_.:-]{1,120}$/.test(input.collectionVersion)
+  )
+    return null;
   const verification =
     eventType === "source_touch"
       ? normalizeInstallationVerification(input.verification)
       : null;
   return {
+    schemaVersion: "fonte.acquisition.v1",
+    classifierVersion: "source.v2",
+    occurrenceId: input.occurrenceId,
+    occurredAt: input.occurredAt,
+    collectionVersion: input.collectionVersion,
     eventId,
     eventType,
     journeyId,
@@ -85,8 +109,43 @@ export async function parse(
 ): Promise<CollectBody | null> {
   const maxBytes = options.maxBytes ?? 16_384;
   if (!Number.isInteger(maxBytes) || maxBytes <= 0) return null;
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > maxBytes) return null;
+  const length = request.headers.get("content-length");
+  if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes))
+    return null;
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  let bytes = 0;
+  const chunks: Uint8Array[] = [];
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel().catch(() => {});
+  }, 3000);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (timedOut) return null;
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        void reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    reader.releaseLock();
+  }
+  const buffer = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const raw = new TextDecoder().decode(buffer);
   try {
     return normalizeBody(JSON.parse(raw));
   } catch {

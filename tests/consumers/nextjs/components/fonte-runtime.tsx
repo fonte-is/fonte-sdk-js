@@ -6,6 +6,13 @@ import { FonteProvider } from "@fonte-is/nextjs";
 
 const capture = createCapture({
   storage: "packed-browser",
+  collectionPolicy: () => ({
+    status: "granted",
+    version: "synthetic-consumer-v1",
+    expiresAt: Date.now() + 60000,
+    storage: "memory",
+    routes: ["/", "/second"],
+  }),
   capturePolicy: { mode: "all" },
 });
 
