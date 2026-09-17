@@ -10,6 +10,11 @@ export interface Evidence {
 export type CollectEventType = "page_view" | "source_touch";
 
 export interface CollectBody {
+  schemaVersion: "fonte.acquisition.v1";
+  occurrenceId: string;
+  occurredAt: string;
+  collectionVersion: string;
+  classifierVersion: "source.v2";
   eventId: string;
   eventType: CollectEventType;
   journeyId: string;
@@ -42,6 +47,7 @@ export interface SourceTouchClassification {
     | "external_referrer"
     | "internal_navigation"
     | "direct_landing"
+    | "no_referrer"
     | "unknown";
 }
 
@@ -63,7 +69,21 @@ export interface TouchPayload {
   gbraid?: string;
   wbraid?: string;
   fbclid?: string;
+  twclid?: string;
+  ttclid?: string;
   fbc?: string;
   fbp?: string;
   clientUserAgent?: string;
+}
+
+export interface CollectionReceipt {
+  disposition:
+    | "accepted"
+    | "duplicate_of_accepted"
+    | "ignored"
+    | "rejected"
+    | "unavailable";
+  eventId: string;
+  recordId?: string;
+  receivedAt?: string;
 }

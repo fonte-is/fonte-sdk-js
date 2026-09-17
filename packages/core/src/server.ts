@@ -46,6 +46,8 @@ export interface TouchInput {
     gbraid?: string;
     wbraid?: string;
     fbclid?: string;
+    twclid?: string;
+    ttclid?: string;
     fbc?: string;
     fbp?: string;
     clientUserAgent?: string;
@@ -124,6 +126,8 @@ const touchBody = (input: TouchInput): TouchInput["touch"] => ({
   gbraid: input.touch.gbraid,
   wbraid: input.touch.wbraid,
   fbclid: input.touch.fbclid,
+  twclid: input.touch.twclid,
+  ttclid: input.touch.ttclid,
   fbc: input.touch.fbc,
   fbp: input.touch.fbp,
   clientUserAgent: input.touch.clientUserAgent,
@@ -218,3 +222,5 @@ export type {
   SourceTouchClassification,
   TouchPayload,
 } from "./collect.js";
+
+export type { CollectionPolicy, CollectionReceipt } from "./collect.js";

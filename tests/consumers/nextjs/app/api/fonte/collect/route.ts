@@ -11,7 +11,11 @@ export async function POST(request: Request) {
     : null;
   const accepted = Boolean(body && scope);
   return Response.json(
-    { accepted, eventType: body?.eventType ?? null },
+    {
+      disposition: accepted ? "unavailable" : "rejected",
+      reason: "parser_fixture_has_no_durable_custody",
+      eventType: body?.eventType ?? null,
+    },
     { status: accepted ? 202 : 400 },
   );
 }

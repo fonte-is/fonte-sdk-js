@@ -14,6 +14,7 @@ export const adStorageQueryKeys = [
   "wbraid",
   "fbclid",
   "ttclid",
+  "twclid",
 ] as const;
 
 export const paidMediums = new Set([
