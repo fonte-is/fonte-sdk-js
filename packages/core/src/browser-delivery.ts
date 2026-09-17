@@ -54,7 +54,10 @@ export function createDeliveryClient(config: DeliveryConfig) {
       const a: Attempt = {
         body: JSON.parse(json),
         json,
-        expiresAt: Math.min(policy.expiresAt, Date.now() + MAX_AGE_MS),
+        expiresAt: Math.min(
+          policy.expiresAt ?? Number.MAX_SAFE_INTEGER,
+          Date.now() + MAX_AGE_MS,
+        ),
         policy: policyKey(policy),
         attempts: 0,
         active: false,

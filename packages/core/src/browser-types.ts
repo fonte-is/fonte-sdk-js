@@ -33,7 +33,7 @@ export interface CaptureConfig {
   storage: string;
   collect?: string;
   /** Absolute lifetime of browser continuity. Reads do not refresh it. */
-  maxAgeDays?: number;
+  maxAgeDays?: number | null;
   verification?: InstallationVerificationMetadata;
   collectionPolicy?: () => CollectionPolicy | null;
   capturePolicy?: {

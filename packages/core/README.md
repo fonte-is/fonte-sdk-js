@@ -12,10 +12,10 @@ const capture = createCapture({
 await capture.page();
 ```
 
-The installer supplies the actual approved collection policy. With no policy,
+The installer supplies the actual configured collection policy. With no policy,
 unknown/denied status, or an expired policy, capture performs no telemetry or
 nonessential cookie/storage reads. A policy includes `version`, an absolute
-`expiresAt`, `storage` (`memory` or `persistent`), and exact allowed `routes`.
+`expiresAt` (timestamp or `null` for no automatic expiry), `storage` (`memory` or `persistent`), and `routes` (exact paths, `/section/*`, or `*`).
 Click IDs, inherited ad cookies, source tokens, and enumerated campaign values
 are separate opt-ins. Do not construct permission from a visitor's silence.
 The server independently validates its policy, origin, route, and fields.
@@ -35,7 +35,7 @@ claim is made. No automatic retries or offline queue are installed.
 
 `reset()` discards pending work and active browser continuity. Call it on
 logout, identity switching, withdrawal, and unlink. Persistent continuity has
-an absolute lifetime (`maxAgeDays`, default 90), capped by policy expiry;
+an absolute lifetime (`maxAgeDays`, default `null` for no automatic expiry), capped by policy expiry;
 reading it does not refresh expiry. Explicit reset removes this installation's
 stored continuity even in a fresh document. A browser ID is not a physical device, person, or account. Old
 attribution caches are not reused as history.
@@ -56,3 +56,7 @@ runtime must retain the versioned issued context separately.
 `@fonte-is/core/server` exposes bounded parsing, scope minimization, and the
 existing `/v1/touches` client. This SDK does not create a storage/identity
 service, decide attribution, create contacts, bill, or export conversions.
+
+`campaignValues: true` retains presented campaign fields without a predeclared
+value list. Operators may instead supply an allowlist or omit the category.
+These are installation choices, not a universal visitor-consent requirement.

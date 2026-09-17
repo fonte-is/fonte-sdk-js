@@ -8,15 +8,15 @@ import {
 export interface CollectionPolicy {
   status: "granted" | "denied" | "unknown";
   version: string;
-  expiresAt: number;
+  expiresAt: number | null;
   storage: "memory" | "persistent";
   routes: readonly string[];
   clickIds?: boolean;
   adCookies?: boolean;
   sourceTokens?: boolean;
-  campaignValues?: Partial<
-    Record<(typeof measurementQueryKeys)[number], readonly string[]>
-  >;
+  campaignValues?:
+    | true
+    | Partial<Record<(typeof measurementQueryKeys)[number], readonly string[]>>;
 }
 export function permitted(
   policy: CollectionPolicy | null | undefined,
@@ -26,14 +26,15 @@ export function permitted(
     policy.status === "granted" &&
     typeof policy.version === "string" &&
     /^[a-zA-Z0-9_.:-]{1,120}$/.test(policy.version) &&
-    Number.isFinite(policy.expiresAt) &&
-    policy.expiresAt > Date.now() &&
+    (policy.expiresAt === null ||
+      (Number.isFinite(policy.expiresAt) && policy.expiresAt > Date.now())) &&
     ["memory", "persistent"].includes(policy.storage) &&
     Array.isArray(policy.routes) &&
     policy.routes.length <= 32 &&
     policy.routes.every(
       (route) =>
-        typeof route === "string" && /^\/[a-zA-Z0-9_/-]{0,199}$/.test(route),
+        typeof route === "string" &&
+        (route === "*" || /^\/[a-zA-Z0-9_/-]{0,199}(?:\/\*)?$/.test(route)),
     ) &&
     [policy.clickIds, policy.adCookies, policy.sourceTokens].every(
       (value) => value === undefined || typeof value === "boolean",
@@ -42,7 +43,7 @@ export function permitted(
   );
 }
 function validCampaignValues(value: CollectionPolicy["campaignValues"]) {
-  if (value === undefined) return true;
+  if (value === undefined || value === true) return true;
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.entries(value).every(
     ([key, values]) =>
@@ -70,7 +71,7 @@ export function minimizeScope(
   }
   if (
     !["https:", "http:"].includes(url.protocol) ||
-    !policy.routes.includes(url.pathname)
+    !routePermitted(url.pathname, policy)
   )
     return null;
   const result: Scope = {
@@ -89,7 +90,11 @@ export function minimizeScope(
     /* absent remains unknown */
   }
   for (const key of measurementQueryKeys) {
-    if (scope[key] && policy.campaignValues?.[key]?.includes(scope[key]))
+    if (
+      scope[key] &&
+      (policy.campaignValues === true ||
+        policy.campaignValues?.[key]?.includes(scope[key]))
+    )
       result[key] = scope[key];
   }
   if (policy.clickIds)
@@ -107,4 +112,17 @@ export function minimizeScope(
     if (value) result.fonte = value;
   }
   return result;
+}
+
+export function routePermitted(
+  path: string,
+  policy: CollectionPolicy,
+): boolean {
+  return policy.routes.some(
+    (route) =>
+      route === "*" ||
+      (route.endsWith("/*")
+        ? path.startsWith(route.slice(0, -1))
+        : route === path),
+  );
 }

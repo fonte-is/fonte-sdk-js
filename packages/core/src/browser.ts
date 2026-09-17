@@ -31,8 +31,8 @@ export function createCapture(config: CaptureConfig): Capture {
     : null;
   if (config.verification && !verification)
     throw Error("fonte_invalid_installation_verification");
-  const maxAgeDays = config.maxAgeDays ?? 90;
-  if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0)
+  const maxAgeDays = config.maxAgeDays ?? null;
+  if (maxAgeDays !== null && (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0))
     throw Error("fonte_max_age_days_must_be_positive");
   if (
     config.capturePolicy?.mode &&

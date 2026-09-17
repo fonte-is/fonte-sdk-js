@@ -1,6 +1,6 @@
 {
   "name": "@fonte-is/react",
-  "version": "0.2.0-fon571.0",
+  "version": "0.2.0-fon571.1",
   "description": "React bindings over @fonte-is/core",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
@@ -27,7 +27,7 @@
     }
   },
   "dependencies": {
-    "@fonte-is/core": "0.2.0-fon571.0"
+    "@fonte-is/core": "0.2.0-fon571.1"
   },
   "peerDependencies": {
     "react": ">=18.2.0 <20"

@@ -4,7 +4,11 @@ import {
   measurementQueryKeys,
   clean,
 } from "./collect-contract.js";
-import { minimizeScope, type CollectionPolicy } from "./collection-policy.js";
+import {
+  minimizeScope,
+  routePermitted,
+  type CollectionPolicy,
+} from "./collection-policy.js";
 import type { Scope } from "./types.js";
 export const compactScope = (value: unknown): Scope | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -17,7 +21,7 @@ export const compactScope = (value: unknown): Scope | null => {
 export function createScopeReader(config: {
   deviceStorageKey: string;
   journeyStorageKey: string;
-  maxAgeDays: number;
+  maxAgeDays: number | null;
 }) {
   let usedPersistentStorage = false;
   let continuity: { id: string; expiresAt: number } | null = null;
@@ -25,7 +29,7 @@ export function createScopeReader(config: {
     if (typeof window === "undefined" || typeof document === "undefined")
       return null;
     const url = new URL(window.location.href);
-    if (!policy.routes.includes(url.pathname)) return null;
+    if (!routePermitted(url.pathname, policy)) return null;
     if (!continuity && policy.storage === "persistent") {
       usedPersistentStorage = true;
       try {
@@ -46,8 +50,10 @@ export function createScopeReader(config: {
       continuity = {
         id: createClientAttemptId(),
         expiresAt: Math.min(
-          policy.expiresAt,
-          Date.now() + config.maxAgeDays * 86400000,
+          policy.expiresAt ?? Number.MAX_SAFE_INTEGER,
+          config.maxAgeDays === null
+            ? Number.MAX_SAFE_INTEGER
+            : Date.now() + config.maxAgeDays * 86400000,
         ),
       };
       if (policy.storage === "persistent")

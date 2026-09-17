@@ -33,9 +33,9 @@ test("the public graph keeps package-specific release versions", async () => {
   assert.deepEqual(
     Object.fromEntries(manifests.map(({ name, version }) => [name, version])),
     {
-      "@fonte-is/core": "0.2.0-fon571.0",
-      "@fonte-is/react": "0.2.0-fon571.0",
-      "@fonte-is/nextjs": "0.2.0-fon571.0",
+      "@fonte-is/core": "0.2.0-fon571.1",
+      "@fonte-is/react": "0.2.0-fon571.1",
+      "@fonte-is/nextjs": "0.2.0-fon571.1",
       "@fonte-is/cli": "0.2.0",
     },
   );
@@ -48,10 +48,10 @@ test("dependency edges point only from framework bindings to Core", async () => 
   const cli = await readJson("packages/cli/package.json");
   assert.deepEqual(core.dependencies ?? {}, {});
   assert.deepEqual(core.peerDependencies ?? {}, {});
-  assert.deepEqual(react.dependencies, { "@fonte-is/core": "0.2.0-fon571.0" });
+  assert.deepEqual(react.dependencies, { "@fonte-is/core": "0.2.0-fon571.1" });
   assert.deepEqual(nextjs.dependencies, {
-    "@fonte-is/core": "0.2.0-fon571.0",
-    "@fonte-is/react": "0.2.0-fon571.0",
+    "@fonte-is/core": "0.2.0-fon571.1",
+    "@fonte-is/react": "0.2.0-fon571.1",
   });
   assert.deepEqual(cli.dependencies, { "openid-client": "6.8.5" });
   assert.deepEqual(cli.peerDependencies ?? {}, {});

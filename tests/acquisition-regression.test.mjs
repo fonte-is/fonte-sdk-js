@@ -332,3 +332,15 @@ test("explicit reset after a document reload erases owned persistent continuity"
     }).page();
     assert.notEqual(requests[2].journeyId, original);
   }));
+
+test("installation can select all routes and campaigns without an automatic expiry", () => {
+  const rich = { status: "granted", version: "synthetic-rich-v1", expiresAt: null, storage: "persistent", routes: ["*"], campaignValues: true, clickIds: true, sourceTokens: true };
+  assert.equal(collect.permitted(rich), true);
+  const scope = collect.minimizeScope({ current_url: "https://example.test/workspace/home?secret=excluded", utm_campaign: "new-campaign", twclid: "new-click" }, rich);
+  assert.equal(scope.utm_campaign, "new-campaign");
+  assert.equal(scope.twclid, "new-click");
+  assert.equal(scope.current_url, "https://example.test/workspace/home");
+  assert.equal(collect.minimizeScope({ current_url: "https://example.test/docs/start" }, { ...rich, routes: ["/docs/*"] }).canonical_route, "/docs/start");
+  assert.equal(collect.minimizeScope({ current_url: "https://example.test/not-docs/start" }, { ...rich, routes: ["/docs/*"] }), null);
+  assert.equal(collect.permitted({ ...rich, status: "denied" }), false);
+});
