@@ -366,4 +366,8 @@ retirement readback grants no refill authority.
 All other broadcast or Bridge declarations return `unsupported_authority`
 before OAuth or network access. There is no generic HTTP command, provider
 credential input, browser UI fallback, generic segment language, local
-eligibility engine, automatic retry after an ambiguous mutation, or MCP layer.
+eligibility engine, automatic retry after an ambiguous mutation, or generic
+MCP layer.
+The only MCP exception is the fixed Sequence-definition authoring surface in
+`MCP_CONTRACT.md`; it has no broadcast, Bridge, recipient, activation, send,
+delivery, or runtime authority.

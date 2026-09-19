@@ -87,6 +87,23 @@ await bootstrapLocalCore({ bearer });
 The spawned consumer owns its subsequent API use. This command itself makes
 no Core API, provider, email, or production request.
 
+## Sequence authoring MCP
+
+`fonte-mcp` is a stdio MCP server for the same Core-owned Sequence authoring
+surface as the `fonte sequence` commands. It has exactly eight tools: list,
+read, create, update, validate, diff, export, and simulate. It keeps the
+browser OAuth bearer only in memory and uses no local Sequence state.
+
+It cannot activate a Sequence, enroll a subscriber, select a recipient, send
+email, report a provider outcome, or control runtime work. Create and update
+require a caller-owned Sequence ID and operation key. If either mutation is
+ambiguous, the server returns `outcome: "ambiguous"` with
+`core_effect: "unknown"`; it never resubmits the mutation. Read the known
+Sequence through `fonte_read_sequence` before deciding what to do next.
+
+See [MCP_CONTRACT.md](./MCP_CONTRACT.md) for the fixed tool allowlist and
+authentication boundary.
+
 ## Workspace invitation client
 
 `@fonte-is/cli/operator-client` exports `createCoreOperatorClient` for the
