@@ -12,6 +12,7 @@ npx @fonte-is/cli auth exec -- npm run local:core-bootstrap
 npx @fonte-is/cli sequence create --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --operation-key create-welcome --definition '{"schema":"sequence_definition.v1","title":"Welcome","entry":{"kind":"subscription_episode"},"reentry":"once","steps":[{"id":"welcome","kind":"send","subject":null,"message":null}]}'
 npx @fonte-is/cli sequence read --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --json
 npx @fonte-is/cli sequence update --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --expected-revision 1 --operation-key update-welcome --definition '<definition-json>'
+npx @fonte-is/cli sequence activate --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --expected-revision 2 --operation-key activate-welcome --binding '{"senderId":"sender-sequence-welcome","scope":{"kind":"general_marketing"},"messageRenderReferences":[{"stepId":"welcome","renderReference":"render-welcome"}]}' --json
 npx @fonte-is/cli sequence validate --workspace my-workspace --environment sandbox --definition '<definition-json>'
 npx @fonte-is/cli sequence diff --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --base-revision 1 --definition '<definition-json>'
 npx @fonte-is/cli sequence export --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --json
@@ -87,19 +88,22 @@ await bootstrapLocalCore({ bearer });
 The spawned consumer owns its subsequent API use. This command itself makes
 no Core API, provider, email, or production request.
 
-## Sequence authoring MCP
+## Sequence authoring and activation MCP
 
 `fonte-mcp` is a stdio MCP server for the same Core-owned Sequence authoring
-surface as the `fonte sequence` commands. It has exactly eight tools: list,
-read, create, update, validate, diff, export, and simulate. It keeps the
-browser OAuth bearer only in memory and uses no local Sequence state.
+and activation surface as the `fonte sequence` commands. It has exactly nine
+tools: list, read, create, update, validate, diff, export, simulate, and
+activate. It keeps the browser OAuth bearer only in memory and uses no local
+Sequence state.
 
-It cannot activate a Sequence, enroll a subscriber, select a recipient, send
-email, report a provider outcome, or control runtime work. Create and update
-require a caller-owned Sequence ID and operation key. If either mutation is
-ambiguous, the server returns `outcome: "ambiguous"` with
-`core_effect: "unknown"`; it never resubmits the mutation. Read the known
-Sequence through `fonte_read_sequence` before deciding what to do next.
+Activation freezes one exact Core draft revision and its sender/scope/render
+references. It cannot enroll a subscriber, select a recipient, send email,
+report a provider outcome, or control runtime work. Create, update, and
+activate require a caller-owned Sequence ID and operation key. If any mutation
+is ambiguous, the server returns `outcome: "ambiguous"` with
+`core_effect: "unknown"`; it never resubmits the mutation. A draft mutation
+can be read through `fonte_read_sequence`; activation intentionally receives no
+invented readback because a draft read cannot prove an activated version.
 
 See [MCP_CONTRACT.md](./MCP_CONTRACT.md) for the fixed tool allowlist and
 authentication boundary.
@@ -195,17 +199,19 @@ checksums, and progress—not contact or provider rows.
 See [OPERATOR_CONTRACT.md](./OPERATOR_CONTRACT.md) for the exact command,
 authority, receipt, and future MCP boundary.
 
-## Sequence authoring
+## Sequence authoring and activation
 
 `sequence list`, `read`, `create`, `update`, `validate`, `diff`, `export`, and
 `simulate` are thin browser-authorized Core clients over the same persisted
-Sequence definition used by future Web views and runtime work. They create or
-change no local Sequence state. Definitions are supplied as one JSON object;
-Core is the validator and durable store.
+Sequence definition used by future Web views and runtime work. `sequence
+activate` freezes one exact persisted revision and its Core binding. None of
+the commands create local Sequence state. Definitions and activation bindings
+are supplied as JSON objects; Core is the validator and durable store.
 
-Create and update require a caller-owned `--sequence-id` and an
-`--operation-key`. If a mutation response is lost, do not retry it: the CLI
-reports `core_effect: "unknown"` and supplies the exact `sequence read`
-command for authoritative recovery. Validation, diff, export, and simulation
-are authoring-only operations. They neither activate a Sequence, enroll a
-contact, nor request delivery.
+Create, update, and activation require a caller-owned `--sequence-id` and an
+`--operation-key`. If a draft mutation response is lost, do not retry it: the
+CLI reports `core_effect: "unknown"` and supplies the exact `sequence read`
+command for authoritative recovery. An ambiguous activation is also unknown,
+without retry or an invented draft readback. Validation, diff, export, and
+simulation are authoring-only operations. Activation records a version/binding
+only; it does not enroll a contact or request delivery.

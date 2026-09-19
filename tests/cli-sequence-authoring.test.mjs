@@ -4,7 +4,11 @@ import test from "node:test";
 import { parseArguments } from "../packages/cli/dist/arguments.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 import {
+  activateArguments,
+  activationBinding,
+  activatedVersion,
   bearer,
+  bound,
   configUrl,
   createArguments,
   definition,
@@ -38,6 +42,15 @@ test("Sequence grammar carries Core-owned definition JSON and stable mutation ID
     sequenceId,
     enteredAtMs: 0,
     assumedAcceptedAtMs: { welcome: 0, followup: 172800000 },
+  });
+  assert.deepEqual(parseArguments(activateArguments()).operator, {
+    kind: "sequence_activate",
+    workspace,
+    environment: "sandbox",
+    sequenceId,
+    expectedRevision: 2,
+    operationKey: "activate-welcome",
+    binding: activationBinding(),
   });
   for (const invalid of [
     withoutOption(createArguments(), "--sequence-id"),
@@ -81,6 +94,19 @@ test("Sequence grammar carries Core-owned definition JSON and stable mutation ID
       "--definition",
       JSON.stringify(definition),
     ],
+    [
+      "sequence",
+      "activate",
+      ...scopeArguments(),
+      "--sequence-id",
+      sequenceId,
+      "--expected-revision",
+      "2",
+      "--operation-key",
+      "activate-welcome",
+      "--binding",
+      JSON.stringify({ ...activationBinding(), unknown: true }),
+    ],
   ])
     assert.throws(() => parseArguments(invalid));
 });
@@ -96,6 +122,7 @@ test("Sequence help and invalid invocation stay on the bounded authoring surface
   assert.equal(overview.exitCode, 0);
   assert.match(overview.stdout, /Fonte sequence commands/);
   assert.match(overview.stdout, /fonte sequence simulate --help/);
+  assert.match(overview.stdout, /fonte sequence activate --help/);
   const createHelp = await runProgram(
     ["sequence", "create", "--help"],
     dependencies(noCore),
@@ -113,7 +140,7 @@ test("Sequence help and invalid invocation stay on the bounded authoring surface
   );
 });
 
-test("Sequence authoring uses the exact Core routes without activating or sending", async () => {
+test("Sequence authoring and activation use exact Core routes without enrolling or sending", async () => {
   const requests = [];
   const fetch = async (input, init = {}) => {
     const url = new URL(String(input));
@@ -133,6 +160,7 @@ test("Sequence authoring uses the exact Core routes without activating or sendin
     ["sequence", "read", ...scopeArguments(), "--sequence-id", sequenceId],
     createArguments(),
     updateArguments(),
+    activateArguments(),
     [
       "sequence",
       "validate",
@@ -173,6 +201,10 @@ test("Sequence authoring uses the exact Core routes without activating or sendin
       ],
       [
         "POST",
+        "/v1/workspaces/northstar/sequences/welcome-sequence/activate?environment=sandbox",
+      ],
+      [
+        "POST",
         "/v1/workspaces/northstar/sequences/validate?environment=sandbox",
       ],
       [
@@ -199,24 +231,55 @@ test("Sequence authoring uses the exact Core routes without activating or sendin
     expectedRevision: 1,
     definition: { ...definition, title: "A warmer welcome" },
   });
-  assert.deepEqual(requests[4].body, { definition });
-  assert.deepEqual(requests[5].body, {
+  assert.deepEqual(requests[4].body, {
+    operationKey: "activate-welcome",
+    expectedRevision: 2,
+    binding: activationBinding(),
+  });
+  assert.deepEqual(requests[5].body, { definition });
+  assert.deepEqual(requests[6].body, {
     baseRevision: 1,
     definition: { ...definition, title: "A warmer welcome" },
   });
-  assert.deepEqual(requests[7].body, {
+  assert.deepEqual(requests[8].body, {
     enteredAtMs: 0,
     assumedAcceptedAtMs: { welcome: 0, followup: 172800000 },
   });
   assert.equal(requests[2].headers["idempotency-key"], "create-welcome");
   assert.equal(requests[3].headers["idempotency-key"], "update-welcome");
+  assert.equal(requests[4].headers["idempotency-key"], "activate-welcome");
   assert.equal(receipts[2].reason, "sequence_created");
   assert.equal(receipts[3].reason, "sequence_updated");
+  assert.equal(receipts[4].reason, "sequence_activated");
+  assert.equal(receipts[4].result.activated_version.version, 1);
   assert.equal(
-    receipts[7].result.delivery,
+    receipts[8].result.delivery,
     "not_requested_by_authoring_preview",
   );
   assert.equal(JSON.stringify(receipts).includes(bearer), false);
+});
+
+test("Sequence activation preserves Core operation-key replay", async () => {
+  const result = await runProgram(
+    activateArguments(),
+    dependencies(async (input) =>
+      String(input) === configUrl
+        ? json(hostedConfig())
+        : json(
+            bound({
+              outcome: "replayed",
+              sequenceId,
+              draftRevision: 2,
+              activatedVersion: activatedVersion(),
+            }),
+          ),
+    ),
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.reason, "sequence_activation_replayed");
+  assert.equal(receipt.core_effect, "none");
+  assert.equal(receipt.result.outcome, "replayed");
 });
 
 test("Sequence revision conflicts are surfaced without a retry instruction", async () => {

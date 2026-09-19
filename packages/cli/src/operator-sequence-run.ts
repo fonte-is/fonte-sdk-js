@@ -30,7 +30,9 @@ export function executeSequenceCommand(
     return client.validateSequence(command);
   if (command.kind === "sequence_diff") return client.diffSequence(command);
   if (command.kind === "sequence_export") return client.exportSequence(command);
-  return client.simulateSequence(command);
+  if (command.kind === "sequence_simulate")
+    return client.simulateSequence(command);
+  return client.activateSequence(command);
 }
 
 export function sequenceReceiptDescriptor(
@@ -52,6 +54,12 @@ export function sequenceReceiptDescriptor(
   }
   if (result.kind === "sequence_simulation") {
     return completed("sequence_authoring_preview_observed", "none");
+  }
+  if (result.kind === "sequence_activation") {
+    if (command.kind !== "sequence_activate") return null;
+    return result.outcome === "activated"
+      ? completed("sequence_activated", "created")
+      : completed("sequence_activation_replayed", "none");
   }
   if (result.kind !== "sequence_draft") return null;
   if (command.kind === "sequence_create") {

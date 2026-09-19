@@ -44,6 +44,15 @@ const mutationKeySchema = z
   );
 const revisionSchema = z.number().int().positive().safe();
 const timestampSchema = z.number().int().nonnegative().safe();
+const boundedText = (maximum: number) =>
+  z
+    .string()
+    .min(1)
+    .max(maximum)
+    .refine(
+      (value) =>
+        value === value.trim() && !/[\u0000-\u001f\u007f]/u.test(value),
+    );
 
 const jsonValueSchema: z.ZodType<SequenceJsonValue> = z.lazy(() =>
   z.union([
@@ -108,6 +117,40 @@ export const simulateSequenceInputSchema = z
       .record(identifierSchema, timestampSchema)
       .optional()
       .default({}),
+  })
+  .strict();
+
+/**
+ * Activation values are opaque Core references. This schema admits only the
+ * known transport shape; it does not infer recipient, rendering, or delivery
+ * semantics from those references.
+ */
+const activationScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("general_marketing") }).strict(),
+  z
+    .object({ kind: z.literal("campaign"), campaign_id: boundedText(200) })
+    .strict(),
+]);
+const messageRenderReferenceSchema = z
+  .object({
+    step_id: boundedText(200),
+    render_reference: boundedText(500),
+  })
+  .strict();
+const activationBindingSchema = z
+  .object({
+    sender_id: boundedText(200),
+    scope: activationScopeSchema,
+    message_render_references: z.array(messageRenderReferenceSchema),
+  })
+  .strict();
+export const activateSequenceInputSchema = z
+  .object({
+    ...scopeInput,
+    sequence_id: sequenceIdSchema,
+    expected_revision: revisionSchema,
+    operation_key: mutationKeySchema,
+    binding: activationBindingSchema,
   })
   .strict();
 
@@ -214,6 +257,32 @@ export const simulationOutputSchema = z
         revision: revisionSchema,
         simulation: sequenceDefinitionSchema,
         delivery: z.literal("not_requested_by_authoring_preview"),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export const activationOutputSchema = z
+  .object({
+    ...completed,
+    activation: z
+      .object({
+        kind: z.literal("sequence_activation"),
+        outcome: z.enum(["activated", "replayed"]),
+        sequence_id: identifierSchema,
+        draft_revision: revisionSchema,
+        activated_version: z
+          .object({
+            activated_version_id: boundedText(200),
+            version: revisionSchema,
+            draft_revision: revisionSchema,
+            definition: sequenceDefinitionSchema,
+            binding: activationBindingSchema,
+            activated_at: z.string().min(1),
+            activated_at_ms: timestampSchema,
+            current: z.boolean(),
+          })
+          .strict(),
       })
       .strict()
       .nullable(),

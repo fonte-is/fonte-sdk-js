@@ -88,6 +88,19 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["sequence", "activate"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id> --expected-revision <n> --operation-key <key>",
+        "--binding <json-object>",
+      ],
+    ],
+    detail:
+      "Activates one exact Core draft revision with an opaque sender/scope/render binding. It cannot enroll, select recipients, send, or run delivery.",
+    json: true,
+  },
+  {
     command: ["sequence", "validate"],
     usage: [
       [

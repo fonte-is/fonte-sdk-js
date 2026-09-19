@@ -4,6 +4,7 @@ import {
   parseCoreReceipt,
 } from "./operator-core-request.js";
 import {
+  sequenceActivation,
   sequenceDiff,
   sequenceDraftEnvelope,
   sequenceExport,
@@ -12,6 +13,8 @@ import {
   sequenceValidation,
 } from "./operator-sequence-json.js";
 import type {
+  SequenceActivateInput,
+  SequenceActivationResult,
   SequenceCreateInput,
   SequenceDiffInput,
   SequenceDiffResult,
@@ -42,6 +45,7 @@ export interface SequenceAuthoringClient {
   simulateSequence(
     input: SequenceSimulationInput,
   ): Promise<SequenceSimulationResult>;
+  activateSequence(input: SequenceActivateInput): Promise<SequenceActivationResult>;
 }
 
 export function createSequenceAuthoringClient(
@@ -139,6 +143,21 @@ export function createSequenceAuthoringClient(
       );
       return matching(result, input.sequenceId);
     },
+    async activateSequence(input) {
+      const result = activationEnvelope(
+        await request(itemSubresourcePath(input, "activate"), {
+          idempotencyKey: input.operationKey,
+          body: {
+            operationKey: input.operationKey,
+            expectedRevision: input.expectedRevision,
+            binding: input.binding,
+          },
+          lostResponseEffect: "unknown",
+        }),
+        input.environment,
+      );
+      return matching(result, input.sequenceId, "unknown");
+    },
   };
 }
 
@@ -162,7 +181,7 @@ function validationPath(
 
 function itemSubresourcePath(
   input: SequenceReadInput,
-  subresource: "diff" | "export" | "simulate",
+  subresource: "activate" | "diff" | "export" | "simulate",
 ): string {
   return `/v1/workspaces/${segment(input.workspace)}/sequences/${segment(input.sequenceId)}/${subresource}?environment=${input.environment}`;
 }
@@ -182,6 +201,18 @@ function mutationEnvelope(
 ): SequenceDraftResult {
   return parseCoreReceipt(
     (receipt) => sequenceDraftEnvelope(receipt, environment),
+    value,
+    "unknown",
+  );
+}
+
+/** A malformed successful activation receipt leaves its Core effect unknown. */
+function activationEnvelope(
+  value: unknown,
+  environment: "sandbox" | "production",
+): SequenceActivationResult {
+  return parseCoreReceipt(
+    (receipt) => sequenceActivation(receipt, environment),
     value,
     "unknown",
   );

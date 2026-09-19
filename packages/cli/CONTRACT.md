@@ -28,9 +28,11 @@ V0 supports only:
 - one thin CLI-only production broadcast journey over Core-owned draft,
   audience, verified-account test, preflight, authorization, control, and
   result authority; and
-- one thin browser-authorized Sequence-definition authoring journey over
-  Core-owned create/read/update/validate/diff/export/simulate authority; and
-- one stdio-only MCP surface over that same closed Sequence-authoring
+- one thin browser-authorized Sequence-definition authoring and activation
+  journey over Core-owned create/read/update/validate/diff/export/simulate/
+  activate authority; and
+- one stdio-only MCP surface over that same closed Sequence-authoring and
+  activation
   authority, as frozen in `MCP_CONTRACT.md`; and
 - one thin Bridge collection, completed Contact-import identity read,
   provider-audience reconciliation, and explicit fingerprint-bound freeze

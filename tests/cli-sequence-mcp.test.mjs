@@ -12,6 +12,8 @@ import {
 import { createCoreRequester } from "../packages/cli/dist/operator-core-request.js";
 import { createSequenceAuthoringClient } from "../packages/cli/dist/operator-sequence-client.js";
 import {
+  activationBinding,
+  activatedVersion,
   bearer,
   configUrl,
   definition,
@@ -25,7 +27,7 @@ import {
 
 const scope = { workspace, environment: "sandbox" };
 
-test("Sequence MCP has one closed authoring tool allowlist and no resources", () => {
+test("Sequence MCP has one closed authoring and activation tool allowlist and no resources", () => {
   assert.deepEqual(MCP_SEQUENCE_TOOLS, [
     "fonte_list_sequences",
     "fonte_read_sequence",
@@ -35,6 +37,7 @@ test("Sequence MCP has one closed authoring tool allowlist and no resources", ()
     "fonte_diff_sequence",
     "fonte_export_sequence",
     "fonte_simulate_sequence",
+    "fonte_activate_sequence",
   ]);
   assert.deepEqual(MCP_SEQUENCE_ALLOWLIST, { tools: MCP_SEQUENCE_TOOLS });
   assert.equal("resources" in MCP_SEQUENCE_ALLOWLIST, false);
@@ -47,6 +50,7 @@ test("Sequence MCP tools preserve the Core authoring inputs and results", async 
   );
   await assertDraftTools(handlers);
   await assertInspectionTools(handlers);
+  await assertActivationTool(handlers);
   assertCoreInputs(calls);
   await assert.rejects(
     handlers.create({
@@ -57,7 +61,13 @@ test("Sequence MCP tools preserve the Core authoring inputs and results", async 
       recipient: { email: "someone@example.test" },
     }),
   );
-  assert.equal(calls.length, 8);
+  await assert.rejects(
+    handlers.activate({
+      ...activationInput(),
+      recipient: { email: "someone@example.test" },
+    }),
+  );
+  assert.equal(calls.length, 9);
 });
 
 test("ambiguous MCP draft mutations are reported once and never retried", async () => {
@@ -86,6 +96,31 @@ test("ambiguous MCP draft mutations are reported once and never retried", async 
     status_code: null,
     core_effect: "unknown",
     sequence: null,
+  });
+  assert.equal(requests, 1);
+});
+
+test("ambiguous MCP Sequence activation is reported once and never retried", async () => {
+  let requests = 0;
+  const requester = createCoreRequester({
+    coreApiBaseUrl: "http://127.0.0.1:43112",
+    bearer,
+    fetch: async () => {
+      requests += 1;
+      throw new Error("response lost after Core may have activated a version");
+    },
+  });
+  const handlers = createSequenceToolHandlers(async () =>
+    createSequenceAuthoringClient(requester),
+  );
+  const result = await handlers.activate(activationInput());
+
+  assert.deepEqual(result, {
+    outcome: "ambiguous",
+    reason: "core_api_unavailable",
+    status_code: null,
+    core_effect: "unknown",
+    activation: null,
   });
   assert.equal(requests, 1);
 });
@@ -123,6 +158,7 @@ test("the ephemeral MCP session uses one browser authorization and Core requeste
 
   await handlers.list(scope);
   await handlers.read({ ...scope, sequence_id: sequenceId });
+  await handlers.activate(activationInput());
 
   assert.equal(configRequests, 1);
   assert.equal(authorizations, 1);
@@ -135,6 +171,11 @@ test("the ephemeral MCP session uses one browser authorization and Core requeste
     {
       method: "GET",
       path: "/v1/workspaces/northstar/sequences/welcome-sequence?environment=sandbox",
+      authorization: `Bearer ${bearer}`,
+    },
+    {
+      method: "POST",
+      path: "/v1/workspaces/northstar/sequences/welcome-sequence/activate?environment=sandbox",
       authorization: `Bearer ${bearer}`,
     },
   ]);
@@ -231,6 +272,16 @@ function recordingClient(calls) {
         delivery: "not_requested_by_authoring_preview",
       };
     },
+    activateSequence: async (input) => {
+      calls.push(["activate", input]);
+      return {
+        kind: "sequence_activation",
+        outcome: "activated",
+        sequence_id: sequenceId,
+        draft_revision: 2,
+        activated_version: activationResult(),
+      };
+    },
   };
 }
 
@@ -295,6 +346,55 @@ async function assertInspectionTools(handlers) {
   );
 }
 
+async function assertActivationTool(handlers) {
+  const result = await handlers.activate(activationInput());
+  assert.equal(result.outcome, "completed");
+  assert.equal(result.activation.outcome, "activated");
+  assert.equal(result.activation.activated_version.version, 1);
+}
+
+function activationInput() {
+  return {
+    ...scope,
+    sequence_id: sequenceId,
+    expected_revision: 2,
+    operation_key: "activate-welcome",
+    binding: {
+      sender_id: activationBinding().senderId,
+      scope: { kind: "general_marketing" },
+      message_render_references: activationBinding().messageRenderReferences.map(
+        (reference) => ({
+          step_id: reference.stepId,
+          render_reference: reference.renderReference,
+        }),
+      ),
+    },
+  };
+}
+
+function activationResult() {
+  const version = activatedVersion();
+  return {
+    activated_version_id: version.activatedVersionId,
+    version: version.version,
+    draft_revision: version.draftRevision,
+    definition: version.definition,
+    binding: {
+      sender_id: version.binding.senderId,
+      scope: { kind: "general_marketing" },
+      message_render_references: version.binding.messageRenderReferences.map(
+        (reference) => ({
+          step_id: reference.stepId,
+          render_reference: reference.renderReference,
+        }),
+      ),
+    },
+    activated_at: version.activatedAt,
+    activated_at_ms: version.activatedAtMs,
+    current: version.current,
+  };
+}
+
 function assertCoreInputs(calls) {
   assert.deepEqual(calls, [
     ["list", scope],
@@ -328,6 +428,16 @@ function assertCoreInputs(calls) {
         sequenceId,
         enteredAtMs: 0,
         assumedAcceptedAtMs: {},
+      },
+    ],
+    [
+      "activate",
+      {
+        ...scope,
+        sequenceId,
+        expectedRevision: 2,
+        operationKey: "activate-welcome",
+        binding: activationBinding(),
       },
     ],
   ]);

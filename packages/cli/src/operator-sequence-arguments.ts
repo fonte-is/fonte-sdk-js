@@ -1,8 +1,11 @@
 import { CliUsageError } from "./errors.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 import type {
+  SequenceActivationBinding,
+  SequenceActivationScope,
   SequenceEnvironment,
   SequenceJsonObject,
+  SequenceMessageRenderReference,
   SequenceOperatorCommand,
 } from "./operator-sequence-types.js";
 
@@ -74,6 +77,17 @@ export function parseSequenceOperatorArguments(
       { kind: "sequence_simulate" },
     );
   }
+  if (operation === "activate") {
+    return parsed(
+      scope(argv.slice(2), [
+        "--sequence-id",
+        "--expected-revision",
+        "--operation-key",
+        "--binding",
+      ]),
+      { kind: "sequence_activate" },
+    );
+  }
   invalid("invalid_field", "sequence operation");
 }
 
@@ -141,6 +155,15 @@ function sequenceCommand(
         sequenceId: sequenceId(options),
         enteredAtMs: nonNegativeInteger(options, "--entered-at-ms"),
         assumedAcceptedAtMs: assumedAcceptedAtMs(options),
+      };
+    case "sequence_activate":
+      return {
+        kind,
+        ...scoped,
+        sequenceId: sequenceId(options),
+        expectedRevision: revision(options, "--expected-revision"),
+        operationKey: operationKey(options),
+        binding: activationBinding(options),
       };
   }
 }
@@ -230,6 +253,58 @@ function definition(options: Options): SequenceJsonObject {
   return jsonObject(required(options, "--definition"), "--definition");
 }
 
+/**
+ * The binding is deliberately one JSON object: the CLI transports the Core
+ * contract but does not derive renderer, sender, or scope semantics locally.
+ */
+function activationBinding(options: Options): SequenceActivationBinding {
+  const field = "--binding";
+  const value = jsonObject(required(options, field), field);
+  exactKeys(value, ["messageRenderReferences", "scope", "senderId"], field);
+  return {
+    senderId: boundedText(value.senderId, 200, field),
+    scope: activationScope(value.scope, field),
+    messageRenderReferences: messageRenderReferences(
+      value.messageRenderReferences,
+      field,
+    ),
+  };
+}
+
+function activationScope(
+  value: unknown,
+  field: string,
+): SequenceActivationScope {
+  const scope = object(value, field);
+  if (scope.kind === "general_marketing") {
+    exactKeys(scope, ["kind"], field);
+    return { kind: "general_marketing" };
+  }
+  if (scope.kind === "campaign") {
+    exactKeys(scope, ["campaignId", "kind"], field);
+    return {
+      kind: "campaign",
+      campaignId: boundedText(scope.campaignId, 200, field),
+    };
+  }
+  invalid("invalid_field", field);
+}
+
+function messageRenderReferences(
+  value: unknown,
+  field: string,
+): readonly SequenceMessageRenderReference[] {
+  if (!Array.isArray(value)) invalid("invalid_field", field);
+  return value.map((reference) => {
+    const item = object(reference, field);
+    exactKeys(item, ["renderReference", "stepId"], field);
+    return {
+      stepId: boundedText(item.stepId, 200, field),
+      renderReference: boundedText(item.renderReference, 500, field),
+    };
+  });
+}
+
 function optionalRevision(options: Options, name: string): number | null {
   return options.values.has(name) ? revision(options, name) : null;
 }
@@ -285,6 +360,39 @@ function jsonObject(value: string, field: string): SequenceJsonObject {
     invalid("invalid_field", field);
   }
   return parsed as SequenceJsonObject;
+}
+
+function object(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    invalid("invalid_field", field);
+  }
+  return value as Record<string, unknown>;
+}
+
+function exactKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+  field: string,
+): void {
+  if (
+    Object.keys(value).length !== keys.length ||
+    Object.keys(value).some((key) => !keys.includes(key))
+  ) {
+    invalid("invalid_field", field);
+  }
+}
+
+function boundedText(value: unknown, maximum: number, field: string): string {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value !== value.trim() ||
+    value.length > maximum ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    invalid("invalid_field", field);
+  }
+  return value;
 }
 
 function invalid(

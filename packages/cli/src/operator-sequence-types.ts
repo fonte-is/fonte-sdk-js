@@ -55,6 +55,32 @@ export interface SequenceSimulationInput extends SequenceReadInput {
   readonly assumedAcceptedAtMs: Readonly<Record<string, number>>;
 }
 
+/**
+ * Activation binds an already-persisted draft revision to Core-owned sender,
+ * scope, and renderer references. The SDK checks only this transport shape;
+ * Core validates that the references match the activated Send steps.
+ */
+export type SequenceActivationScope =
+  | { readonly kind: "general_marketing" }
+  | { readonly kind: "campaign"; readonly campaignId: string };
+
+export interface SequenceMessageRenderReference {
+  readonly stepId: string;
+  readonly renderReference: string;
+}
+
+export interface SequenceActivationBinding {
+  readonly senderId: string;
+  readonly scope: SequenceActivationScope;
+  readonly messageRenderReferences: readonly SequenceMessageRenderReference[];
+}
+
+export interface SequenceActivateInput extends SequenceReadInput {
+  readonly expectedRevision: number;
+  readonly operationKey: string;
+  readonly binding: SequenceActivationBinding;
+}
+
 export interface SequencePlan {
   readonly title: string;
   readonly entry: "subscription_episode";
@@ -123,6 +149,42 @@ export interface SequenceSimulationResult {
   readonly delivery: "not_requested_by_authoring_preview";
 }
 
+export type SequenceActivationOutcome = "activated" | "replayed";
+
+export type SequenceActivationScopeResult =
+  | { readonly kind: "general_marketing" }
+  | { readonly kind: "campaign"; readonly campaign_id: string };
+
+export interface SequenceActivationBindingResult {
+  readonly sender_id: string;
+  readonly scope: SequenceActivationScopeResult;
+  readonly message_render_references: readonly {
+    readonly step_id: string;
+    readonly render_reference: string;
+  }[];
+}
+
+/**
+ * This is a Core receipt for one immutable activated version. It deliberately
+ * carries no enrollment, recipient, provider attempt, or delivery result.
+ */
+export interface SequenceActivationResult {
+  readonly kind: "sequence_activation";
+  readonly outcome: SequenceActivationOutcome;
+  readonly sequence_id: string;
+  readonly draft_revision: number;
+  readonly activated_version: {
+    readonly activated_version_id: string;
+    readonly version: number;
+    readonly draft_revision: number;
+    readonly definition: SequenceJsonObject;
+    readonly binding: SequenceActivationBindingResult;
+    readonly activated_at: string;
+    readonly activated_at_ms: number;
+    readonly current: boolean;
+  };
+}
+
 export type SequenceOperatorCommand =
   | ({ readonly kind: "sequence_list" } & SequenceScopeInput)
   | ({ readonly kind: "sequence_read" } & SequenceReadInput)
@@ -131,7 +193,8 @@ export type SequenceOperatorCommand =
   | ({ readonly kind: "sequence_validate" } & SequenceValidationInput)
   | ({ readonly kind: "sequence_diff" } & SequenceDiffInput)
   | ({ readonly kind: "sequence_export" } & SequenceReadInput)
-  | ({ readonly kind: "sequence_simulate" } & SequenceSimulationInput);
+  | ({ readonly kind: "sequence_simulate" } & SequenceSimulationInput)
+  | ({ readonly kind: "sequence_activate" } & SequenceActivateInput);
 
 export type SequenceOperatorResult =
   | SequenceDraftResult
@@ -139,4 +202,5 @@ export type SequenceOperatorResult =
   | SequenceValidationResult
   | SequenceDiffResult
   | SequenceExportResult
-  | SequenceSimulationResult;
+  | SequenceSimulationResult
+  | SequenceActivationResult;
