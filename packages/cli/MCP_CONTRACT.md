@@ -1,8 +1,8 @@
-# Fonte Sequence Authoring MCP V1
+# Fonte Sequence Authoring and Activation MCP V1
 
-`fonte-mcp` is a stdio MCP server for the closed Sequence-definition
-authoring surface. It is an authenticated client of Fonte Core; it does not
-store, interpret, activate, or execute Sequence state itself.
+`fonte-mcp` is a stdio MCP server for the closed Sequence-definition authoring
+and activation surface. It is an authenticated client of Fonte Core; it does
+not store, interpret, enroll, or execute Sequence state itself.
 
 ## Authentication and authority
 
@@ -13,8 +13,8 @@ state, recipient data, provider payload, or delivery result is stored by the
 MCP process.
 
 Core remains the authority for workspace access, definition validation,
-revision checks, operation-key replay, semantic diffs, exported definitions,
-and authoring-only timing previews.
+revision checks, operation-key replay, immutable version activation, semantic
+diffs, exported definitions, and authoring-only timing previews.
 
 ## Admitted tools
 
@@ -28,14 +28,18 @@ The server exposes exactly these tools:
 - `fonte_diff_sequence`
 - `fonte_export_sequence`
 - `fonte_simulate_sequence`
+- `fonte_activate_sequence`
 
-All inputs name the workspace and environment explicitly. Create and update
-also require a caller-owned Sequence ID and operation key. They are
-idempotent only through Core's operation-key contract.
+All inputs name the workspace and environment explicitly. Create, update, and
+activate also require a caller-owned Sequence ID and operation key. They are
+idempotent only through Core's operation-key contract. Activation additionally
+accepts one strict binding object with opaque sender, scope, and renderer
+references; Core alone validates its relationship to the persisted revision.
 
-The server exposes no resources, generic HTTP proxy, local state, activation,
-enrollment, recipient selection, provider payload, send, delivery, billing,
-or runtime controls.
+The server exposes no resources, generic HTTP proxy, local state, enrollment,
+recipient selection, provider payload, send, delivery, billing, or runtime
+controls. Activation records only an immutable Core version/binding; it does
+not enroll a subscription episode or create a delivery request.
 
 ## Mutation uncertainty
 
@@ -43,6 +47,11 @@ If a create or update may have reached Core but the response cannot be proven,
 the tool returns `outcome: "ambiguous"` and `core_effect: "unknown"`. It never
 retries the mutation. Read the known Sequence ID through
 `fonte_read_sequence` before deciding any next action.
+
+If activation may have reached Core but its response cannot be proven, the tool
+also returns `outcome: "ambiguous"` and `core_effect: "unknown"`, without an
+automatic retry or a fabricated readback instruction. A draft read cannot
+establish whether a particular activated version was recorded.
 
 ## Running
 

@@ -64,6 +64,15 @@ export function renderSequenceOperatorHuman(
       "",
     ].join("\n");
   }
+  if (result.kind === "sequence_activation") {
+    return [
+      `Fonte Sequence activation: ${result.outcome}.`,
+      `Sequence/draft revision: ${result.sequence_id}/${result.draft_revision}.`,
+      `Activated version: ${result.activated_version.activated_version_id}/${result.activated_version.version}; current: ${result.activated_version.current ? "yes" : "no"}.`,
+      `Core effect: ${receipt.core_effect}.`,
+      "",
+    ].join("\n");
+  }
   return null;
 }
 

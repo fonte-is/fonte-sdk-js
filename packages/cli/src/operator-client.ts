@@ -143,6 +143,13 @@ export type {
   WorkspaceInvitationWorkspaceResult,
 } from "./operator-workspace-invitation-client.js";
 export type {
+  SequenceActivateInput,
+  SequenceActivationBinding,
+  SequenceActivationBindingResult,
+  SequenceActivationOutcome,
+  SequenceActivationResult,
+  SequenceActivationScope,
+  SequenceActivationScopeResult,
   SequenceCreateInput,
   SequenceDiffInput,
   SequenceDiffResult,
@@ -152,6 +159,7 @@ export type {
   SequenceJsonObject,
   SequenceJsonValue,
   SequenceListResult,
+  SequenceMessageRenderReference,
   SequencePlan,
   SequencePlanStep,
   SequenceReadInput,

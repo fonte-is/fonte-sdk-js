@@ -82,6 +82,33 @@ export function simulateArguments() {
   ];
 }
 
+export function activationBinding() {
+  return {
+    senderId: "sender-sequence-welcome",
+    scope: { kind: "general_marketing" },
+    messageRenderReferences: [
+      { stepId: "welcome", renderReference: "render-welcome" },
+      { stepId: "followup", renderReference: "render-followup" },
+    ],
+  };
+}
+
+export function activateArguments() {
+  return [
+    "sequence",
+    "activate",
+    ...scopeArguments(),
+    "--sequence-id",
+    sequenceId,
+    "--expected-revision",
+    "2",
+    "--operation-key",
+    "activate-welcome",
+    "--binding",
+    JSON.stringify(activationBinding()),
+  ];
+}
+
 export function sequenceRoute(request) {
   const collection = "/v1/workspaces/northstar/sequences?environment=sandbox";
   const item =
@@ -115,6 +142,21 @@ export function sequenceRoute(request) {
         currentRevision: 2,
         diff: { changed: true, changes: [{ kind: "title_changed" }] },
       }),
+    );
+  }
+  if (
+    request.method === "POST" &&
+    request.path ===
+      `${item.replace("?environment=sandbox", "/activate?environment=sandbox")}`
+  ) {
+    return json(
+      bound({
+        outcome: "activated",
+        sequenceId,
+        draftRevision: 2,
+        activatedVersion: activatedVersion(),
+      }),
+      201,
     );
   }
   if (
@@ -182,6 +224,20 @@ export function plan() {
         subject: "A quick follow-up",
       },
     ],
+  };
+}
+
+export function activatedVersion() {
+  const activatedAt = "2026-09-19T08:02:00.000Z";
+  return {
+    activatedVersionId: "10000000-0000-4000-8000-000000000611",
+    version: 1,
+    draftRevision: 2,
+    definition,
+    binding: activationBinding(),
+    activatedAt,
+    activatedAtMs: Date.parse(activatedAt),
+    current: true,
   };
 }
 

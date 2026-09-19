@@ -45,7 +45,7 @@ export function createFonteSequenceMcpServer(
     { name: MCP_SERVER_NAME, version: CLI_VERSION },
     {
       instructions:
-        "Authenticated Sequence draft authoring through Fonte Core. This server cannot activate, enroll, send, deliver, or manage recipients.",
+        "Authenticated Sequence draft authoring and version activation through Fonte Core. This server cannot enroll, send, deliver, or manage recipients.",
     },
   );
   registerMcpSequenceTools(server, clientProvider);

@@ -14,7 +14,7 @@ provider capacity. A missing, invalid, stale, or unavailable Core fact stays a
 blocker. A lost mutation response has `core_effect: unknown` until an explicit
 authoritative read command resolves it.
 
-## Sequence authoring
+## Sequence authoring and activation
 
 Sequence commands use the same browser OAuth and Core workspace-access path,
 but they support either `sandbox` or `production` because they are definition
@@ -33,6 +33,10 @@ fonte sequence create --workspace <slug> --environment <sandbox|production> \
 fonte sequence update --workspace <slug> --environment <sandbox|production> \
   --sequence-id <id> --expected-revision <n> --operation-key <key> \
   --definition <json-object>
+
+fonte sequence activate --workspace <slug> --environment <sandbox|production> \
+  --sequence-id <id> --expected-revision <n> --operation-key <key> \
+  --binding <json-object>
 
 fonte sequence validate --workspace <slug> --environment <sandbox|production> \
   --definition <json-object>
@@ -57,9 +61,21 @@ Do not retry the mutation before that read. Core alone resolves operation-key
 replay, changed-material conflict, revision conflict, and the persisted
 definition.
 
+Activation submits one exact Core draft revision and a structurally checked but
+semantically opaque binding JSON object with exactly `senderId`, `scope`, and
+`messageRenderReferences`. Core alone validates that it is a complete Sequence,
+that the renderer references match its Send steps, and records the immutable
+activated version. It creates no subscription entry, recipient, provider
+request, delivery outcome, billing fact, or runtime control. An activation
+response that is lost or malformed remains `core_effect: "unknown"`; the CLI
+does not retry it and does not suggest draft readback because that route cannot
+prove whether an activated version was recorded.
+
 Validate, diff, export, and simulate are definition/preview operations only.
 They do not activate a Sequence, enroll a subscription episode, create a
-message occurrence, submit provider work, or claim a delivery outcome.
+message occurrence, submit provider work, or claim a delivery outcome. The
+separate `activate` command only records the Core version and binding; it does
+not perform any of those runtime effects.
 
 ## Production journey
 
@@ -368,6 +384,6 @@ before OAuth or network access. There is no generic HTTP command, provider
 credential input, browser UI fallback, generic segment language, local
 eligibility engine, automatic retry after an ambiguous mutation, or generic
 MCP layer.
-The only MCP exception is the fixed Sequence-definition authoring surface in
-`MCP_CONTRACT.md`; it has no broadcast, Bridge, recipient, activation, send,
-delivery, or runtime authority.
+The only MCP exception is the fixed Sequence-definition authoring and
+activation surface in `MCP_CONTRACT.md`; it has no broadcast, Bridge,
+recipient, enrollment, send, delivery, or runtime authority.

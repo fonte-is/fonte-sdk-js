@@ -3,6 +3,7 @@ import {
   type SequenceMcpFailure,
 } from "./mcp-sequence-failure.js";
 import {
+  activateSequenceInputSchema,
   createSequenceInputSchema,
   diffSequenceInputSchema,
   exportSequenceInputSchema,
@@ -14,6 +15,7 @@ import {
 } from "./mcp-sequence-types.js";
 import type { SequenceAuthoringClient } from "./operator-sequence-client.js";
 import type {
+  SequenceActivationResult,
   SequenceDiffResult,
   SequenceDraftResult,
   SequenceExportResult,
@@ -30,6 +32,7 @@ export const MCP_SEQUENCE_TOOLS = [
   "fonte_diff_sequence",
   "fonte_export_sequence",
   "fonte_simulate_sequence",
+  "fonte_activate_sequence",
 ] as const;
 
 export type SequenceMcpClient = Pick<
@@ -42,6 +45,7 @@ export type SequenceMcpClient = Pick<
   | "diffSequence"
   | "exportSequence"
   | "simulateSequence"
+  | "activateSequence"
 >;
 export type SequenceMcpClientProvider = () => Promise<SequenceMcpClient>;
 
@@ -68,6 +72,9 @@ interface SequenceToolHandlers {
   simulate(
     input: unknown,
   ): Promise<SequenceToolResult<"simulation", SequenceSimulationResult>>;
+  activate(
+    input: unknown,
+  ): Promise<SequenceToolResult<"activation", SequenceActivationResult>>;
 }
 
 type SequenceToolResult<Key extends string, Value> =
@@ -184,6 +191,35 @@ export function createSequenceToolHandlers(
             sequenceId: value.sequence_id,
             enteredAtMs: value.entered_at_ms,
             assumedAcceptedAtMs: value.assumed_accepted_at_ms,
+          }),
+        ),
+      );
+    },
+    async activate(input) {
+      const value = activateSequenceInputSchema.parse(input);
+      return execute("activation", () =>
+        provider().then((client) =>
+          client.activateSequence({
+            workspace: value.workspace,
+            environment: value.environment,
+            sequenceId: value.sequence_id,
+            expectedRevision: value.expected_revision,
+            operationKey: value.operation_key,
+            binding: {
+              senderId: value.binding.sender_id,
+              scope:
+                value.binding.scope.kind === "general_marketing"
+                  ? { kind: "general_marketing" }
+                  : {
+                      kind: "campaign",
+                      campaignId: value.binding.scope.campaign_id,
+                    },
+              messageRenderReferences:
+                value.binding.message_render_references.map((reference) => ({
+                  stepId: reference.step_id,
+                  renderReference: reference.render_reference,
+                })),
+            },
           }),
         ),
       );

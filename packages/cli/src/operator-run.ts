@@ -401,8 +401,10 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind.startsWith("sequence_")
-      ? "fonte.core.sequence_authoring.v1"
+    contract_id: command.kind === "sequence_activate"
+      ? "fonte.core.sequence_activation.v1"
+      : command.kind.startsWith("sequence_")
+        ? "fonte.core.sequence_authoring.v1"
       : command.kind === "workspace_marketing_settings_read"
         ? "fonte.core.workspace_marketing_settings.v1"
         : command.kind === "broadcast_preflight"

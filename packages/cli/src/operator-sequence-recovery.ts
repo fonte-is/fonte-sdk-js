@@ -15,7 +15,9 @@ interface ReceiptWithEffect {
 /**
  * Core owns mutation replay. When a create or update response is lost, the
  * client must read the known caller-owned Sequence ID before doing anything
- * else; it must not resubmit the mutation blindly.
+ * else; it must not resubmit the mutation blindly. Activation intentionally
+ * receives no draft-read instruction: the draft route cannot prove whether an
+ * activated version was recorded, and this SDK does not invent that readback.
  */
 export function withAmbiguousSequenceRecovery<
   Receipt extends ReceiptWithEffect,

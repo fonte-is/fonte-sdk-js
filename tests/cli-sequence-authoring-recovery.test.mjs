@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { runProgram } from "../packages/cli/dist/program.js";
 import {
+  activateArguments,
   bound,
   createArguments,
   definition,
@@ -51,6 +52,51 @@ test("malformed successful Sequence mutation receipts are recovered by readback"
   assert.equal(receipt.reason, "core_operator_receipt_invalid");
   assert.equal(receipt.core_effect, "unknown");
   assert.deepEqual(receipt.next_action, readback());
+});
+
+test("ambiguous Sequence activation stays unknown without an invented readback", async () => {
+  let calls = 0;
+  const result = await runProgram(
+    activateArguments(),
+    dependencies(async (input) => {
+      calls += 1;
+      if (String(input) === configUrl) return json(hostedConfig());
+      throw new Error("response lost after Core may have activated a version");
+    }),
+  );
+  assert.equal(result.exitCode, 3);
+  assert.equal(calls, 2);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.reason, "core_api_unavailable");
+  assert.equal(receipt.core_effect, "unknown");
+  assert.equal("next_action" in receipt, false);
+});
+
+test("malformed successful Sequence activation stays unknown without a retry", async () => {
+  let calls = 0;
+  const result = await runProgram(
+    activateArguments(),
+    dependencies(async (input) => {
+      calls += 1;
+      return String(input) === configUrl
+        ? json(hostedConfig())
+        : json(
+            bound({
+              outcome: "activated",
+              sequenceId,
+              draftRevision: 2,
+              activatedVersion: {},
+            }),
+            201,
+          );
+    }),
+  );
+  assert.equal(result.exitCode, 3);
+  assert.equal(calls, 2);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.reason, "core_operator_receipt_invalid");
+  assert.equal(receipt.core_effect, "unknown");
+  assert.equal("next_action" in receipt, false);
 });
 
 test("Sequence reads preserve Core-valid plan text without CLI-only caps", async () => {

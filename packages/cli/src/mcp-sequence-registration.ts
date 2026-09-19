@@ -6,6 +6,8 @@ import {
   type SequenceMcpClientProvider,
 } from "./mcp-sequence-tools.js";
 import {
+  activateSequenceInputSchema,
+  activationOutputSchema,
   createSequenceInputSchema,
   diffOutputSchema,
   diffSequenceInputSchema,
@@ -135,6 +137,18 @@ export function registerMcpSequenceTools(
       annotations: readOnly,
     },
     async (input) => result(await handlers.simulate(input)),
+  );
+  server.registerTool(
+    MCP_SEQUENCE_TOOLS[8],
+    {
+      title: "Activate Sequence version",
+      description:
+        "Freezes one exact Core draft revision and its sender/scope/render references. It cannot enroll, select recipients, send, or run delivery.",
+      inputSchema: activateSequenceInputSchema,
+      outputSchema: activationOutputSchema,
+      annotations: draftMutation,
+    },
+    async (input) => result(await handlers.activate(input)),
   );
 }
 
