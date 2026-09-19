@@ -6,6 +6,7 @@ import {
   CoreOperatorError,
 } from "./operator-client.js";
 import { withAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
+import { withAmbiguousSequenceRecovery } from "./operator-sequence-recovery.js";
 import {
   executeProviderAudienceCommand,
   providerAudienceReceiptDescriptor,
@@ -38,6 +39,11 @@ import {
   executeWorkspaceMarketingSettingsCommand,
   workspaceMarketingSettingsReceiptDescriptor,
 } from "./operator-marketing-settings-run.js";
+import {
+  executeSequenceCommand,
+  isSequenceCommand,
+  sequenceReceiptDescriptor,
+} from "./operator-sequence-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import type {
   OperatorCommand,
@@ -106,20 +112,23 @@ export async function runOperatorCommand(
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
-    return withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
-      schema_version: "fonte.cli.operator_receipt.v1",
-      command: command.kind,
-      outcome: "blocked",
-      reason:
-        core?.reason ??
-        (error instanceof HostedTestBlockedError
-          ? error.reason
-          : "operator_request_failed"),
-      workspace: command.workspace,
-      authority: currentAuthority(command),
-      core_effect: core?.coreEffect ?? "none",
-      result: null,
-    });
+    return withAmbiguousSequenceRecovery(
+      command,
+      withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
+        schema_version: "fonte.cli.operator_receipt.v1",
+        command: command.kind,
+        outcome: "blocked",
+        reason:
+          core?.reason ??
+          (error instanceof HostedTestBlockedError
+            ? error.reason
+            : "operator_request_failed"),
+        workspace: command.workspace,
+        authority: currentAuthority(command),
+        core_effect: core?.coreEffect ?? "none",
+        result: null,
+      }),
+    );
   }
 }
 async function execute(
@@ -140,6 +149,8 @@ async function execute(
     client,
   );
   if (marketingSettings) return marketingSettings;
+  if (isSequenceCommand(command))
+    return executeSequenceCommand(command, client);
   if (isProviderConnectionCommand(command)) {
     return executeProviderConnectionCommand(
       command,
@@ -245,6 +256,16 @@ function successReceipt(
       production.outcome,
       production.reason,
       production.coreEffect,
+    );
+  }
+  const sequence = sequenceReceiptDescriptor(command, result);
+  if (sequence) {
+    return currentReceipt(
+      command,
+      result,
+      sequence.outcome,
+      sequence.reason,
+      sequence.coreEffect,
     );
   }
   if (result.kind === "broadcast_preflight") {
@@ -380,8 +401,9 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id:
-      command.kind === "workspace_marketing_settings_read"
+    contract_id: command.kind.startsWith("sequence_")
+      ? "fonte.core.sequence_authoring.v1"
+      : command.kind === "workspace_marketing_settings_read"
         ? "fonte.core.workspace_marketing_settings.v1"
         : command.kind === "broadcast_preflight"
           ? "fonte.core.broadcast_preflight.v1"

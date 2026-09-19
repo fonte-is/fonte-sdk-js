@@ -30,6 +30,10 @@ import {
   type WorkspaceInvitationClient,
 } from "./operator-workspace-invitation-client.js";
 import {
+  createSequenceAuthoringClient,
+  type SequenceAuthoringClient,
+} from "./operator-sequence-client.js";
+import {
   requestBroadcastPreflight,
   type BroadcastPreflightInput,
 } from "./operator-preflight-client.js";
@@ -139,6 +143,25 @@ export type {
   WorkspaceInvitationWorkspaceResult,
 } from "./operator-workspace-invitation-client.js";
 export type {
+  SequenceCreateInput,
+  SequenceDiffInput,
+  SequenceDiffResult,
+  SequenceDraftResult,
+  SequenceEnvironment,
+  SequenceExportResult,
+  SequenceJsonObject,
+  SequenceJsonValue,
+  SequenceListResult,
+  SequencePlan,
+  SequencePlanStep,
+  SequenceReadInput,
+  SequenceSimulationInput,
+  SequenceSimulationResult,
+  SequenceUpdateInput,
+  SequenceValidationInput,
+  SequenceValidationResult,
+} from "./operator-sequence-types.js";
+export type {
   WorkspaceMarketingSettingsInput,
   WorkspaceMarketingSettingsResult,
 } from "./operator-marketing-settings-types.js";
@@ -158,7 +181,8 @@ export interface CoreOperatorClient
     ProviderConnectionClient,
     ProviderEvidenceClient,
     WorkspaceInvitationClient,
-    WorkspaceMarketingSettingsClient {
+    WorkspaceMarketingSettingsClient,
+    SequenceAuthoringClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -206,6 +230,7 @@ export function createCoreOperatorClient(
     ...createProviderEvidenceClient(request),
     ...createWorkspaceInvitationClient(request),
     ...createWorkspaceMarketingSettingsClient(request),
+    ...createSequenceAuthoringClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,

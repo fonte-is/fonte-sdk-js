@@ -20,7 +20,8 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   if (
     command === "broadcast" ||
     command === "bridge" ||
-    command === "provider-evidence"
+    command === "provider-evidence" ||
+    command === "sequence"
   ) {
     const operator = parseOperatorArguments(argv);
     return {
