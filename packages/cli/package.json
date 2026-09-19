@@ -42,6 +42,8 @@
     "access": "public"
   },
   "dependencies": {
-    "openid-client": "6.8.5"
+    "@modelcontextprotocol/server": "2.0.0",
+    "openid-client": "6.8.5",
+    "zod": "4.4.3"
   }
 }
