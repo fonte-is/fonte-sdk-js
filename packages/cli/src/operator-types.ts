@@ -41,9 +41,14 @@ import type {
   WorkspaceMarketingSettingsOperatorCommand,
   WorkspaceMarketingSettingsResult,
 } from "./operator-marketing-settings-types.js";
+import type {
+  SequenceOperatorCommand,
+  SequenceOperatorResult,
+} from "./operator-sequence-types.js";
 
 export type OperatorCommand =
   | WorkspaceMarketingSettingsOperatorCommand
+  | SequenceOperatorCommand
   | {
       readonly kind: "broadcast_test_send";
       readonly workspace: string;
@@ -269,6 +274,7 @@ export interface ResendBridgeCopyResult extends Omit<
 
 export type OperatorResult =
   | WorkspaceMarketingSettingsResult
+  | SequenceOperatorResult
   | SandboxTestResult
   | BroadcastCanaryResult
   | ProductionAudienceAppendResult
@@ -314,6 +320,7 @@ export interface OperatorReceipt {
       | "fonte.core.provider_connections.v1"
       | "fonte.core.provider_evidence_candidate.v1"
       | "fonte.core.workspace_marketing_settings.v1"
+      | "fonte.core.sequence_authoring.v1"
       | "fonte.core.provider_rotation_partition.v1"
       | "unavailable";
   };

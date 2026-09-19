@@ -9,6 +9,13 @@ npx @fonte-is/cli init --yes
 npx @fonte-is/cli doctor
 npx @fonte-is/cli test --workspace my-workspace
 npx @fonte-is/cli auth exec -- npm run local:core-bootstrap
+npx @fonte-is/cli sequence create --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --operation-key create-welcome --definition '{"schema":"sequence_definition.v1","title":"Welcome","entry":{"kind":"subscription_episode"},"reentry":"once","steps":[{"id":"welcome","kind":"send","subject":null,"message":null}]}'
+npx @fonte-is/cli sequence read --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --json
+npx @fonte-is/cli sequence update --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --expected-revision 1 --operation-key update-welcome --definition '<definition-json>'
+npx @fonte-is/cli sequence validate --workspace my-workspace --environment sandbox --definition '<definition-json>'
+npx @fonte-is/cli sequence diff --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --base-revision 1 --definition '<definition-json>'
+npx @fonte-is/cli sequence export --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --json
+npx @fonte-is/cli sequence simulate --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --entered-at-ms 0 --assumed-accepted-at-ms '{"welcome":0}' --json
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment sandbox --draft-id <uuid> --revision 1 --idempotency-key <key>
 npx @fonte-is/cli broadcast test status --workspace my-workspace --environment sandbox --test-id <uuid> --watch
 npx @fonte-is/cli broadcast preflight --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --postal-address "1 Synthetic Way"
@@ -170,3 +177,18 @@ checksums, and progress—not contact or provider rows.
 
 See [OPERATOR_CONTRACT.md](./OPERATOR_CONTRACT.md) for the exact command,
 authority, receipt, and future MCP boundary.
+
+## Sequence authoring
+
+`sequence list`, `read`, `create`, `update`, `validate`, `diff`, `export`, and
+`simulate` are thin browser-authorized Core clients over the same persisted
+Sequence definition used by future Web views and runtime work. They create or
+change no local Sequence state. Definitions are supplied as one JSON object;
+Core is the validator and durable store.
+
+Create and update require a caller-owned `--sequence-id` and an
+`--operation-key`. If a mutation response is lost, do not retry it: the CLI
+reports `core_effect: "unknown"` and supplies the exact `sequence read`
+command for authoritative recovery. Validation, diff, export, and simulation
+are authoring-only operations. They neither activate a Sequence, enroll a
+contact, nor request delivery.

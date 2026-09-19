@@ -27,6 +27,8 @@ V0 supports only:
 - one thin CLI-only production broadcast journey over Core-owned draft,
   audience, verified-account test, preflight, authorization, control, and
   result authority; and
+- one thin browser-authorized Sequence-definition authoring journey over
+  Core-owned create/read/update/validate/diff/export/simulate authority; and
 - one thin Bridge collection, completed Contact-import identity read,
   provider-audience reconciliation, and explicit fingerprint-bound freeze
   journey over Core-owned authority; and
@@ -55,6 +57,7 @@ fonte test --workspace <slug> [--json]
 fonte auth exec -- <command> [args...]
 fonte broadcast <command> ... [--json]
 fonte bridge <command> ... [--json]
+fonte sequence <command> ... [--json]
 fonte remove [--yes] [--json]
 fonte --help
 fonte --version

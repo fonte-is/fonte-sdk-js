@@ -8,6 +8,8 @@ export interface CoreRequestOptions {
 }
 
 export interface CorePostOptions {
+  /** POST remains the default; revisioned Core commands may require PUT. */
+  readonly method?: "POST" | "PUT";
   readonly idempotencyKey?: string;
   readonly body: Record<string, unknown>;
   readonly lostResponseEffect: "none" | "unknown";
@@ -46,7 +48,7 @@ export function createCoreRequester(
     let response: Response;
     try {
       response = await options.fetch(`${baseUrl}${path}`, {
-        method: post ? "POST" : "GET",
+        method: post ? (post.method ?? "POST") : "GET",
         headers: {
           accept: "application/json",
           authorization: `Bearer ${bearer}`,
