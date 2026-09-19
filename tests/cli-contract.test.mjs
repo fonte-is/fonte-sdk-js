@@ -27,8 +27,15 @@ test("CLI package identity stays independent from the fonte binary", async () =>
   );
   assert.equal(manifest.name, "@fonte-is/cli");
   assert.equal(manifest.version, "0.2.0");
-  assert.deepEqual(manifest.bin, { fonte: "./dist/main.js" });
-  assert.deepEqual(manifest.dependencies, { "openid-client": "6.8.5" });
+  assert.deepEqual(manifest.bin, {
+    fonte: "./dist/main.js",
+    "fonte-mcp": "./dist/mcp-main.js",
+  });
+  assert.deepEqual(manifest.dependencies, {
+    "@modelcontextprotocol/server": "2.0.0",
+    "openid-client": "6.8.5",
+    zod: "4.4.3",
+  });
   assert.deepEqual(manifest.exports, {
     "./operator-client": {
       types: "./dist/operator-client.d.ts",

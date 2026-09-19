@@ -20,12 +20,14 @@
     }
   },
   "bin": {
-    "fonte": "./dist/main.js"
+    "fonte": "./dist/main.js",
+    "fonte-mcp": "./dist/mcp-main.js"
   },
   "files": [
     "dist",
     "assets",
     "LICENSE",
+    "MCP_CONTRACT.md",
     "README.md",
     "OPERATOR_CONTRACT.md"
   ],

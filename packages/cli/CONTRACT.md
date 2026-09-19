@@ -7,9 +7,10 @@ verification semantics without returning the fork to the parent task.
 
 ## Boundary
 
-The package is `@fonte-is/cli`; its only binary is `fonte`. The source remains
-under `packages/cli` so a later registry-name change to `fonte` does not change
-the implementation architecture.
+The package is `@fonte-is/cli`; its public entry points are `fonte` and the
+stdio-only `fonte-mcp`. The source remains under `packages/cli` so a later
+registry-name change to `fonte` does not change the implementation
+architecture.
 
 V0 supports only:
 
@@ -29,6 +30,8 @@ V0 supports only:
   result authority; and
 - one thin browser-authorized Sequence-definition authoring journey over
   Core-owned create/read/update/validate/diff/export/simulate authority; and
+- one stdio-only MCP surface over that same closed Sequence-authoring
+  authority, as frozen in `MCP_CONTRACT.md`; and
 - one thin Bridge collection, completed Contact-import identity read,
   provider-audience reconciliation, and explicit fingerprint-bound freeze
   journey over Core-owned authority; and
@@ -61,6 +64,8 @@ fonte sequence <command> ... [--json]
 fonte remove [--yes] [--json]
 fonte --help
 fonte --version
+
+fonte-mcp
 ```
 
 Flags may appear in either order after a command. Duplicate, unknown, or
