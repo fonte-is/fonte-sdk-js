@@ -10,12 +10,15 @@ const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
+const senderId = "sender_synthetic_primary";
 const digest = `sha256:${"c".repeat(64)}`;
 const html =
   "<!doctype html><p>Hello {{{contact.email}}}</p>" +
   '<a href="{{{unsubscribe_url}}}">Leave</a>';
 let currentHtml = html;
 let currentRevision = 1;
+let currentSender = null;
+let currentReplyTo = null;
 let currentSource = {
   title: "Synthetic draft",
   subject: "Synthetic subject",
@@ -41,7 +44,7 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    if (authorizations > 7) {
+    if (authorizations > 10) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";
@@ -62,12 +65,33 @@ function route(url, init) {
     return response({ error: "human_auth_invalid" }, 401);
   }
   if (
+    init.method === "GET" &&
+    path ===
+      `/v1/workspaces/${workspace}/delivery/sender-domains` +
+        "?environment=production"
+  ) {
+    return response(
+      bound({
+        senderProfiles: [
+          {
+            senderId,
+            fromName: "Synthetic Sender",
+            emailAddress: "sender@example.test",
+            defaultReplyTo: "reply@example.test",
+          },
+        ],
+      }),
+    );
+  }
+  if (
     init.method === "POST" &&
     path ===
       `/v1/workspaces/${workspace}/broadcast-drafts` + "?environment=production"
   ) {
     currentHtml = body.htmlBody;
     currentRevision = 1;
+    currentSender = body.sender;
+    currentReplyTo = body.replyTo;
     currentSource = body;
     return response(lifecycleReceipt("applied"));
   }
@@ -112,7 +136,15 @@ function route(url, init) {
 }
 
 function revisionReceipt(body) {
-  currentHtml = body.changes.htmlBody;
+  if (Object.hasOwn(body.changes, "htmlBody")) {
+    currentHtml = body.changes.htmlBody;
+  }
+  if (Object.hasOwn(body.changes, "sender")) {
+    currentSender = body.changes.sender;
+  }
+  if (Object.hasOwn(body.changes, "replyTo")) {
+    currentReplyTo = body.changes.replyTo;
+  }
   currentRevision = body.baseRevision + 1;
   return {
     revision: currentRevision,
@@ -160,8 +192,8 @@ function draft(
     broadcastDraftId: draftId,
     version,
     title: source.title ?? "Synthetic draft",
-    sender: null,
-    replyTo: null,
+    sender: currentSender,
+    replyTo: currentReplyTo,
     audienceKind: recipientSelection === null ? null : "recipient_expression",
     audienceContactImportBatchId: null,
     recipientExpression:
@@ -192,7 +224,7 @@ function renderReceipt() {
   return bound({
     broadcastDraftId: draftId,
     status: "preview",
-    senderId: "sender_synthetic",
+    senderId: currentSender ?? senderId,
     renderContentDigest: digest,
     html: currentHtml,
     text: currentHtml,

@@ -13,6 +13,7 @@ const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
 const operationId = "synthetic-test-composition-v2";
 const systemId = "00000000-0000-4000-8000-000000000153";
+const senderId = "sender_synthetic_primary";
 const digest = `sha256:${"c".repeat(64)}`;
 const html =
   "<!doctype html><p>Hello {{{contact.email}}}</p>" +
@@ -122,10 +123,38 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(revised.outcome, "completed");
   assert.equal(revised.revision.draft.html_body, html);
 
+  const senders = await call(child, "fonte_list_broadcast_senders", {
+    workspace,
+    match: "sender@example.test",
+  });
+  assert.equal(senders.outcome, "completed");
+  assert.equal(senders.catalog.resolution.outcome, "selected");
+  assert.equal(senders.catalog.resolution.sender_profile_id, senderId);
+
+  const bound = await call(child, "fonte_update_broadcast_sender", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 2,
+    operation_id: "bind-synthetic-sender-v1",
+    sender_profile_id: senderId,
+  });
+  assert.equal(bound.outcome, "completed");
+  assert.equal(bound.revision.revision, 3);
+  assert.equal(bound.revision.draft.sender_profile_id, senderId);
+  assert.equal(bound.revision.draft.html_body, html);
+
+  const boundReadback = await call(child, "fonte_read_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+  });
+  assert.equal(boundReadback.draft.revision, 3);
+  assert.equal(boundReadback.draft.draft.sender_profile_id, senderId);
+  assert.equal(boundReadback.draft.draft.html_body, html);
+
   const rendered = await call(child, "fonte_render_broadcast_draft", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 3,
   });
   assert.equal(rendered.outcome, "completed");
   assert.equal(rendered.render.render_content_digest, digest);
@@ -134,7 +163,7 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   const requested = await call(child, "fonte_request_broadcast_test", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 3,
     operation_id: operationId,
     render_proof: rendered.render.render_proof,
   });
@@ -161,7 +190,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   const loggedOut = await call(child, "fonte_render_broadcast_draft", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 4,
   });
   assert.equal(loggedOut.reason, "login_required");
   assert.equal(loggedOut.core_effect, "none");
@@ -169,7 +198,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   const loggedOutRevision = await call(child, "fonte_update_broadcast_draft", {
     workspace,
     draft_id: draftId,
-    base_revision: 2,
+    base_revision: 4,
     operation_id: "blocked-replace-html-v3",
     changes: { active_source: "html", html_body: html },
   });
@@ -181,7 +210,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   const loggedOutTest = await call(child, "fonte_request_broadcast_test", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 4,
     operation_id: "blocked-test-composition-v2",
     render_proof: renderProof,
   });
@@ -201,7 +230,7 @@ async function verifyTargeting(child) {
   const targeted = await call(child, "fonte_update_broadcast_targeting", {
     workspace,
     draft_id: draftId,
-    base_revision: 2,
+    base_revision: 3,
     operation_id: "target-everyone-except-v1",
     recipient_selection: {
       to: { kind: "everyone" },
@@ -209,7 +238,7 @@ async function verifyTargeting(child) {
     },
   });
   assert.equal(targeted.outcome, "completed");
-  assert.equal(targeted.targeting.revision, 3);
+  assert.equal(targeted.targeting.revision, 4);
   assert.deepEqual(targeted.targeting.recipient_selection, {
     to: { kind: "everyone" },
     except: [{ kind: "system", systemId }],
@@ -221,7 +250,7 @@ async function verifyLoggedOutTargeting(child) {
   const targeted = await call(child, "fonte_update_broadcast_targeting", {
     workspace,
     draft_id: draftId,
-    base_revision: 3,
+    base_revision: 4,
     operation_id: "blocked-target-v2",
     recipient_selection: { to: { kind: "everyone" }, except: [] },
   });
