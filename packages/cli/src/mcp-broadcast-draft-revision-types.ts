@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { BroadcastDraftJsonValue } from
-  "./operator-broadcast-draft-revision-client.js";
+  "./operator-broadcast-draft-snapshot.js";
 
 const outcomeSchema = z.enum([
   "completed",
@@ -88,7 +88,7 @@ const jsonValueSchema: z.ZodType<BroadcastDraftJsonValue> = z.lazy(() =>
   ]),
 );
 const nullableTextSchema = z.string().nullable();
-const draftSchema = z
+export const broadcastDraftSnapshotSchema = z
   .object({
     draft_id: z.string().uuid(),
     revision: revisionSchema,
@@ -123,7 +123,7 @@ const revisionResultSchema = z
     revision: revisionSchema,
     operation_id: operationIdSchema,
     saved_at: z.string().min(1),
-    draft: draftSchema,
+    draft: broadcastDraftSnapshotSchema,
   })
   .strict();
 

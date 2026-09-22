@@ -31,7 +31,7 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    if (authorizations > 4) {
+    if (authorizations > 6) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";
@@ -51,6 +51,16 @@ function route(url, init) {
   if (authorization !== "Bearer synthetic-stdio-broadcast-bearer") {
     return response({ error: "human_auth_invalid" }, 401);
   }
+  if (
+    init.method === "POST"
+    && path === `/v1/workspaces/${workspace}/broadcast-drafts`
+      + "?environment=production"
+  ) return response(lifecycleReceipt("applied", body));
+  if (
+    init.method === "GET"
+    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
+      + "?environment=production"
+  ) return response(lifecycleReceipt(null));
   if (
     init.method === "PATCH"
     && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
@@ -79,29 +89,54 @@ function revisionReceipt(body) {
   return {
     revision: 2,
     savedAt: "2026-09-22T14:00:00.000Z",
-    draft: {
-      broadcastDraftId: draftId,
-      sourceCampaignId: null,
-      sourceMarketingBroadcastId: null,
-      version: 2,
-      title: "Synthetic draft",
-      sender: "sender_synthetic",
-      replyTo: null,
-      audienceKind: "all_contacts",
-      audienceContactImportBatchId: null,
-      recipientExpression: null,
-      recipientSelection: null,
-      communicationPurposeId: null,
-      subscriptionName: null,
-      subject: "Synthetic subject",
-      preheader: "Synthetic preheader",
-      textBody: htmlBody,
-      activeSource: body.changes.activeSource,
-      composerBody: null,
-      htmlBody,
-      createdAt: "2026-09-22T13:00:00.000Z",
-      updatedAt: "2026-09-22T14:00:00.000Z",
-    },
+    draft: draft(htmlBody, 2, "2026-09-22T14:00:00.000Z"),
+  };
+}
+
+function lifecycleReceipt(outcome, body = null) {
+  const source = body ?? {
+    title: "Synthetic draft",
+    subject: "Synthetic subject",
+    preheader: "Synthetic preheader",
+    activeSource: "html",
+    composerBody: null,
+    htmlBody: html,
+  };
+  return bound({
+    outcome,
+    draft: draft(
+      source.htmlBody,
+      1,
+      "2026-09-22T13:00:00.000Z",
+      source,
+    ),
+  });
+}
+
+function draft(htmlBody, version, updatedAt, source = {}) {
+  return {
+    broadcastDraftId: draftId,
+    version,
+    title: source.title ?? "Synthetic draft",
+    sender: null,
+    replyTo: null,
+    audienceKind: null,
+    audienceContactImportBatchId: null,
+    recipientExpression: null,
+    recipientSelection: null,
+    communicationPurposeId: null,
+    subscriptionName: null,
+    subject: source.subject ?? "Synthetic subject",
+    preheader: source.preheader ?? "Synthetic preheader",
+    textBody: htmlBody,
+    activeSource: source.activeSource ?? "html",
+    composerBody: source.composerBody ?? null,
+    htmlBody,
+    createdAt: "2026-09-22T13:00:00.000Z",
+    updatedAt,
+    latestTestMarketingBroadcastId: null,
+    sendProgress: null,
+    sendReceipt: null,
   };
 }
 

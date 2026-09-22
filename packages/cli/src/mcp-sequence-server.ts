@@ -1,6 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/server";
 
 import { CLI_VERSION } from "./constants.js";
+import { registerMcpBroadcastDraftLifecycleTools } from
+  "./mcp-broadcast-draft-lifecycle-registration.js";
+import {
+  MCP_BROADCAST_DRAFT_CREATE_TOOL,
+  MCP_BROADCAST_DRAFT_READ_TOOL,
+  type BroadcastDraftLifecycleClientProvider,
+} from "./mcp-broadcast-draft-lifecycle-tools.js";
 import { registerMcpBroadcastDraftRevisionTool } from
   "./mcp-broadcast-draft-revision-registration.js";
 import {
@@ -24,6 +31,8 @@ import {
   type SequenceMcpClientProvider,
 } from "./mcp-sequence-tools.js";
 import { registerMcpSequenceTools } from "./mcp-sequence-registration.js";
+import { createBroadcastDraftLifecycleClient } from
+  "./operator-broadcast-draft-lifecycle-client.js";
 import { createBroadcastDraftRevisionClient } from
   "./operator-broadcast-draft-revision-client.js";
 import { createBroadcastRenderTestClient } from
@@ -33,6 +42,8 @@ import { createSequenceAuthoringClient } from "./operator-sequence-client.js";
 export const MCP_SERVER_NAME = "fonte";
 export const MCP_SEQUENCE_ALLOWLIST = { tools: MCP_SEQUENCE_TOOLS } as const;
 export const MCP_BROADCAST_TOOLS = [
+  MCP_BROADCAST_DRAFT_CREATE_TOOL,
+  MCP_BROADCAST_DRAFT_READ_TOOL,
   MCP_BROADCAST_DRAFT_REVISION_TOOL,
   MCP_BROADCAST_RENDER_TOOL,
   MCP_BROADCAST_TEST_REQUEST_TOOL,
@@ -45,6 +56,7 @@ export const MCP_FONTE_ALLOWLIST = {
 export type SequenceMcpSessionOptions = McpClientAuthOptions;
 export interface FonteMcpClientProviders {
   readonly sequence: SequenceMcpClientProvider;
+  readonly broadcastDraftLifecycle: BroadcastDraftLifecycleClientProvider;
   readonly broadcastDraftRevision: BroadcastDraftRevisionClientProvider;
   readonly broadcastRenderTest: BroadcastRenderTestClientProvider;
 }
@@ -57,6 +69,8 @@ export function createDurableFonteMcpSession(
   return {
     sequence: async () =>
       createSequenceAuthoringClient((await authenticated()).request),
+    broadcastDraftLifecycle: async () =>
+      createBroadcastDraftLifecycleClient((await authenticated()).request),
     broadcastDraftRevision: async () =>
       createBroadcastDraftRevisionClient((await authenticated()).request),
     broadcastRenderTest: async () =>
@@ -91,6 +105,10 @@ export function createFonteMcpServer(
 ): McpServer {
   const server = mcpServer(fonteInstructions);
   registerMcpSequenceTools(server, providers.sequence);
+  registerMcpBroadcastDraftLifecycleTools(
+    server,
+    providers.broadcastDraftLifecycle,
+  );
   registerMcpBroadcastDraftRevisionTool(
     server,
     providers.broadcastDraftRevision,
@@ -110,4 +128,4 @@ const sequenceInstructions =
   "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the current local Fonte customer session; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the credential store and retry; for secure_storage_unavailable, use a supported credential environment. This server cannot enroll, send, deliver, or manage recipients.";
 
 const fonteInstructions =
-  "The local fonte-mcp stdio host provides Sequence authoring plus revision-fenced Broadcast draft update, canonical render, verified-account test request, and test-result readback through Fonte Core using the current local Fonte customer session. Initialize and tools/list never log in. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the credential store and retry; for secure_storage_unavailable, use a supported credential environment. Broadcast tests are explicit external effects, use only Core's verified-account destination and inspected render identity, and never grant production Send authority. This host does not share credentials with hosted MCP or the legacy private transport.";
+  "The local fonte-mcp stdio host provides Sequence authoring plus content-first Broadcast draft create/read/update, canonical render, verified-account test request, and test-result readback through Fonte Core using the current local Fonte customer session. Initialize and tools/list never log in. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the credential store and retry; for secure_storage_unavailable, use a supported credential environment. Broadcast tests are explicit external effects, use only Core's verified-account destination and inspected render identity, and never grant production Send authority. This host does not share credentials with hosted MCP or the legacy private transport.";

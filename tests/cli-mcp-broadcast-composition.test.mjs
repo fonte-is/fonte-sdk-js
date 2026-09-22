@@ -33,6 +33,27 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
     [...MCP_FONTE_ALLOWLIST.tools],
   );
 
+  const created = await call(child, "fonte_create_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+    title: "Synthetic draft",
+    subject: "Synthetic subject",
+    preheader: "Synthetic preheader",
+    active_source: "html",
+    composer_body: null,
+    html_body: html,
+  });
+  assert.equal(created.outcome, "completed");
+  assert.equal(created.draft.draft.sender_profile_id, null);
+  assert.equal(created.draft.draft.audience_kind, null);
+
+  const exactDraft = await call(child, "fonte_read_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+  });
+  assert.equal(exactDraft.draft.draft_id, draftId);
+  assert.equal(exactDraft.draft.draft.html_body, html);
+
   const revised = await call(child, "fonte_update_broadcast_draft", {
     workspace,
     draft_id: draftId,
@@ -105,6 +126,12 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   });
   assert.equal(loggedOutTest.reason, "login_required");
   assert.equal(loggedOutTest.core_effect, "none");
+  const loggedOutRead = await call(child, "fonte_read_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+  });
+  assert.equal(loggedOutRead.reason, "login_required");
+  assert.equal(loggedOutRead.core_effect, "none");
   assert.equal(child.stderr(), "");
   assertNoSecret(child.output());
 });
