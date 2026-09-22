@@ -47,7 +47,7 @@ export async function runHostedTest(
       dependencies,
     );
     return {
-      schema_version: "fonte.cli.test_receipt.v1",
+      schema_version: "fonte.cli.test_receipt.v2",
       command: "test",
       outcome: "terminal",
       reason: "provider_submission_terminal",
@@ -62,7 +62,7 @@ export async function runHostedTest(
       provider_error_code: result.providerErrorCode,
       accepted_email_usage_quantity: result.acceptedEmailUsageQuantity,
       inbox_delivery_confirmed: false,
-      token_persisted: dependencies.credentialPersisted?.() ?? false,
+      token_persisted: dependencies.credentialPersisted?.() ?? null,
     };
   } catch (error) {
     const reason =
@@ -76,7 +76,7 @@ export async function runHostedTest(
       providerSubmission,
       sandboxDraftId,
       sandboxDraftRetained,
-      dependencies.credentialPersisted?.() ?? false,
+      dependencies.credentialPersisted?.() ?? null,
     );
   }
 }
@@ -88,10 +88,10 @@ export function testBlockedReceipt(
   providerSubmission: HostedTestReceipt["provider_submission"] = "not_requested",
   sandboxDraftId: string | null = null,
   sandboxDraftRetained: boolean | null = sandboxDraftId !== null,
-  tokenPersisted = false,
+  tokenPersisted: boolean | null = null,
 ): HostedTestReceipt {
   return {
-    schema_version: "fonte.cli.test_receipt.v1",
+    schema_version: "fonte.cli.test_receipt.v2",
     command: "test",
     outcome: "blocked",
     reason,

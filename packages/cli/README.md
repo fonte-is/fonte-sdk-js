@@ -66,17 +66,18 @@ and `.fonte/` rather than rerunning the command blindly.
 ## Persistent sign-in
 
 Run `fonte auth login` once. Later `auth exec`, broadcast, Bridge and hosted test
-commands reuse that sign-in and refresh silently. `fonte auth status` checks the
-sign-in without opening a browser; `fonte auth logout` removes this machine's
+commands reuse that sign-in and refresh silently. `fonte auth status` reports
+local custody without discovery or server validation; `fonte auth logout` removes this machine's
 stored CLI credential, including when the identity service is unreachable.
 All three commands support `--json`. Use `fonte auth login --switch-account`
-to discard the current CLI sign-in and open the browser again.
+to replace the current CLI sign-in explicitly. Set `FONTE_NONINTERACTIVE=1` to
+disable browser and native human interaction; other values are invalid.
 
-The refresh credential is stored through the native macOS Keychain or Windows
-Credential Manager. These facilities must be available and unlocked. Linux
-sign-in currently fails closed: the native dependency can silently fall back
-from Secret Service to a different store, which does not meet this contract.
-There is no plaintext file, environment-variable, or shell-command fallback.
+The refresh credential is stored through Fonte's private native adapter using
+macOS Keychain, Windows Credential Manager, or Linux Secret Service on the
+packaged targets. These facilities must be available and unlocked. Linux never
+falls back to kernel keyutils or Windows custody under WSL. There is no plaintext
+file, environment-variable, shell-command, or alternate native-store fallback.
 Local installation commands remain available without credential storage.
 
 Each new process obtains a fresh access token and verifies the authenticated
@@ -85,12 +86,14 @@ scopes, API target, redirect and user. Refresh, logout and account changes are
 serialized across processes. Interrupted or uncertain refresh requires a new
 login; no old refresh token is silently retried. Core still checks workspace,
 environment and action permission for every command. Logout removes local
-custody; it cannot revoke an already handed-off child's short-lived bearer.
+custody but remote revocation is unsupported in this release; it cannot revoke
+an already handed-off child's bearer or another installation.
 
 `fonte test` requires a passing installation check and requests one sandbox email
-to the signed-in account's verified email. It reports `token_persisted: true`
-when it used the secure persisted refresh credential; access tokens remain in
-memory and are discarded on process exit.
+to the signed-in account's verified email. Its v2 receipt reports
+`token_persisted: true` only for confirmed secure refresh custody, `false` for
+known absence, and `null` when a failed store operation leaves custody unknown.
+Access tokens remain in memory and are discarded on process exit.
 
 `fonte auth exec -- <command> [args...]` directly spawns the command without a
 shell and supplies its ephemeral access token only as `FONTE_HUMAN_BEARER` in
@@ -177,7 +180,7 @@ accepted email contributes one included sandbox usage unit. Account creation,
 arbitrary recipients, production email, and transactional application email
 remain unavailable; production capability requires the verified-domain journey.
 
-The operator commands are thin browser-authorized Core clients and do not
+The operator commands are thin stored-session Core clients and do not
 require a Next.js project. V1 implements the fixed sandbox canary, the bounded
 production draft/audience/test/preflight/authorization/control/result journey,
 Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
@@ -222,7 +225,7 @@ authority, receipt, and future MCP boundary.
 ## Sequence authoring and activation
 
 `sequence list`, `read`, `create`, `update`, `validate`, `diff`, `export`, and
-`simulate` are thin browser-authorized Core clients over the same persisted
+`simulate` are thin stored-session Core clients over the same persisted
 Sequence definition used by future Web views and runtime work. `sequence
 activate` freezes one exact persisted revision and its Core binding. None of
 the commands create local Sequence state. Definitions and activation bindings

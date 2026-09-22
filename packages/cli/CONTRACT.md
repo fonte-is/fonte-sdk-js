@@ -81,8 +81,9 @@ admitted syntax and authority. In particular, broadcast-test help distinguishes
 the fixed sandbox canary syntax from the verified-account production-test
 syntax, and Bridge help names the admitted Resend copy and provider-audience
 routes.
-There is no terminal prompt. Authenticated commands open the system browser
-only when a new human sign-in is needed for the registered public CLI client. The workspace slug
+There is no terminal prompt. Only explicit `auth login` may open the system
+browser for the registered public CLI client. Ordinary authenticated commands
+never initiate account login. The workspace slug
 is explicit, lowercase, and remains subject to server-side Fonte workspace
 membership.
 
@@ -92,17 +93,22 @@ ordinary authenticated commands reuse that identity across processes and refresh
 silently. Only refresh credentials persist; each bearer stays in memory and the
 direct child's `FONTE_HUMAN_BEARER` environment. No credential enters plaintext
 files, process arguments, shell history, logs, receipts or ordinary configuration.
-A non-reusable marker is committed before refresh; interrupted rotation requires
-login. Core remains the authority for every action. Local logout removes custody
-without claiming remote revocation of an already handed-off bearer.
+A non-reusable marker is committed before refresh; an uncertain rotation
+requires explicit login and is never replayed. `FONTE_NONINTERACTIVE=1`
+disables browser and native human interaction; other values are invalid. Core
+remains the authority for every action. Local logout removes custody and reports
+remote revocation as unsupported without claiming that issued tokens or another
+installation were revoked.
+
+Auth JSON uses `fonte.cli.auth.v2`. Local status is offline and always reports
+`server_check: "not_checked"`; only a token verified and issued during the
+current login invocation may report `server_check: "token_issued"`.
 
 `auth exec` does not run Doctor, create a sandbox draft, request an email,
 contact a provider, or call the Core API. Sign-in failure or cancellation exits `3` with one bounded recovery instruction. A missing or
 nonzero child exits `1` with the existing execution failure text. A successful
-child exits `0` without CLI-produced stdout or stderr. The callback listener
-and browser authorization retain the fixed issuer/client discovery, loopback
-host, callback path, random state, five-minute timeout, and one code-or-error
-validation used by `test`.
+child exits `0` without CLI-produced stdout or stderr. `auth exec` uses only the
+existing stored login and never starts browser authorization.
 
 ## Hosted sandbox proof
 
@@ -121,9 +127,10 @@ After a passing Doctor check, `test` creates fixed synthetic sandbox content,
 requests the existing signed-in sandbox canary, and polls its existing readback.
 The server chooses the verified account email and platform sandbox sender. The
 CLI cannot provide an arbitrary recipient or sender. The terminal receipt uses
-schema `fonte.cli.test_receipt.v1`, preserves accepted/refused/unknown, records
+schema `fonte.cli.test_receipt.v2`, preserves accepted/refused/unknown, records
 one included unit only for accepted, and always reports
-`inbox_delivery_confirmed: false`, the actual secure `token_persisted` state, and
+`inbox_delivery_confirmed: false`, the actual secure `token_persisted` state
+(`true`, `false`, or `null` when custody is unknown), and
 `production_email: "locked_pending_verified_domain"`.
 The fixed sandbox draft remains as a workspace audit artifact. Every test
 receipt reports `sandbox_draft_id` and `sandbox_draft_retained`; failures before
@@ -140,8 +147,8 @@ Exit codes:
 3  safe product blocker, detected drift, refused proof, or unknown proof
 ```
 
-For `auth exec`, exit `3` also covers browser authorization timeout,
-cancellation, denial, or unavailable callback authority.
+For `auth exec`, exit `3` covers missing, unavailable, revoked, changed, or
+uncertain stored sign-in authority. It never opens a browser.
 
 `init` and `remove` without `--yes` return a plan with exit 0 and make no
 changes. `--json` writes exactly one JSON object plus a trailing newline to

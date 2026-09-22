@@ -4,21 +4,25 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
-import { productionDependencies } from "./oauth.js";
-import {
-  prepareOpenIdAuthorization,
-  refreshOpenIdAuthorization,
-} from "./oauth-client.js";
-import { createPersistentLoginSession } from "./persistent-login.js";
-import { createOperatingSystemLoginStore } from "./secure-login-store.js";
+import { createClientAuthRuntime } from "./client-auth-runtime.js";
 import { withLoginLock } from "./login-lock.js";
 import { systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
 
 const cancellation = new AbortController();
 const cancel = () => cancellation.abort();
-const login = createPersistentLoginSession({
-  store: createOperatingSystemLoginStore(),
+const handleSignals =
+  process.argv[2] === "auth" ||
+  (process.argv[2] === "broadcast" &&
+    (process.argv[3] === "canary" ||
+      (process.argv[3] === "audience" && process.argv[4] === "append")));
+if (handleSignals) {
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+}
+const login = createClientAuthRuntime({
+  fetch: globalThis.fetch,
+  configUrl: process.env.FONTE_CLI_CONFIG_URL,
   withLock: async (operation, signal) => {
     if (!handleSignals) {
       process.once("SIGINT", cancel);
@@ -33,28 +37,13 @@ const login = createPersistentLoginSession({
       }
     }
   },
-  browser: productionDependencies,
-  prepareLogin: (hosted, switchAccount) =>
-    prepareOpenIdAuthorization(hosted, { persistent: true, switchAccount }),
-  refreshGrant: refreshOpenIdAuthorization,
 });
-const handleSignals =
-  process.argv[2] === "auth" ||
-  (process.argv[2] === "broadcast" &&
-    (process.argv[3] === "canary" ||
-      (process.argv[3] === "audience" && process.argv[4] === "append")));
-if (handleSignals) {
-  process.once("SIGINT", cancel);
-  process.once("SIGTERM", cancel);
-}
 const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
   runner: systemRunner,
   auth: {
     session: login,
-    configUrl: process.env.FONTE_CLI_CONFIG_URL,
-    fetch: globalThis.fetch,
     signal: cancellation.signal,
   },
   authExec: {
@@ -68,8 +57,7 @@ const result = await runProgram(process.argv.slice(2), {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
     authorize: login.authorize,
-    renewAuthorization: (config, signal, force = false) =>
-      force ? login.refresh(config, signal) : login.authorize(config, signal),
+    renewAuthorization: login.renewAuthorization,
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
     readProviderEvidenceCandidateFile: (path) => readFile(path, "utf8"),

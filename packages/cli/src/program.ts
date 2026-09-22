@@ -157,7 +157,7 @@ function receiptExitCode(receipt: AnyCliReceipt): 0 | 3 {
       ? 3
       : 0;
   }
-  if (receipt.schema_version !== "fonte.cli.test_receipt.v1") return 0;
+  if (receipt.schema_version !== "fonte.cli.test_receipt.v2") return 0;
   return receipt.outcome === "terminal" &&
     receipt.provider_submission === "accepted"
     ? 0

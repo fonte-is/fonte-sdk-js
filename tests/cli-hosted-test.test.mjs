@@ -224,11 +224,13 @@ test("test returns a truthful accepted-only terminal receipt", async () => {
         assert.deepEqual(received, config);
         return "header.payload.signature";
       },
+      credentialPersisted: () => false,
       sleep: async () => assert.fail("terminal result must not sleep"),
     },
   );
 
   assert.equal(receipt.outcome, "terminal");
+  assert.equal(receipt.schema_version, "fonte.cli.test_receipt.v2");
   assert.equal(receipt.provider_submission, "accepted");
   assert.equal(receipt.sandbox_draft_id, draftId);
   assert.equal(receipt.sandbox_draft_retained, true);
@@ -240,6 +242,36 @@ test("test returns a truthful accepted-only terminal receipt", async () => {
     JSON.stringify(receipt).includes("header.payload.signature"),
     false,
   );
+});
+
+test("v2 test receipts distinguish confirmed, absent, and unknown refresh custody", async () => {
+  assert.equal(
+    testBlockedReceipt(
+      "fonte",
+      "login_required",
+      "passed",
+      "not_requested",
+      null,
+      false,
+      true,
+    ).token_persisted,
+    true,
+  );
+  assert.equal(
+    testBlockedReceipt(
+      "fonte",
+      "login_required",
+      "passed",
+      "not_requested",
+      null,
+      false,
+      false,
+    ).token_persisted,
+    false,
+  );
+  const unknown = testBlockedReceipt("fonte", "secure_storage_unavailable");
+  assert.equal(unknown.schema_version, "fonte.cli.test_receipt.v2");
+  assert.equal(unknown.token_persisted, null);
 });
 
 test("test refuses a non-accepted usage charge", async () => {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderCallbackPage } from "../packages/cli/dist/loopback-callback-page.js";
+import {
+  callbackCompleteScript,
+  renderCallbackPage,
+} from "../packages/cli/dist/loopback-callback-page.js";
 
 test("OAuth status page renders pending without claiming completion", () => {
   const page = renderCallbackPage("pending");
@@ -8,13 +11,13 @@ test("OAuth status page renders pending without claiming completion", () => {
   assert.match(page, /Completing authorization/);
   assert.match(page, /Your terminal is validating the grant\./);
   assert.match(page, /http-equiv="refresh" content="1"/);
-    assert.doesNotMatch(page, /Authorization complete|You’re almost there/);
-    assert.doesNotMatch(page, /<script|window\.close/);
-    assert.match(page, /viewBox="0 0 38 38"/);
-    assert.match(page, /M34\.7188 15\.7682/);
-    assert.doesNotMatch(page, /You’re ready to continue|You can close this tab/);
-    assert.match(page, /data-outcome="pending"/);
-    assert.match(page, /role="status"/);
+  assert.doesNotMatch(page, /Authorization complete|You’re almost there/);
+  assert.doesNotMatch(page, /<script|window\.close/);
+  assert.match(page, /viewBox="0 0 38 38"/);
+  assert.match(page, /M34\.7188 15\.7682/);
+  assert.doesNotMatch(page, /You’re ready to continue|You can close this tab/);
+  assert.match(page, /data-outcome="pending"/);
+  assert.match(page, /role="status"/);
   assert.match(page, /<main aria-labelledby="callback-title">/);
 });
 
@@ -50,7 +53,7 @@ test("OAuth status page keeps failure and expiry generic", () => {
   assert.match(expired, /data-outcome="expired"/);
 });
 
-test("OAuth page assets are self-contained without scripts or external requests", () => {
+test("OAuth page assets are self-contained with only the reviewed completion script", () => {
   const page = renderCallbackPage("complete");
   const font = page.match(/data:font\/woff2;base64,([A-Za-z0-9+/=]+)/);
   assert.ok(font, "the page embeds its font instead of depending on a CDN");
@@ -58,8 +61,11 @@ test("OAuth page assets are self-contained without scripts or external requests"
     Buffer.from(font[1], "base64").subarray(0, 4).toString(),
     "wOF2",
   );
+  const reviewedScript = `<script>${callbackCompleteScript}</script>`;
+  assert.equal(page.match(/<script>[\s\S]*?<\/script>/g)?.length, 1);
+  assert.equal(page.includes(reviewedScript), true);
   assert.doesNotMatch(
-    page,
+    page.replace(reviewedScript, ""),
     /<script|<form|(?:src|href)="https?:|url\(["']?https?:|@import/i,
   );
 });

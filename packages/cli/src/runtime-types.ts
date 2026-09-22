@@ -46,7 +46,7 @@ export interface AuthorizedConsumerDependencies {
 }
 
 export interface HostedTestDependencies {
-  credentialPersisted?(): boolean;
+  credentialPersisted?(): boolean | null;
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
   authorize(config: HostedConfig): Promise<string>;
   sleep(milliseconds: number): Promise<void>;

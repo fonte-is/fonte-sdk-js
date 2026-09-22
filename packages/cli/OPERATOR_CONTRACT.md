@@ -20,7 +20,7 @@ authoritative read command resolves it.
 
 ## Sequence authoring and activation
 
-Sequence commands use the same browser OAuth and Core workspace-access path,
+Sequence commands use the same stored customer session and Core workspace-access path,
 but they support either `sandbox` or `production` because they are definition
 authoring operations, not provider effects:
 
