@@ -309,7 +309,7 @@ test("real stdio initialize and tools/list need no login; tool calls reread inje
   t.after(() => actual.close());
   await initialize(actual);
   const listed = await actual.request("tools/list", {});
-  assert.equal(listed.result.tools.length, 15);
+  assert.equal(listed.result.tools.length, 16);
   assert.equal(actual.stderr(), "");
   assertNoSecret(actual.output());
 

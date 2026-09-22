@@ -11,6 +11,7 @@ const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
 const operationId = "synthetic-test-composition-v2";
+const systemId = "00000000-0000-4000-8000-000000000153";
 const digest = `sha256:${"c".repeat(64)}`;
 const html = "<!doctype html><p>Hello {{{contact.email}}}</p>"
   + '<a href="{{{unsubscribe_url}}}">Leave</a>';
@@ -95,6 +96,11 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(read.test_result.delivery_outcome, "delivered");
   assert.equal(read.test_result.inbox_confirmation, "unavailable");
 
+  await verifyTargeting(child);
+  await verifyLoggedOutSession(child, rendered.render.render_proof);
+});
+
+async function verifyLoggedOutSession(child, renderProof) {
   const loggedOut = await call(child, "fonte_render_broadcast_draft", {
     workspace,
     draft_id: draftId,
@@ -117,12 +123,14 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(loggedOutRevision.reason, "login_required");
   assert.equal(loggedOutRevision.core_effect, "none");
 
+  await verifyLoggedOutTargeting(child);
+
   const loggedOutTest = await call(child, "fonte_request_broadcast_test", {
     workspace,
     draft_id: draftId,
     revision: 2,
     operation_id: "blocked-test-composition-v2",
-    render_proof: rendered.render.render_proof,
+    render_proof: renderProof,
   });
   assert.equal(loggedOutTest.reason, "login_required");
   assert.equal(loggedOutTest.core_effect, "none");
@@ -134,7 +142,39 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(loggedOutRead.core_effect, "none");
   assert.equal(child.stderr(), "");
   assertNoSecret(child.output());
-});
+}
+
+async function verifyTargeting(child) {
+  const targeted = await call(child, "fonte_update_broadcast_targeting", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 2,
+    operation_id: "target-everyone-except-v1",
+    recipient_selection: {
+      to: { kind: "everyone" },
+      except: [{ kind: "system", systemId }],
+    },
+  });
+  assert.equal(targeted.outcome, "completed");
+  assert.equal(targeted.targeting.revision, 3);
+  assert.deepEqual(targeted.targeting.recipient_selection, {
+    to: { kind: "everyone" },
+    except: [{ kind: "system", systemId }],
+  });
+  assert.equal(targeted.targeting.draft.html_body, html);
+}
+
+async function verifyLoggedOutTargeting(child) {
+  const targeted = await call(child, "fonte_update_broadcast_targeting", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 3,
+    operation_id: "blocked-target-v2",
+    recipient_selection: { to: { kind: "everyone" }, except: [] },
+  });
+  assert.equal(targeted.reason, "login_required");
+  assert.equal(targeted.core_effect, "none");
+}
 
 async function call(child, name, args) {
   const response = await child.request("tools/call", {

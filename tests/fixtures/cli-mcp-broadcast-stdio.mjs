@@ -31,7 +31,7 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    if (authorizations > 6) {
+    if (authorizations > 7) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";
@@ -65,7 +65,11 @@ function route(url, init) {
     init.method === "PATCH"
     && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
       + "?environment=production"
-  ) return response(revisionReceipt(body));
+  ) {
+    return response(Object.hasOwn(body.changes, "recipientSelection")
+      ? targetingReceipt(body)
+      : revisionReceipt(body));
+  }
   if (
     init.method === "POST"
     && path === `/v1/workspaces/${workspace}/marketing-broadcasts/${draftId}`
@@ -93,6 +97,21 @@ function revisionReceipt(body) {
   };
 }
 
+function targetingReceipt(body) {
+  const recipientSelection = body.changes.recipientSelection;
+  return {
+    revision: 3,
+    savedAt: "2026-09-22T15:00:00.000Z",
+    draft: draft(
+      html,
+      3,
+      "2026-09-22T15:00:00.000Z",
+      {},
+      recipientSelection,
+    ),
+  };
+}
+
 function lifecycleReceipt(outcome, body = null) {
   const source = body ?? {
     title: "Synthetic draft",
@@ -113,17 +132,26 @@ function lifecycleReceipt(outcome, body = null) {
   });
 }
 
-function draft(htmlBody, version, updatedAt, source = {}) {
+function draft(
+  htmlBody,
+  version,
+  updatedAt,
+  source = {},
+  recipientSelection = null,
+) {
   return {
     broadcastDraftId: draftId,
     version,
     title: source.title ?? "Synthetic draft",
     sender: null,
     replyTo: null,
-    audienceKind: null,
+    audienceKind: recipientSelection === null ? null : "recipient_expression",
     audienceContactImportBatchId: null,
-    recipientExpression: null,
-    recipientSelection: null,
+    recipientExpression: recipientSelection === null ? null : {
+      include: [{ kind: "everyone" }],
+      exclude: recipientSelection.except,
+    },
+    recipientSelection,
     communicationPurposeId: null,
     subscriptionName: null,
     subject: source.subject ?? "Synthetic subject",
