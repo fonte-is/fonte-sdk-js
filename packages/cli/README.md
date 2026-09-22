@@ -19,12 +19,13 @@ npx @fonte-is/cli sequence export --workspace my-workspace --environment sandbox
 npx @fonte-is/cli sequence simulate --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --entered-at-ms 0 --assumed-accepted-at-ms '{"welcome":0}' --json
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment sandbox --draft-id <uuid> --revision 1 --idempotency-key <key>
 npx @fonte-is/cli broadcast test status --workspace my-workspace --environment sandbox --test-id <uuid> --watch
-npx @fonte-is/cli broadcast preflight --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --postal-address "1 Synthetic Way"
 npx @fonte-is/cli broadcast audience options --workspace my-workspace --environment production
 npx @fonte-is/cli broadcast draft create --workspace my-workspace --environment production --idempotency-key <uuid> --title "Product update" --subject "August update" --body "<p>Hello</p>" --sender-profile-id <id> --communication-purpose-id <uuid> --all-contacts
 npx @fonte-is/cli broadcast audience preview --workspace my-workspace --environment production --draft-id <uuid>
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
-npx @fonte-is/cli broadcast authorize --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
+npx @fonte-is/cli broadcast send now --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --request-id <uuid>
+npx @fonte-is/cli broadcast send schedule --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --not-before 2026-10-01T09:00:00.000Z --request-id <uuid>
+npx @fonte-is/cli broadcast send status --workspace my-workspace --environment production --draft-id <uuid> --watch
 npx @fonte-is/cli broadcast status --workspace my-workspace --environment production --broadcast-id <uuid> --watch
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
 npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
@@ -111,13 +112,12 @@ await bootstrapLocalCore({ bearer });
 The spawned consumer owns its subsequent API use. This command itself makes
 no Core API, provider, email, or production request.
 
-## Sequence authoring and activation MCP
+## Sequence and Broadcast MCP
 
 `fonte-mcp` is a stdio MCP server for the same Core-owned Sequence authoring
-and activation surface as the `fonte sequence` commands. It has exactly nine
-tools: list, read, create, update, validate, diff, export, simulate, and
-activate. It keeps the browser OAuth bearer only in memory and uses no local
-Sequence state.
+surface and the bounded Broadcast draft, targeting, render, test, and v3 Send
+surfaces as the corresponding `fonte` commands. It keeps the browser OAuth
+bearer only in memory and uses no local workflow state.
 
 Activation freezes one exact Core draft revision and its sender/scope/render
 references. It cannot enroll a subscriber, select a recipient, send email,
@@ -127,6 +127,14 @@ is ambiguous, the server returns `outcome: "ambiguous"` with
 `core_effect: "unknown"`; it never resubmits the mutation. A draft mutation
 can be read through `fonte_read_sequence`; activation intentionally receives no
 invented readback because a draft read cannot prove an activated version.
+
+For Broadcast, `fonte_send_broadcast_now` and `fonte_schedule_broadcast` are
+the one explicit human-approval handoff. They submit the saved draft version
+directly to Core without a machine-side review, audience preparation, exact
+count, quote, payment, or provider call. `fonte_read_broadcast_send_operation`
+is GET-only observation. Schedule replacement, cancellation, and the narrowly
+structured spend-limit action bind Core's exact current generations; they do
+not invent authority or reconstruct billing state.
 
 See [MCP_CONTRACT.md](./MCP_CONTRACT.md) for the fixed tool allowlist and
 authentication boundary.
@@ -181,8 +189,11 @@ arbitrary recipients, production email, and transactional application email
 remain unavailable; production capability requires the verified-domain journey.
 
 The operator commands are thin stored-session Core clients and do not
-require a Next.js project. V1 implements the fixed sandbox canary, the bounded
-production draft/audience/test/preflight/authorization/control/result journey,
+require a Next.js project. The current Broadcast v3 path accepts one saved
+draft cheaply and observes the durable operation without recipient-scale work.
+The earlier V1 surface remains for compatible existing operations, including
+the fixed sandbox canary and the bounded production
+draft/audience/test/preflight/authorization/control/result journey,
 Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
 collection discovery, reconciliation, and explicit fingerprint-bound audience
 freeze. Contact-import status returns Core's exact completed batch UUID and
@@ -199,6 +210,36 @@ Preflight observes one exact persisted draft revision. Authorization reuses
 Core's existing authority and immutable recipient freeze. Lost mutation
 responses remain unknown until explicit readback. Unexposed declarations return
 `unsupported_authority` before OAuth or network access.
+
+## Broadcast v3 Send
+
+`broadcast send now` and `broadcast send schedule` are the machine-client
+entry points for an explicit customer Send or Schedule direction. Each sends
+one digest-free instruction containing only Core's v3 schema, stable request
+ID, fixed execution rail, expected saved-draft version, and timing. A success
+is a durable `Queued` or `Scheduled` operation; the CLI does not prepare an
+audience, calculate a recipient count or quote, reserve funds, call a payment
+provider, or dispatch email before returning.
+
+`broadcast send status` reads that operation with GET only. `--watch` repeats
+only the bounded read and never advances work. Missing population, delivery,
+or other evidence remains explicitly unavailable. Ordinary output presents
+the customer lifecycle as Queued, Scheduled, Preparing, Sending, Complete,
+Cancelled, or Action required; internal authorization, packaging, and pending
+activation stages remain Preparing.
+
+An unclaimed schedule can be changed with `broadcast send replace-schedule`
+or stopped with `broadcast send cancel`, both using the exact instruction
+generation returned by Core. If status reports the structured
+`increase_account_spend_limit` action, `broadcast send increase-limit` first
+re-reads and verifies that same operation and both generations, applies only
+Core's supplied recurring-account minimum through the existing sanctioned
+billing route, and submits the approval amendment. It requires a separate
+explicit customer direction and performs no client-side cost calculation.
+
+The older `broadcast preflight`, `broadcast authorize`, `broadcast status`,
+and broadcast-scoped control commands remain available only for existing
+v1/v2 operations. They are not prerequisites for Broadcast v3 acceptance.
 
 The candidate evidence journey is JSON-only and the rotation journey is
 aggregate-only. Rotation follows one closed sequence: `start`, `read`, then

@@ -1,4 +1,5 @@
 import { renderProductionOperatorHuman } from "./operator-production-render.js";
+import { renderBroadcastSendInstructionHuman } from "./operator-broadcast-send-instruction-render.js";
 import { renderWorkspaceMarketingSettings } from "./operator-marketing-settings-render.js";
 import { renderBlockedOperator } from "./operator-blocked-render.js";
 import { renderProviderRotation } from "./operator-provider-rotation-render.js";
@@ -21,6 +22,8 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   if (receipt.outcome === "blocked" && receipt.result === null) {
     return renderBlockedOperator(receipt);
   }
+  const send = renderBroadcastSendInstructionHuman(receipt);
+  if (send !== null) return send;
   const production = renderProductionOperatorHuman(receipt);
   if (production !== null) return production;
   const marketingSettings = renderWorkspaceMarketingSettings(receipt);

@@ -1,7 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 
-import { HostedTestBlockedError } from
-  "../../packages/cli/dist/hosted-errors.js";
+import { HostedTestBlockedError } from "../../packages/cli/dist/hosted-errors.js";
 import {
   createDurableFonteMcpSession,
   createFonteMcpServer,
@@ -11,9 +10,12 @@ const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
+const sendRequestId = "00000000-0000-4000-8000-000000000154";
+const sendOperationId = "00000000-0000-4000-8000-000000000155";
 const digest = `sha256:${"c".repeat(64)}`;
-const html = "<!doctype html><p>Hello {{{contact.email}}}</p>"
-  + '<a href="{{{unsubscribe_url}}}">Leave</a>';
+const html =
+  "<!doctype html><p>Hello {{{contact.email}}}</p>" +
+  '<a href="{{{unsubscribe_url}}}">Leave</a>';
 const hosted = {
   schema: "fonte.cli.hosted_config.v1",
   authorizationServer: "https://identity.example.test/auth/v1",
@@ -31,7 +33,7 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    if (authorizations > 7) {
+    if (authorizations > 8) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";
@@ -52,28 +54,58 @@ function route(url, init) {
     return response({ error: "human_auth_invalid" }, 401);
   }
   if (
-    init.method === "POST"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts`
-      + "?environment=production"
-  ) return response(lifecycleReceipt("applied", body));
-  if (
-    init.method === "GET"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
-      + "?environment=production"
-  ) return response(lifecycleReceipt(null));
-  if (
-    init.method === "PATCH"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
-      + "?environment=production"
+    init.method === "POST" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        "/send-intent?environment=production"
   ) {
-    return response(Object.hasOwn(body.changes, "recipientSelection")
-      ? targetingReceipt(body)
-      : revisionReceipt(body));
+    if (
+      new Headers(init.headers).get("idempotency-key") !== sendRequestId ||
+      JSON.stringify(body) !==
+        JSON.stringify({
+          schema: "broadcast_send_intent.v3",
+          requestId: sendRequestId,
+          executionRail: "canonical_execution_cell_v1",
+          expectedDraftVersion: 3,
+          timing: { mode: "now" },
+        })
+    )
+      return response({ error: "broadcast_send_intent_invalid" }, 400);
+    return response(
+      { status: "accepted", operation: sendOperation(), replayed: false },
+      202,
+    );
   }
   if (
-    init.method === "POST"
-    && path === `/v1/workspaces/${workspace}/marketing-broadcasts/${draftId}`
-      + "/send-approvals?environment=production"
+    init.method === "POST" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts` + "?environment=production"
+  )
+    return response(lifecycleReceipt("applied", body));
+  if (
+    init.method === "GET" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        "?environment=production"
+  )
+    return response(lifecycleReceipt(null));
+  if (
+    init.method === "PATCH" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        "?environment=production"
+  ) {
+    return response(
+      Object.hasOwn(body.changes, "recipientSelection")
+        ? targetingReceipt(body)
+        : revisionReceipt(body),
+    );
+  }
+  if (
+    init.method === "POST" &&
+    path ===
+      `/v1/workspaces/${workspace}/marketing-broadcasts/${draftId}` +
+        "/send-approvals?environment=production"
   ) {
     if (body.operation === "render_preview") return response(renderReceipt());
     if (body.operation === "send_test_to_verified_account") {
@@ -81,11 +113,51 @@ function route(url, init) {
     }
   }
   if (
-    init.method === "GET"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
-      + `/test-deliveries/${testId}?environment=production`
-  ) return response(testReadReceipt());
+    init.method === "GET" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        `/test-deliveries/${testId}?environment=production`
+  )
+    return response(testReadReceipt());
   return response({ error: "synthetic_route_missing" }, 404);
+}
+
+function sendOperation() {
+  return {
+    schema: "broadcast_send_operation.v2",
+    operationId: sendOperationId,
+    scope: {
+      workspaceId: "workspace-internal",
+      environment: "production",
+      draftId,
+    },
+    instructionGeneration: 1,
+    approvalGeneration: 1,
+    acceptedAt: "2026-09-22T16:00:00.000Z",
+    timing: { mode: "now" },
+    notBefore: "2026-09-22T16:00:00.000Z",
+    phase: "queued",
+    reason: null,
+    retryable: true,
+    nextAttemptAt: "2026-09-22T16:00:01.000Z",
+    total: null,
+    timestamps: {
+      preparationStartedAt: null,
+      snapshotAt: null,
+      authorizationCommittedAt: null,
+      firstSubmissionAt: null,
+      terminalAt: null,
+    },
+    delivery: {
+      status: "unavailable",
+      reason: "provider_submission_not_started",
+      observedAt: null,
+    },
+    requiredAction: null,
+    allowedActions: ["cancel"],
+    executionAuthorized: false,
+    replayed: false,
+  };
 }
 
 function revisionReceipt(body) {
@@ -102,13 +174,7 @@ function targetingReceipt(body) {
   return {
     revision: 3,
     savedAt: "2026-09-22T15:00:00.000Z",
-    draft: draft(
-      html,
-      3,
-      "2026-09-22T15:00:00.000Z",
-      {},
-      recipientSelection,
-    ),
+    draft: draft(html, 3, "2026-09-22T15:00:00.000Z", {}, recipientSelection),
   };
 }
 
@@ -123,12 +189,7 @@ function lifecycleReceipt(outcome, body = null) {
   };
   return bound({
     outcome,
-    draft: draft(
-      source.htmlBody,
-      1,
-      "2026-09-22T13:00:00.000Z",
-      source,
-    ),
+    draft: draft(source.htmlBody, 1, "2026-09-22T13:00:00.000Z", source),
   });
 }
 
@@ -147,10 +208,13 @@ function draft(
     replyTo: null,
     audienceKind: recipientSelection === null ? null : "recipient_expression",
     audienceContactImportBatchId: null,
-    recipientExpression: recipientSelection === null ? null : {
-      include: [{ kind: "everyone" }],
-      exclude: recipientSelection.except,
-    },
+    recipientExpression:
+      recipientSelection === null
+        ? null
+        : {
+            include: [{ kind: "everyone" }],
+            exclude: recipientSelection.except,
+          },
     recipientSelection,
     communicationPurposeId: null,
     subscriptionName: null,
@@ -265,7 +329,11 @@ function proof() {
 }
 
 function bound(value) {
-  return { tenantId: "workspace-synthetic", environment: "production", ...value };
+  return {
+    tenantId: "workspace-synthetic",
+    environment: "production",
+    ...value,
+  };
 }
 
 function response(value, status = 200) {

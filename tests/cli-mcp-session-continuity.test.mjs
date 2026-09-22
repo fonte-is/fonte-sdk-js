@@ -5,7 +5,10 @@ import test from "node:test";
 
 import { createClientAuthRuntime } from "../packages/cli/dist/client-auth-runtime.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
-import { createDurableSequenceMcpSession } from "../packages/cli/dist/mcp-sequence-server.js";
+import {
+  createDurableSequenceMcpSession,
+  MCP_FONTE_ALLOWLIST,
+} from "../packages/cli/dist/mcp-sequence-server.js";
 import { createSequenceToolHandlers } from "../packages/cli/dist/mcp-sequence-tools.js";
 import {
   definition,
@@ -103,7 +106,11 @@ test("each MCP tool boundary rereads custody and refuses a surviving stale sessi
         return json(hostedConfig());
       }
       coreRequests += 1;
-      return json({ tenantId: "tenant_demo", environment: "sandbox", rows: [] });
+      return json({
+        tenantId: "tenant_demo",
+        environment: "sandbox",
+        rows: [],
+      });
     },
     authorize: async () => {
       authorizations += 1;
@@ -154,8 +161,7 @@ test("only exact pre-effect human-auth rejection refreshes and retries unchanged
         authorization: init.headers.authorization,
         idempotencyKey: init.headers["idempotency-key"],
       });
-      if (coreAttempt === 1)
-        return json({ error: "human_auth_invalid" }, 401);
+      if (coreAttempt === 1) return json({ error: "human_auth_invalid" }, 401);
       return sequenceRoute({
         method: init.method,
         path: `${url.pathname}${url.search}`,
@@ -309,7 +315,10 @@ test("real stdio initialize and tools/list need no login; tool calls reread inje
   t.after(() => actual.close());
   await initialize(actual);
   const listed = await actual.request("tools/list", {});
-  assert.equal(listed.result.tools.length, 16);
+  assert.deepEqual(
+    listed.result.tools.map(({ name }) => name),
+    MCP_FONTE_ALLOWLIST.tools,
+  );
   assert.equal(actual.stderr(), "");
   assertNoSecret(actual.output());
 
@@ -385,7 +394,9 @@ async function startMcp(script) {
   return {
     request,
     notify(method, params) {
-      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`);
+      child.stdin.write(
+        `${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`,
+      );
     },
     output: () => stdout,
     stderr: () => stderr,

@@ -1,5 +1,6 @@
 import { CliUsageError } from "./errors.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
+import { parseBroadcastSendInstructionArguments } from "./operator-broadcast-send-instruction-arguments.js";
 import { parseWorkspaceMarketingSettingsArguments } from "./operator-marketing-settings-arguments.js";
 import { parseProviderAudienceArguments } from "./operator-provider-audience-arguments.js";
 import { parseProviderConnectionArguments } from "./operator-provider-connection-arguments.js";
@@ -9,22 +10,11 @@ import { parseProductionOperatorArguments } from "./operator-production-argument
 import { parseSequenceOperatorArguments } from "./operator-sequence-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
-const missingBroadcast = new Set([
-  "draft",
-  "audience",
-  "preflight",
-  "authorize",
-  "prepare",
-  "send",
-  "reconcile",
-  "status",
-  "watch",
-  "pause",
-  "resume",
-  "cancel",
-  "close",
-  "duplicate",
-]);
+const missingBroadcast = new Set(
+  "draft audience preflight authorize prepare send reconcile status watch pause resume cancel close duplicate".split(
+    " ",
+  ),
+);
 const bridgeDeclarations = new Set([
   "observe",
   "status",
@@ -45,6 +35,8 @@ export function parseOperatorArguments(
   if (providerEvidence) return providerEvidence;
   const providerRotation = parseProviderRotationArguments(argv);
   if (providerRotation) return providerRotation;
+  const broadcastSend = parseBroadcastSendInstructionArguments(argv);
+  if (broadcastSend) return broadcastSend;
   const production = parseProductionOperatorArguments(argv);
   if (production) return production;
   const providerConnection = parseProviderConnectionArguments(argv);

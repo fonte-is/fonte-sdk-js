@@ -6,6 +6,11 @@ import {
   CoreOperatorError,
 } from "./operator-client.js";
 import { withAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
+import {
+  broadcastSendInstructionReceiptDescriptor,
+  executeBroadcastSendInstructionCommand,
+  isBroadcastSendInstructionCommand,
+} from "./operator-broadcast-send-instruction-run.js";
 import { withAmbiguousSequenceRecovery } from "./operator-sequence-recovery.js";
 import {
   executeProviderAudienceCommand,
@@ -149,6 +154,9 @@ async function execute(
     client,
   );
   if (marketingSettings) return marketingSettings;
+  if (isBroadcastSendInstructionCommand(command)) {
+    return executeBroadcastSendInstructionCommand(command, client, sleep);
+  }
   if (isSequenceCommand(command))
     return executeSequenceCommand(command, client);
   if (isProviderConnectionCommand(command)) {
@@ -238,6 +246,17 @@ function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
 ): OperatorReceipt {
+  if (result.kind === "broadcast_send_operation") {
+    const send = broadcastSendInstructionReceiptDescriptor(command, result);
+    if (!send) throw new TypeError("operator_receipt_unmappable");
+    return currentReceipt(
+      command,
+      result,
+      send.outcome,
+      send.reason,
+      send.coreEffect,
+    );
+  }
   const providerEvidence = providerEvidenceReceiptDescriptor(command, result);
   if (providerEvidence) {
     return currentReceipt(
@@ -401,36 +420,42 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind === "sequence_activate"
-      ? "fonte.core.sequence_activation.v1"
-      : command.kind.startsWith("sequence_")
-        ? "fonte.core.sequence_authoring.v1"
-      : command.kind === "workspace_marketing_settings_read"
-        ? "fonte.core.workspace_marketing_settings.v1"
-        : command.kind === "broadcast_preflight"
-          ? "fonte.core.broadcast_preflight.v1"
-          : command.kind === "broadcast_audience_append"
-            ? "fonte.core.production_broadcast_audience_append.v1"
-            : command.kind.startsWith("broadcast_") &&
-                command.kind !== "broadcast_test_send" &&
-                command.kind !== "broadcast_test_status"
-              ? "fonte.core.production_broadcast.v1"
-              : command.kind === "bridge_contact_import_status"
-                ? "fonte.core.contact_import.v1"
-                : command.kind.startsWith("bridge_provider_placement_")
-                  ? "fonte.core.provider_placement_application.v1"
-                  : command.kind.startsWith("bridge_provider_rotation_")
-                    ? "fonte.core.provider_rotation_partition.v1"
-                    : command.kind.startsWith("bridge_resend_")
-                      ? "fonte.core.resend_bridge.v1"
-                      : command.kind.startsWith("bridge_connection_")
-                        ? "fonte.core.provider_connections.v1"
-                        : command.kind.startsWith("bridge_provider_")
-                          ? "fonte.core.provider_audience.v1"
-                          : command.kind.startsWith(
-                                "provider_evidence_candidate_",
-                              )
-                            ? "fonte.core.provider_evidence_candidate.v1"
-                            : "fonte.core.sandbox_canary.v1",
+    contract_id:
+      command.kind.startsWith("broadcast_send_") ||
+      command.kind === "broadcast_schedule" ||
+      command.kind === "broadcast_schedule_replace" ||
+      command.kind === "broadcast_spend_limit_increase"
+        ? "fonte.core.broadcast_send_instruction.v3"
+        : command.kind === "sequence_activate"
+          ? "fonte.core.sequence_activation.v1"
+          : command.kind.startsWith("sequence_")
+            ? "fonte.core.sequence_authoring.v1"
+            : command.kind === "workspace_marketing_settings_read"
+              ? "fonte.core.workspace_marketing_settings.v1"
+              : command.kind === "broadcast_preflight"
+                ? "fonte.core.broadcast_preflight.v1"
+                : command.kind === "broadcast_audience_append"
+                  ? "fonte.core.production_broadcast_audience_append.v1"
+                  : command.kind.startsWith("broadcast_") &&
+                      command.kind !== "broadcast_test_send" &&
+                      command.kind !== "broadcast_test_status"
+                    ? "fonte.core.production_broadcast.v1"
+                    : command.kind === "bridge_contact_import_status"
+                      ? "fonte.core.contact_import.v1"
+                      : command.kind.startsWith("bridge_provider_placement_")
+                        ? "fonte.core.provider_placement_application.v1"
+                        : command.kind.startsWith("bridge_provider_rotation_")
+                          ? "fonte.core.provider_rotation_partition.v1"
+                          : command.kind.startsWith("bridge_resend_")
+                            ? "fonte.core.resend_bridge.v1"
+                            : command.kind.startsWith("bridge_connection_")
+                              ? "fonte.core.provider_connections.v1"
+                              : command.kind.startsWith("bridge_provider_")
+                                ? "fonte.core.provider_audience.v1"
+                                : command.kind.startsWith(
+                                      "provider_evidence_candidate_",
+                                    )
+                                  ? "fonte.core.provider_evidence_candidate.v1"
+                                  : "fonte.core.sandbox_canary.v1",
   };
 }

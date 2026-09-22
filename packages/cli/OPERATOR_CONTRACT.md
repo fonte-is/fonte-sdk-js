@@ -83,6 +83,67 @@ not perform any of those runtime effects.
 
 ## Production journey
 
+### Broadcast v3 Fast Path
+
+For a new v3 Send, the explicit customer Send or Schedule direction is the
+single human-approval handoff:
+
+```text
+fonte broadcast send now --workspace <slug> --environment production \
+  --draft-id <uuid> --expected-version <n> --request-id <uuid>
+
+fonte broadcast send schedule --workspace <slug> --environment production \
+  --draft-id <uuid> --expected-version <n> \
+  --not-before <canonical-iso-instant> --request-id <uuid>
+
+fonte broadcast send status --workspace <slug> --environment production \
+  --draft-id <uuid> [--watch]
+
+fonte broadcast send replace-schedule --workspace <slug> \
+  --environment production --draft-id <uuid> \
+  --expected-instruction-generation <n> --expected-version <n> \
+  --not-before <canonical-iso-instant> --request-id <uuid>
+
+fonte broadcast send cancel --workspace <slug> --environment production \
+  --draft-id <uuid> --expected-instruction-generation <n> \
+  --request-id <uuid>
+
+fonte broadcast send increase-limit --workspace <slug> \
+  --environment production --draft-id <uuid> \
+  --expected-instruction-generation <n> \
+  --expected-approval-generation <n> --request-id <uuid>
+```
+
+Send and Schedule submit exactly one digest-free v3 instruction for the saved
+draft version and return the durable Queued or Scheduled operation. The client
+does not review, prepare, resolve, count, quote, reserve, pay, authorize, or
+dispatch before acceptance. The request ID is both the body replay identity
+and the HTTP idempotency key. A lost mutation response keeps
+`core_effect: unknown`; the same request may be retried with the exact same
+request ID and material, while the bounded operation GET provides independent
+readback by draft identity.
+
+Status and status watch are GET-only and cannot advance the operation. Missing
+evidence remains unavailable, never zero or complete. The human lifecycle is
+Queued, Scheduled, Preparing, Sending, Complete, Cancelled, or Action required;
+the CLI folds internal authorization, packaging, and pending activation into
+Preparing unless diagnostic detail was explicitly requested.
+
+Schedule replacement and cancellation are generation-fenced against Core's
+current instruction. The spend-limit command is allowed only for the exact
+structured `increase_account_spend_limit` action returned by the same
+operation. It re-reads that action, verifies instruction and approval
+generations, submits only Core's `minimumMaximumMinor` to the existing account
+spending-cap mutation, then amends approval on the same operation. It derives
+no cost, reconstructs no balance, reserves nothing, and never calls a payment
+provider directly.
+
+The preflight, authorize, broadcast-ID status, and broadcast-ID control
+commands below remain as the legacy v1/v2 compatibility surface. They are not
+part of v3 acceptance and must not be inserted before a v3 Send or Schedule.
+
+### Legacy v1/v2 compatibility
+
 ```text
 fonte broadcast marketing-settings read --workspace <slug> \
   --environment <sandbox|production>
@@ -404,6 +465,6 @@ before OAuth or network access. There is no generic HTTP command, provider
 credential input, browser UI fallback, generic segment language, local
 eligibility engine, automatic retry after an ambiguous mutation, or generic
 MCP layer.
-The only MCP exception is the fixed Sequence-definition authoring and
-activation surface in `MCP_CONTRACT.md`; it has no broadcast, Bridge,
-recipient, enrollment, send, delivery, or runtime authority.
+The fixed Sequence and Broadcast MCP allowlist is defined in
+`MCP_CONTRACT.md`; it has no Bridge, recipient preparation, enrollment,
+provider dispatch, delivery mutation, or generic runtime authority.

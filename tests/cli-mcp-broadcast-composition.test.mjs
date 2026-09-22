@@ -3,18 +3,19 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import test from "node:test";
 
-import {
-  MCP_FONTE_ALLOWLIST,
-} from "../packages/cli/dist/mcp-sequence-server.js";
+import { MCP_FONTE_ALLOWLIST } from "../packages/cli/dist/mcp-sequence-server.js";
 
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
 const operationId = "synthetic-test-composition-v2";
 const systemId = "00000000-0000-4000-8000-000000000153";
+const sendRequestId = "00000000-0000-4000-8000-000000000154";
+const sendOperationId = "00000000-0000-4000-8000-000000000155";
 const digest = `sha256:${"c".repeat(64)}`;
-const html = "<!doctype html><p>Hello {{{contact.email}}}</p>"
-  + '<a href="{{{unsubscribe_url}}}">Leave</a>';
+const html =
+  "<!doctype html><p>Hello {{{contact.email}}}</p>" +
+  '<a href="{{{unsubscribe_url}}}">Leave</a>';
 
 test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async (t) => {
   const child = await startMcp();
@@ -97,6 +98,16 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(read.test_result.inbox_confirmation, "unavailable");
 
   await verifyTargeting(child);
+  const sent = await call(child, "fonte_send_broadcast_now", {
+    workspace,
+    draft_id: draftId,
+    request_id: sendRequestId,
+    expected_draft_version: 3,
+  });
+  assert.equal(sent.outcome, "completed");
+  assert.equal(sent.operation.operation.operation_id, sendOperationId);
+  assert.equal(sent.operation.operation.phase, "queued");
+  assert.equal(sent.operation.operation.total, null);
   await verifyLoggedOutSession(child, rendered.render.render_proof);
 });
 
@@ -109,17 +120,13 @@ async function verifyLoggedOutSession(child, renderProof) {
   assert.equal(loggedOut.reason, "login_required");
   assert.equal(loggedOut.core_effect, "none");
 
-  const loggedOutRevision = await call(
-    child,
-    "fonte_update_broadcast_draft",
-    {
-      workspace,
-      draft_id: draftId,
-      base_revision: 2,
-      operation_id: "blocked-replace-html-v3",
-      changes: { active_source: "html", html_body: html },
-    },
-  );
+  const loggedOutRevision = await call(child, "fonte_update_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 2,
+    operation_id: "blocked-replace-html-v3",
+    changes: { active_source: "html", html_body: html },
+  });
   assert.equal(loggedOutRevision.reason, "login_required");
   assert.equal(loggedOutRevision.core_effect, "none");
 
@@ -209,7 +216,9 @@ async function startMcp() {
     }
   });
   process.stderr.setEncoding("utf8");
-  process.stderr.on("data", (chunk) => { stderr += chunk; });
+  process.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
   return {
     request(method, params) {
       id += 1;
@@ -223,12 +232,14 @@ async function startMcp() {
           clearTimeout(timeout);
           resolve(message);
         });
-        process.stdin.write(`${JSON.stringify({
-          jsonrpc: "2.0",
-          id: requestId,
-          method,
-          params,
-        })}\n`);
+        process.stdin.write(
+          `${JSON.stringify({
+            jsonrpc: "2.0",
+            id: requestId,
+            method,
+            params,
+          })}\n`,
+        );
       });
     },
     notify(method, params) {

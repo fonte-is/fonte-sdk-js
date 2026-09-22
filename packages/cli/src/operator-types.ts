@@ -1,4 +1,8 @@
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+import type {
+  BroadcastSendInstructionOperatorCommand,
+  BroadcastSendOperationResult,
+} from "./operator-broadcast-send-instruction-types.js";
 import type { OperatorNextAction } from "./operator-broadcast-recovery.js";
 import type {
   ContactImportStatusResult,
@@ -49,6 +53,7 @@ import type {
 export type OperatorCommand =
   | WorkspaceMarketingSettingsOperatorCommand
   | SequenceOperatorCommand
+  | BroadcastSendInstructionOperatorCommand
   | {
       readonly kind: "broadcast_test_send";
       readonly workspace: string;
@@ -275,6 +280,7 @@ export interface ResendBridgeCopyResult extends Omit<
 export type OperatorResult =
   | WorkspaceMarketingSettingsResult
   | SequenceOperatorResult
+  | BroadcastSendOperationResult
   | SandboxTestResult
   | BroadcastCanaryResult
   | ProductionAudienceAppendResult
@@ -312,6 +318,7 @@ export interface OperatorReceipt {
       | "fonte.core.sandbox_canary.v1"
       | "fonte.core.broadcast_preflight.v1"
       | "fonte.core.production_broadcast.v1"
+      | "fonte.core.broadcast_send_instruction.v3"
       | "fonte.core.production_broadcast_audience_append.v1"
       | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"
