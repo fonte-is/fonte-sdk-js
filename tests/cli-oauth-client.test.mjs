@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   prepareOpenIdAuthorization,
   refreshOpenIdAuthorization,
+  renewOpenIdAuthorization,
 } from "../packages/cli/dist/oauth-client.js";
 
 const hosted = {
@@ -38,6 +39,8 @@ function provider(t, overrides = {}) {
       ? "discovery"
       : url.pathname.split("/").at(-1);
     calls.push({ kind, url, options });
+    const custom = await overrides.respond?.({ kind, url, options });
+    if (custom !== undefined) return custom;
     if (overrides.redirect === kind) {
       return new Response(null, {
         status: 302,
@@ -53,6 +56,25 @@ function provider(t, overrides = {}) {
     return Response.json(body);
   });
   return calls;
+}
+
+function renew(overrides = {}) {
+  return renewOpenIdAuthorization({
+    hosted,
+    refreshToken: "previous-refresh-token",
+    expectedSubject: "synthetic-subject",
+    beforeExchange: async () => {},
+    ...overrides,
+  });
+}
+
+function assertFailure(outcome, expected) {
+  assert.deepEqual(outcome, expected);
+  assert.deepEqual(Object.keys(outcome).sort(), [
+    "exchangeSubmitted",
+    "reason",
+    "tag",
+  ]);
 }
 
 function callback(prepared) {
@@ -293,4 +315,332 @@ test("initial grant requires an authenticated UserInfo subject", async (t) => {
     prepared.exchange(callback(prepared)),
     /authorization_failed/,
   );
+});
+
+test("typed renewal marks before one exchange and returns receipt-time absolute expiry", async (t) => {
+  let now = 1_000_000;
+  t.mock.method(Date, "now", () => now);
+  const events = [];
+  const calls = provider(t, {
+    tokens: { refresh_token: "rotated-refresh-token", scope: undefined },
+    respond: async ({ kind }) => {
+      if (kind === "token") events.push("token");
+      if (kind === "userinfo") now += 5_000;
+    },
+  });
+  const outcome = await renew({
+    beforeExchange: async () => events.push("marker"),
+  });
+  assert.deepEqual(events, ["marker", "token"]);
+  assert.deepEqual(outcome, {
+    tag: "success",
+    exchangeSubmitted: true,
+    accessToken: tokens.access_token,
+    refreshToken: "rotated-refresh-token",
+    subject: "synthetic-subject",
+    scopes: ["email"],
+    expiresAt: 4_600_000,
+  });
+  assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+});
+
+test("typed renewal retains the prior refresh token only after a valid success", async (t) => {
+  provider(t, { tokens: { refresh_token: undefined, scope: undefined } });
+  const outcome = await renew();
+  assert.equal(outcome.tag, "success");
+  assert.equal(outcome.refreshToken, "previous-refresh-token");
+  assert.equal(outcome.subject, "synthetic-subject");
+  assert.deepEqual(outcome.scopes, ["email"]);
+});
+
+test("discovery transport failure is retryable without token submission", async (t) => {
+  const calls = provider(t, {
+    respond: async ({ kind }) => {
+      if (kind === "discovery") throw new TypeError("synthetic outage");
+    },
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "retryable_before_exchange",
+    reason: "provider_unavailable",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery"],
+  );
+});
+
+test("marker failure is retryable and prevents token submission", async (t) => {
+  const calls = provider(t);
+  const outcome = await renew({
+    beforeExchange: async () => {
+      throw new Error("synthetic marker failure");
+    },
+  });
+  assertFailure(outcome, {
+    tag: "retryable_before_exchange",
+    reason: "provider_unavailable",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery"],
+  );
+});
+
+test("cancellation before exchange never submits a refresh token", async (t) => {
+  const controller = new AbortController();
+  const calls = provider(t);
+  const outcome = await renew({
+    signal: controller.signal,
+    beforeExchange: async () => controller.abort(),
+  });
+  assertFailure(outcome, {
+    tag: "cancelled_before_exchange",
+    reason: "cancelled",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery"],
+  );
+});
+
+test("cancellation during discovery is classified before exchange", async (t) => {
+  const controller = new AbortController();
+  const calls = provider(t, {
+    respond: async ({ kind }) => {
+      if (kind !== "discovery") return undefined;
+      controller.abort();
+      throw controller.signal.reason;
+    },
+  });
+  const outcome = await renew({ signal: controller.signal });
+  assertFailure(outcome, {
+    tag: "cancelled_before_exchange",
+    reason: "cancelled",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery"],
+  );
+});
+
+test("untrusted discovery metadata is a configuration rejection", async (t) => {
+  const calls = provider(t, {
+    metadata: { token_endpoint: "https://untrusted.example.test/token" },
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "rejected_configuration",
+    reason: "configuration_rejected",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery"],
+  );
+});
+
+test("invalid client binding is rejected without discovery or exchange", async (t) => {
+  const calls = provider(t);
+  const outcome = await renew({ hosted: { ...hosted, clientId: "" } });
+  assertFailure(outcome, {
+    tag: "rejected_configuration",
+    reason: "configuration_rejected",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(calls, []);
+});
+
+test("a discovery redirect is a configuration rejection rather than a retry origin", async (t) => {
+  const calls = provider(t, { redirect: "discovery" });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "rejected_configuration",
+    reason: "configuration_rejected",
+    exchangeSubmitted: false,
+  });
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery"],
+  );
+});
+
+test("typed invalid_grant is revoked without inspecting native messages", async (t) => {
+  const calls = provider(t, {
+    respond: async ({ kind }) =>
+      kind === "token"
+        ? Response.json(
+            {
+              error: "invalid_grant",
+              error_description: "contains synthetic-refresh-token",
+            },
+            { status: 400 },
+          )
+        : undefined,
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "rejected_invalid_grant",
+    reason: "invalid_grant",
+    exchangeSubmitted: true,
+  });
+  assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+  assert.doesNotMatch(JSON.stringify(outcome), /synthetic-refresh-token/);
+});
+
+test("an untyped invalid_grant message after dispatch remains uncertain", async (t) => {
+  const calls = provider(t, {
+    respond: async ({ kind }) => {
+      if (kind === "token") throw new Error("invalid_grant");
+    },
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "exchange_uncertain",
+    reason: "exchange_uncertain",
+    exchangeSubmitted: true,
+  });
+  assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+});
+
+test("invalid_grant on a nonstandard status remains uncertain", async (t) => {
+  const calls = provider(t, {
+    respond: async ({ kind }) =>
+      kind === "token"
+        ? Response.json({ error: "invalid_grant" }, { status: 429 })
+        : undefined,
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "exchange_uncertain",
+    reason: "exchange_uncertain",
+    exchangeSubmitted: true,
+  });
+  assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+});
+
+for (const [name, tokenResponse] of Object.entries({
+  rateLimited: () =>
+    Response.json({ error: "temporarily_unavailable" }, { status: 429 }),
+  serverError: () => Response.json({ error: "server_error" }, { status: 503 }),
+  malformedSuccess: () =>
+    new Response("{", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  lostBody: () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new TypeError("synthetic response loss"));
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ),
+})) {
+  test(`${name} after token dispatch is uncertain and is not retried`, async (t) => {
+    const calls = provider(t, {
+      respond: async ({ kind }) =>
+        kind === "token" ? tokenResponse() : undefined,
+    });
+    const outcome = await renew();
+    assert.equal(outcome.tag, "exchange_uncertain");
+    assert.equal(outcome.exchangeSubmitted, true);
+    assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+  });
+}
+
+test("abort after token dispatch is uncertain rather than retryable", async (t) => {
+  const controller = new AbortController();
+  const calls = provider(t, {
+    respond: async ({ kind }) => {
+      if (kind !== "token") return undefined;
+      controller.abort();
+      throw controller.signal.reason;
+    },
+  });
+  const outcome = await renew({ signal: controller.signal });
+  assertFailure(outcome, {
+    tag: "exchange_uncertain",
+    reason: "exchange_uncertain",
+    exchangeSubmitted: true,
+  });
+  assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+});
+
+for (const [name, overrides, reason] of [
+  ["subject", { user: { sub: "other-subject" } }, "subject_mismatch"],
+  ["scope", { tokens: { scope: "profile" } }, "scope_mismatch"],
+]) {
+  test(`${name} mismatch after issuance cannot commit`, async (t) => {
+    const calls = provider(t, overrides);
+    const outcome = await renew();
+    assertFailure(outcome, {
+      tag: "identity_mismatch",
+      reason,
+      exchangeSubmitted: true,
+    });
+    assert.equal(calls.filter(({ kind }) => kind === "token").length, 1);
+  });
+}
+
+test("UserInfo failure after rotation is uncertain and exposes no reusable token", async (t) => {
+  const calls = provider(t, {
+    tokens: { refresh_token: "rotated-refresh-token" },
+    respond: async ({ kind }) => {
+      if (kind === "userinfo") throw new TypeError("synthetic userinfo loss");
+    },
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "exchange_uncertain",
+    reason: "exchange_uncertain",
+    exchangeSubmitted: true,
+  });
+  assert.doesNotMatch(
+    JSON.stringify(outcome),
+    /previous-refresh-token|rotated-refresh-token|synthetic-access-token/,
+  );
+  assert.deepEqual(
+    calls.map(({ kind }) => kind),
+    ["discovery", "token", "userinfo"],
+  );
+});
+
+test("expiry exhausted during UserInfo validation is an invalid uncertain response", async (t) => {
+  let now = 2_000_000;
+  t.mock.method(Date, "now", () => now);
+  provider(t, {
+    tokens: { expires_in: 1 },
+    respond: async ({ kind }) => {
+      if (kind === "userinfo") now += 1_001;
+    },
+  });
+  const outcome = await renew();
+  assertFailure(outcome, {
+    tag: "exchange_uncertain",
+    reason: "response_invalid",
+    exchangeSubmitted: true,
+  });
+});
+
+test("credential-bearing callback errors are sanitized at the renewal boundary", async (t) => {
+  provider(t);
+  const secret = "sensitive-credential-value";
+  const outcome = await renew({
+    refreshToken: secret,
+    beforeExchange: async () => {
+      throw new Error(`failed to store ${secret}`);
+    },
+  });
+  assertFailure(outcome, {
+    tag: "retryable_before_exchange",
+    reason: "provider_unavailable",
+    exchangeSubmitted: false,
+  });
+  assert.doesNotMatch(JSON.stringify(outcome), new RegExp(secret));
 });
