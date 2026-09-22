@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createInterface } from "node:readline";
 import test from "node:test";
 
-import {
-  MCP_FONTE_ALLOWLIST,
-} from "../packages/cli/dist/mcp-sequence-server.js";
+import { MCP_FONTE_ALLOWLIST } from "../packages/cli/dist/mcp-sequence-server.js";
 
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
@@ -13,8 +14,64 @@ const testId = "00000000-0000-4000-8000-000000000152";
 const operationId = "synthetic-test-composition-v2";
 const systemId = "00000000-0000-4000-8000-000000000153";
 const digest = `sha256:${"c".repeat(64)}`;
-const html = "<!doctype html><p>Hello {{{contact.email}}}</p>"
-  + '<a href="{{{unsubscribe_url}}}">Leave</a>';
+const html =
+  "<!doctype html><p>Hello {{{contact.email}}}</p>" +
+  '<a href="{{{unsubscribe_url}}}">Leave</a>';
+
+test("fresh fonte-mcp prepares and corrects a local HTML file", async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "fonte-mcp-html-"));
+  const sourceFile = path.join(directory, "source.html");
+  const correctedFile = path.join(directory, "corrected.html");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(sourceFile, htmlWith("Source A"));
+  await writeFile(correctedFile, htmlWith("Source B"));
+  const child = await startMcp();
+  t.after(() => child.close());
+  await child.request("initialize", {
+    protocolVersion: "2025-11-25",
+    capabilities: {},
+    clientInfo: { name: "fonte-file-test", version: "1.0.0" },
+  });
+  child.notify("notifications/initialized", {});
+
+  const prepared = await call(child, "fonte_prepare_broadcast_html_file", {
+    workspace,
+    draft_id: draftId,
+    title: "Synthetic draft",
+    subject: "Synthetic subject",
+    preheader: "Synthetic preheader",
+    source_file: sourceFile,
+    reference_file: null,
+    postal_address_literal: null,
+    literal_fallbacks: {},
+  });
+  assert.equal(prepared.outcome, "completed");
+  assert.equal(prepared.stage, "complete");
+  assert.equal(prepared.readback.draft.html_body, htmlWith("Source A"));
+  assert.equal(prepared.render.revision, 1);
+  assert.equal(
+    prepared.source.visual_verification,
+    "unverified_missing_reference",
+  );
+
+  const revised = await call(child, "fonte_revise_broadcast_html_file", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 1,
+    operation_id: "source-file-correction-v2",
+    source_file: correctedFile,
+    reference_file: null,
+    postal_address_literal: null,
+    literal_fallbacks: {},
+  });
+  assert.equal(revised.outcome, "completed");
+  assert.equal(revised.save.draft_id, draftId);
+  assert.equal(revised.save.revision, 2);
+  assert.equal(revised.readback.draft.html_body, htmlWith("Source B"));
+  assert.equal(revised.render.revision, 2);
+  assert.equal(child.stderr(), "");
+  assertNoSecret(child.output());
+});
 
 test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async (t) => {
   const child = await startMcp();
@@ -109,17 +166,13 @@ async function verifyLoggedOutSession(child, renderProof) {
   assert.equal(loggedOut.reason, "login_required");
   assert.equal(loggedOut.core_effect, "none");
 
-  const loggedOutRevision = await call(
-    child,
-    "fonte_update_broadcast_draft",
-    {
-      workspace,
-      draft_id: draftId,
-      base_revision: 2,
-      operation_id: "blocked-replace-html-v3",
-      changes: { active_source: "html", html_body: html },
-    },
-  );
+  const loggedOutRevision = await call(child, "fonte_update_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 2,
+    operation_id: "blocked-replace-html-v3",
+    changes: { active_source: "html", html_body: html },
+  });
   assert.equal(loggedOutRevision.reason, "login_required");
   assert.equal(loggedOutRevision.core_effect, "none");
 
@@ -209,7 +262,9 @@ async function startMcp() {
     }
   });
   process.stderr.setEncoding("utf8");
-  process.stderr.on("data", (chunk) => { stderr += chunk; });
+  process.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
   return {
     request(method, params) {
       id += 1;
@@ -223,12 +278,14 @@ async function startMcp() {
           clearTimeout(timeout);
           resolve(message);
         });
-        process.stdin.write(`${JSON.stringify({
-          jsonrpc: "2.0",
-          id: requestId,
-          method,
-          params,
-        })}\n`);
+        process.stdin.write(
+          `${JSON.stringify({
+            jsonrpc: "2.0",
+            id: requestId,
+            method,
+            params,
+          })}\n`,
+        );
       });
     },
     notify(method, params) {
@@ -248,4 +305,12 @@ async function startMcp() {
 function assertNoSecret(value) {
   assert.equal(value.includes("synthetic-stdio-broadcast-bearer"), false);
   assert.equal(value.includes("refreshToken"), false);
+}
+
+function htmlWith(copy) {
+  return (
+    '<!doctype html><html><body style="font-family:Arial,sans-serif">' +
+    `<p>${copy} {{{contact.email}}}</p>` +
+    '<a href="{{{unsubscribe_url}}}">Leave</a></body></html>'
+  );
 }

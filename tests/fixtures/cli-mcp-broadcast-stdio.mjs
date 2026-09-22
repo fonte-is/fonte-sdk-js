@@ -1,7 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 
-import { HostedTestBlockedError } from
-  "../../packages/cli/dist/hosted-errors.js";
+import { HostedTestBlockedError } from "../../packages/cli/dist/hosted-errors.js";
 import {
   createDurableFonteMcpSession,
   createFonteMcpServer,
@@ -12,8 +11,19 @@ const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
 const digest = `sha256:${"c".repeat(64)}`;
-const html = "<!doctype html><p>Hello {{{contact.email}}}</p>"
-  + '<a href="{{{unsubscribe_url}}}">Leave</a>';
+const html =
+  "<!doctype html><p>Hello {{{contact.email}}}</p>" +
+  '<a href="{{{unsubscribe_url}}}">Leave</a>';
+let currentHtml = html;
+let currentRevision = 1;
+let currentSource = {
+  title: "Synthetic draft",
+  subject: "Synthetic subject",
+  preheader: "Synthetic preheader",
+  activeSource: "html",
+  composerBody: null,
+  htmlBody: html,
+};
 const hosted = {
   schema: "fonte.cli.hosted_config.v1",
   authorizationServer: "https://identity.example.test/auth/v1",
@@ -52,28 +62,39 @@ function route(url, init) {
     return response({ error: "human_auth_invalid" }, 401);
   }
   if (
-    init.method === "POST"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts`
-      + "?environment=production"
-  ) return response(lifecycleReceipt("applied", body));
-  if (
-    init.method === "GET"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
-      + "?environment=production"
-  ) return response(lifecycleReceipt(null));
-  if (
-    init.method === "PATCH"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
-      + "?environment=production"
+    init.method === "POST" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts` + "?environment=production"
   ) {
-    return response(Object.hasOwn(body.changes, "recipientSelection")
-      ? targetingReceipt(body)
-      : revisionReceipt(body));
+    currentHtml = body.htmlBody;
+    currentRevision = 1;
+    currentSource = body;
+    return response(lifecycleReceipt("applied"));
   }
   if (
-    init.method === "POST"
-    && path === `/v1/workspaces/${workspace}/marketing-broadcasts/${draftId}`
-      + "/send-approvals?environment=production"
+    init.method === "GET" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        "?environment=production"
+  )
+    return response(lifecycleReceipt(null));
+  if (
+    init.method === "PATCH" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        "?environment=production"
+  ) {
+    return response(
+      Object.hasOwn(body.changes, "recipientSelection")
+        ? targetingReceipt(body)
+        : revisionReceipt(body),
+    );
+  }
+  if (
+    init.method === "POST" &&
+    path ===
+      `/v1/workspaces/${workspace}/marketing-broadcasts/${draftId}` +
+        "/send-approvals?environment=production"
   ) {
     if (body.operation === "render_preview") return response(renderReceipt());
     if (body.operation === "send_test_to_verified_account") {
@@ -81,30 +102,34 @@ function route(url, init) {
     }
   }
   if (
-    init.method === "GET"
-    && path === `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
-      + `/test-deliveries/${testId}?environment=production`
-  ) return response(testReadReceipt());
+    init.method === "GET" &&
+    path ===
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
+        `/test-deliveries/${testId}?environment=production`
+  )
+    return response(testReadReceipt());
   return response({ error: "synthetic_route_missing" }, 404);
 }
 
 function revisionReceipt(body) {
-  const htmlBody = body.changes.htmlBody;
+  currentHtml = body.changes.htmlBody;
+  currentRevision = body.baseRevision + 1;
   return {
-    revision: 2,
+    revision: currentRevision,
     savedAt: "2026-09-22T14:00:00.000Z",
-    draft: draft(htmlBody, 2, "2026-09-22T14:00:00.000Z"),
+    draft: draft(currentHtml, currentRevision, "2026-09-22T14:00:00.000Z"),
   };
 }
 
 function targetingReceipt(body) {
   const recipientSelection = body.changes.recipientSelection;
+  currentRevision = body.baseRevision + 1;
   return {
-    revision: 3,
+    revision: currentRevision,
     savedAt: "2026-09-22T15:00:00.000Z",
     draft: draft(
-      html,
-      3,
+      currentHtml,
+      currentRevision,
       "2026-09-22T15:00:00.000Z",
       {},
       recipientSelection,
@@ -112,22 +137,14 @@ function targetingReceipt(body) {
   };
 }
 
-function lifecycleReceipt(outcome, body = null) {
-  const source = body ?? {
-    title: "Synthetic draft",
-    subject: "Synthetic subject",
-    preheader: "Synthetic preheader",
-    activeSource: "html",
-    composerBody: null,
-    htmlBody: html,
-  };
+function lifecycleReceipt(outcome) {
   return bound({
     outcome,
     draft: draft(
-      source.htmlBody,
-      1,
+      currentHtml,
+      currentRevision,
       "2026-09-22T13:00:00.000Z",
-      source,
+      currentSource,
     ),
   });
 }
@@ -147,10 +164,13 @@ function draft(
     replyTo: null,
     audienceKind: recipientSelection === null ? null : "recipient_expression",
     audienceContactImportBatchId: null,
-    recipientExpression: recipientSelection === null ? null : {
-      include: [{ kind: "everyone" }],
-      exclude: recipientSelection.except,
-    },
+    recipientExpression:
+      recipientSelection === null
+        ? null
+        : {
+            include: [{ kind: "everyone" }],
+            exclude: recipientSelection.except,
+          },
     recipientSelection,
     communicationPurposeId: null,
     subscriptionName: null,
@@ -174,14 +194,14 @@ function renderReceipt() {
     status: "preview",
     senderId: "sender_synthetic",
     renderContentDigest: digest,
-    html,
-    text: html,
-    renderProof: proof(),
+    html: currentHtml,
+    text: currentHtml,
+    renderProof: proof(currentRevision),
     render: {
       subject: "Synthetic subject",
       replyTo: null,
       preheader: "Synthetic preheader",
-      textBody: html,
+      textBody: currentHtml,
       postalAddress: null,
       clickTrackingEnabled: true,
     },
@@ -190,8 +210,8 @@ function renderReceipt() {
       unsubscribeUrl: "https://preview.invalid/unsubscribe/preview",
       postalAddress: null,
       finalizerVersion: "fonte-core-recipient-finalizer-v2",
-      html: "<p>Hello preview-recipient@example.invalid</p>",
-      text: "Hello preview-recipient@example.invalid",
+      html: sample(currentHtml),
+      text: sample(currentHtml),
     },
   });
 }
@@ -210,7 +230,7 @@ function testRequestReceipt() {
     refusedCount: 0,
     unknownCount: 0,
     created: true,
-    renderProof: proof(),
+    renderProof: proof(currentRevision),
   });
 }
 
@@ -242,20 +262,20 @@ function testReadReceipt() {
       renderingFailedCount: 0,
     },
     originalDraft: {
-      testDraftVersion: 2,
-      currentVersion: 2,
+      testDraftVersion: currentRevision,
+      currentVersion: currentRevision,
       versionUnchangedSinceTest: true,
     },
-    renderProof: proof(),
+    renderProof: proof(currentRevision),
   });
 }
 
-function proof() {
+function proof(version = 2) {
   return {
     source: "html",
     templateIdentity: "complete_html_v1",
     templateRevision: "fonte-core-render-v2",
-    broadcastVersion: 2,
+    broadcastVersion: version,
     rendererVersion: "fonte-core-email-renderer-v2",
     recipientSlotSchemaVersion: "fonte-core-recipient-slots-v1",
     finalizerVersion: "fonte-core-recipient-finalizer-v2",
@@ -264,8 +284,22 @@ function proof() {
   };
 }
 
+function sample(value) {
+  return value
+    .replaceAll("{{{contact.email}}}", "preview-recipient@example.invalid")
+    .replaceAll(
+      "{{{unsubscribe_url}}}",
+      "https://preview.invalid/unsubscribe/preview",
+    )
+    .replaceAll("{{{postal_address}}}", "");
+}
+
 function bound(value) {
-  return { tenantId: "workspace-synthetic", environment: "production", ...value };
+  return {
+    tenantId: "workspace-synthetic",
+    environment: "production",
+    ...value,
+  };
 }
 
 function response(value, status = 200) {

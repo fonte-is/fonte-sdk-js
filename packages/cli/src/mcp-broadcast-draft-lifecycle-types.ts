@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-import { broadcastDraftSnapshotSchema } from
-  "./mcp-broadcast-draft-revision-types.js";
+import { broadcastDraftSnapshotSchema } from "./mcp-broadcast-draft-revision-types.js";
 import {
   mcpOutcomeSchema,
   mcpWorkspaceSchema,
@@ -10,13 +9,16 @@ import {
 const nullableHeader = (maximum: number, allowEmpty: boolean) =>
   z.union([
     z.null(),
-    z.string().max(maximum)
+    z
+      .string()
+      .max(maximum)
       .refine((value) => allowEmpty || value.length > 0)
       .refine((value) => !/\p{Cc}/u.test(value)),
   ]);
 const nullableBody = z.union([
   z.null(),
-  z.string()
+  z
+    .string()
     .refine((value) => new TextEncoder().encode(value).byteLength <= 262_144)
     .refine(
       (value) => !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value),
@@ -43,7 +45,7 @@ export const readBroadcastDraftInputSchema = z
   })
   .strict();
 
-const lifecycleResultSchema = z
+export const broadcastDraftLifecycleResultSchema = z
   .object({
     kind: z.literal("broadcast_draft"),
     outcome: z.enum(["applied", "no_change"]).nullable(),
@@ -59,6 +61,6 @@ export const broadcastDraftLifecycleOutputSchema = z
     reason: z.string().min(1).max(100).nullable(),
     status_code: z.number().int().min(100).max(599).nullable(),
     core_effect: z.enum(["none", "unknown"]),
-    draft: lifecycleResultSchema.nullable(),
+    draft: broadcastDraftLifecycleResultSchema.nullable(),
   })
   .strict();
