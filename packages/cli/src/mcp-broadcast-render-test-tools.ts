@@ -1,3 +1,5 @@
+import { HostedTestBlockedError } from "./hosted-errors.js";
+import { sequenceMcpFailure } from "./mcp-sequence-failure.js";
 import { CoreOperatorError } from "./operator-core-request.js";
 import { renderBroadcastDraftInputSchema } from
   "./mcp-broadcast-render-types.js";
@@ -126,6 +128,9 @@ function success<Key extends string, Value>(key: Key, value: Value) {
 }
 
 function failure(error: unknown, mutation: boolean): ToolFailure {
+  if (error instanceof HostedTestBlockedError) {
+    return sequenceMcpFailure(error);
+  }
   if (!(error instanceof CoreOperatorError)) {
     return {
       outcome: mutation ? "ambiguous" : "unavailable",

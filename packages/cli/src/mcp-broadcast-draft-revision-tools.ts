@@ -1,3 +1,5 @@
+import { HostedTestBlockedError } from "./hosted-errors.js";
+import { sequenceMcpFailure } from "./mcp-sequence-failure.js";
 import { CoreOperatorError } from "./operator-core-request.js";
 import { reviseBroadcastDraftInputSchema } from
   "./mcp-broadcast-draft-revision-types.js";
@@ -87,6 +89,9 @@ function clientChanges(
 }
 
 function failure(error: unknown): BroadcastDraftRevisionFailure {
+  if (error instanceof HostedTestBlockedError) {
+    return { ...sequenceMcpFailure(error), revision: null };
+  }
   if (!(error instanceof CoreOperatorError)) {
     return {
       outcome: "ambiguous",
