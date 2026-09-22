@@ -43,6 +43,111 @@ const entries: readonly HelpEntry[] = [
     detail: "Plans or applies removal of Fonte-owned local installation state.",
     json: true,
   },
+  {
+    command: ["sequence", "list"],
+    usage: [["--workspace <slug> --environment <sandbox|production>"]],
+    detail: "Lists persisted Sequence drafts authorized by Fonte Core.",
+    json: true,
+  },
+  {
+    command: ["sequence", "read"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id>",
+      ],
+    ],
+    detail:
+      "Reads one exact persisted Sequence draft and its Core-generated plan.",
+    json: true,
+  },
+  {
+    command: ["sequence", "create"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <caller-owned-id> --operation-key <key>",
+        "--definition <json-object>",
+      ],
+    ],
+    detail:
+      "Creates one Core-owned Sequence draft. A caller-owned ID makes an ambiguous response safely readable without retrying the mutation.",
+    json: true,
+  },
+  {
+    command: ["sequence", "update"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id> --expected-revision <n> --operation-key <key>",
+        "--definition <json-object>",
+      ],
+    ],
+    detail:
+      "Revision-checks and idempotently updates one Sequence draft through Fonte Core.",
+    json: true,
+  },
+  {
+    command: ["sequence", "activate"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id> --expected-revision <n> --operation-key <key>",
+        "--binding <json-object>",
+      ],
+    ],
+    detail:
+      "Activates one exact Core draft revision with an opaque sender/scope/render binding. It cannot enroll, select recipients, send, or run delivery.",
+    json: true,
+  },
+  {
+    command: ["sequence", "validate"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--definition <json-object>",
+      ],
+    ],
+    detail:
+      "Validates a candidate Sequence definition in Core without saving or sending.",
+    json: true,
+  },
+  {
+    command: ["sequence", "diff"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id> --definition <json-object>",
+        "[--base-revision <n>]",
+      ],
+    ],
+    detail: "Compares a candidate definition with one Core-persisted revision.",
+    json: true,
+  },
+  {
+    command: ["sequence", "export"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id>",
+      ],
+    ],
+    detail: "Exports exactly one persisted Sequence definition from Core.",
+    json: true,
+  },
+  {
+    command: ["sequence", "simulate"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--sequence-id <id> --entered-at-ms <epoch-ms>",
+        "[--assumed-accepted-at-ms <json-object>]",
+      ],
+    ],
+    detail:
+      "Previews a draft timeline using explicit assumed delivery acceptances; it never enrolls or sends.",
+    json: true,
+  },
   ...workspaceMarketingSettingsHelpEntries,
   {
     command: ["broadcast", "draft", "create"],
@@ -296,8 +401,8 @@ export function operatorRecoveryCommand(argv: readonly string[]): string {
   );
   return entry
     ? `fonte ${entry.command.join(" ")} --help`
-    : argv[0] === "broadcast"
-      ? "fonte broadcast --help"
+    : argv[0] === "broadcast" || argv[0] === "sequence"
+      ? `fonte ${argv[0]} --help`
       : "fonte --help";
 }
 

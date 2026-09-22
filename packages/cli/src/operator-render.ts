@@ -2,6 +2,7 @@ import { renderProductionOperatorHuman } from "./operator-production-render.js";
 import { renderWorkspaceMarketingSettings } from "./operator-marketing-settings-render.js";
 import { renderBlockedOperator } from "./operator-blocked-render.js";
 import { renderProviderRotation } from "./operator-provider-rotation-render.js";
+import { renderSequenceOperatorHuman } from "./operator-sequence-render.js";
 import type {
   ProviderAudienceUnavailableInputResult as UnavailableInput,
   ProviderAudienceSourceReferenceResult,
@@ -24,6 +25,8 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   if (production !== null) return production;
   const marketingSettings = renderWorkspaceMarketingSettings(receipt);
   if (marketingSettings !== null) return marketingSettings;
+  const sequence = renderSequenceOperatorHuman(receipt);
+  if (sequence !== null) return sequence;
   const result = receipt.result!;
   if (result.kind === "contact_import_status") {
     return [

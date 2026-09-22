@@ -54,15 +54,19 @@ test("dependency edges point only from framework bindings to Core", async () => 
     "@fonte-is/react": "0.2.0-fon571.1",
   });
   assert.deepEqual(cli.dependencies, {
-    "@napi-rs/keyring": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "openid-client": "6.8.5",
+    zod: "4.4.3",
   });
   assert.deepEqual(cli.peerDependencies ?? {}, {});
 });
 
-test("the CLI package has one stable binary and one operator client surface", async () => {
+test("the CLI package has fixed command and Sequence MCP entry points", async () => {
   const cli = await readJson("packages/cli/package.json");
-  assert.deepEqual(cli.bin, { fonte: "./dist/main.js" });
+  assert.deepEqual(cli.bin, {
+    fonte: "./dist/main.js",
+    "fonte-mcp": "./dist/mcp-main.js",
+  });
   assert.equal(cli.main, undefined);
   assert.deepEqual(cli.exports, {
     "./operator-client": {

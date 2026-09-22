@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 export type CallbackPageOutcome = "pending" | "complete" | "failed" | "expired";
 
 export const callbackCompleteScript = "try { window.close(); } catch {}";
@@ -5,23 +7,20 @@ export const callbackCompleteScript = "try { window.close(); } catch {}";
 const content = {
   pending: {
     title: "Completing authorization",
-    description: "Fonte received the authorization response.",
-    detail: "Your terminal is validating the grant.",
+    description:
+      "Your terminal is validating the grant. This page will update automatically.",
   },
   complete: {
-    title: "Authorization complete",
-    description: "The authorization grant is ready in your terminal.",
-    detail: "You can close this tab.",
+    title: "You’re ready to continue.",
+    description: "Return to your terminal. You can close this tab.",
   },
   failed: {
     title: "Authorization not completed",
     description: "Return to your terminal for the reason, then try again.",
-    detail: "No credential was stored by this page.",
   },
   expired: {
     title: "Authorization expired",
     description: "Return to your terminal to start a fresh authorization.",
-    detail: "No credential was stored by this page.",
   },
 } as const;
 
@@ -37,54 +36,40 @@ const fonteFavicon = fonteMark
     '<svg aria-hidden="true" viewBox="0 0 38 38" fill="none">',
     '<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="translate(1 1) scale(1.631579)">',
   )
-  .replace("</svg>", "</g></svg>")
-  .replaceAll('fill="currentColor"', 'fill="#007DF9"');
+  .replace(
+    "</svg>",
+    "</g><style>svg { color: #171717; } @media (prefers-color-scheme: dark) { svg { color: #f5f5f5; } }</style></svg>",
+  );
 
 const fonteFaviconHref = `data:image/svg+xml,${encodeURIComponent(fonteFavicon)}`;
 
-const statusIcons = {
-  pending: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-    <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>
-    <path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`,
-  complete: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-    <path d="m7.25 12.25 3 3 6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`,
-  failed: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-    <path d="m8.5 8.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  </svg>`,
-  expired: `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-    <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>
-    <path d="M12 8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="12" cy="16" r="1" fill="currentColor"/>
-  </svg>`,
-} as const;
+// Embed the packaged font so the loopback page needs no network requests.
+const geistFont = readFileSync(
+  new URL("../assets/geist-latin.woff2", import.meta.url),
+).toString("base64");
 
 const styles = `
+  @font-face {
+    font-family: "Geist";
+    src: url("data:font/woff2;base64,${geistFont}") format("woff2");
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+  }
   :root {
     color-scheme: light dark;
-    font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #ffffff;
-    color: #252921;
+    font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --canvas: #ffffff;
-    --text: #252921;
-    --text-secondary: #687066;
-    --brand: #006edb;
-    --pending: #006edb;
-    --success: #079455;
-    --failure: #d92d20;
+    --text: #171717;
+    --text-secondary: #737373;
+    background: var(--canvas);
+    color: var(--text);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      background: #141915;
-      color: #f2efe8;
-      --canvas: #141915;
-      --text: #f2efe8;
-      --text-secondary: #a8afa7;
-      --brand: #53a0ff;
-      --pending: #53a0ff;
-      --success: #47cd89;
-      --failure: #f97066;
+      --canvas: #0a0a0a;
+      --text: #f5f5f5;
+      --text-secondary: #a3a3a3;
     }
   }
   * { box-sizing: border-box; }
@@ -95,72 +80,55 @@ const styles = `
     margin: 0;
     display: flex;
     align-items: center;
-    padding: 48px 16px;
+    padding: 64px 24px;
     background: var(--canvas);
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   main {
-    display: flex;
     width: 100%;
-    max-width: 360px;
+    max-width: 380px;
     margin: 0 auto;
-    flex-direction: column;
-    gap: 32px;
+  }
+  .fonte-logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 24px;
   }
   .fonte-mark {
-    width: 40px;
-    height: 40px;
-    align-self: center;
-    color: var(--brand);
+    display: block;
+    width: 29px;
+    height: 29px;
   }
-  .fonte-mark svg,
-  .status-icon svg {
+  .fonte-mark svg {
     display: block;
     width: 100%;
     height: 100%;
   }
-  .message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    text-align: center;
+  .fonte-wordmark {
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -1.1px;
+    line-height: 32px;
   }
   h1 {
     margin: 0;
     font-size: 24px;
-    font-weight: 500;
-    letter-spacing: -0.02em;
+    font-weight: 700;
+    letter-spacing: normal;
     line-height: 32px;
+    text-wrap: balance;
   }
   .description {
-    margin: 0;
+    margin: 8px 0 0;
     color: var(--text-secondary);
     font-size: 16px;
+    font-weight: 400;
     line-height: 24px;
+    text-wrap: pretty;
   }
-  .status {
-    display: flex;
-    align-self: center;
-    align-items: flex-start;
-    gap: 10px;
-    margin: 0;
-    color: var(--text);
-    font-size: 14px;
-    font-weight: 500;
-    line-height: 20px;
-  }
-  .status-icon {
-    width: 20px;
-    height: 20px;
-    flex: 0 0 auto;
-    color: var(--success);
-  }
-  [data-outcome="pending"] .status-icon { color: var(--pending); }
-  [data-outcome="failed"] .status-icon,
-  [data-outcome="expired"] .status-icon { color: var(--failure); }
 `;
 
 export function renderCallbackPage(outcome: CallbackPageOutcome): string {
@@ -177,7 +145,7 @@ export function renderCallbackPage(outcome: CallbackPageOutcome): string {
     <meta name="referrer" content="no-referrer">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#141915" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
     ${refresh}
     <link rel="icon" type="image/svg+xml" sizes="any" href="${fonteFaviconHref}">
     <title>${copy.title} · Fonte</title>
@@ -185,15 +153,14 @@ export function renderCallbackPage(outcome: CallbackPageOutcome): string {
   </head>
   <body data-outcome="${outcome}">
     <main aria-labelledby="callback-title">
-      <span class="fonte-mark">${fonteMark}</span>
-      <header class="message">
+      <div class="fonte-logo" role="img" aria-label="Fonte">
+        <span class="fonte-mark">${fonteMark}</span>
+        <span class="fonte-wordmark" aria-hidden="true">Fonte</span>
+      </div>
+      <div role="${role}" aria-live="polite">
         <h1 id="callback-title">${copy.title}</h1>
         <p class="description">${copy.description}</p>
-      </header>
-      <p class="status" role="${role}" aria-live="polite">
-        <span class="status-icon">${statusIcons[outcome]}</span>
-        <span>${copy.detail}</span>
-      </p>
+      </div>
     </main>
     ${outcome === "complete" ? `<script>${callbackCompleteScript}</script>` : ""}
   </body>

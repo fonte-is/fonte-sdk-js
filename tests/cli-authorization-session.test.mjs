@@ -166,6 +166,10 @@ test("loopback status is opaque, read-only, one-shot, and truthful through bound
       pending.headers["content-security-policy"],
       /default-src 'none'.*frame-ancestors 'none'/,
     );
+    assert.match(
+      pending.headers["content-security-policy"],
+      /(?:^|; )font-src data:;/,
+    );
     assert.equal(pending.headers["access-control-allow-origin"], undefined);
 
     const attemptedMutation = await requestCallback(
@@ -195,7 +199,6 @@ test("loopback status is opaque, read-only, one-shot, and truthful through bound
       accepted.headers.location,
     );
     assert.equal(complete.status, 200);
-    assert.match(complete.body, /Authorization complete/);
     const script = complete.body.match(/<script>(.*?)<\/script>/)[1];
     const hash = createHash("sha256").update(script).digest("base64");
     assert.ok(
@@ -203,6 +206,7 @@ test("loopback status is opaque, read-only, one-shot, and truthful through bound
         `script-src 'sha256-${hash}'`,
       ),
     );
+    assert.match(complete.body, /data-outcome="complete"/);
     assert.doesNotMatch(complete.body, /http-equiv="refresh"/);
     const secondTab = await requestCallback(
       listener.boundPort,
