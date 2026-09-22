@@ -25,9 +25,9 @@ export function registerMcpBroadcastDraftRevisionTool(
   server.registerTool(
     MCP_BROADCAST_DRAFT_REVISION_TOOL,
     {
-      title: "Update Broadcast draft copy",
+      title: "Update Broadcast draft",
       description:
-        "Revision-checks title, subject, or preheader on one existing unsent Core Broadcast draft. It cannot render, test, authorize, or send.",
+        "Revision-checks copy or source HTML on one existing unsent Core Broadcast draft. It cannot render, test, authorize, or send.",
       inputSchema: reviseBroadcastDraftInputSchema,
       outputSchema: reviseBroadcastDraftOutputSchema,
       annotations: draftMutation,

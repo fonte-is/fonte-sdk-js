@@ -2,6 +2,7 @@ import { CoreOperatorError } from "./operator-core-request.js";
 import { reviseBroadcastDraftInputSchema } from
   "./mcp-broadcast-draft-revision-types.js";
 import type {
+  BroadcastDraftRevisionChanges,
   BroadcastDraftRevisionClient,
   BroadcastDraftRevisionResult,
 } from "./operator-broadcast-draft-revision-client.js";
@@ -49,12 +50,39 @@ export function createBroadcastDraftRevisionToolHandler(
           draftId: value.draft_id,
           baseRevision: value.base_revision,
           operationId: value.operation_id,
-          changes: value.changes,
+          changes: clientChanges(value.changes),
         }),
       };
     } catch (error) {
       return failure(error);
     }
+  };
+}
+
+function clientChanges(
+  changes: {
+    readonly title?: string | null;
+    readonly subject?: string | null;
+    readonly preheader?: string | null;
+    readonly text_body?: string | null;
+    readonly active_source?: "composer" | "html";
+    readonly composer_body?: string | null;
+    readonly html_body?: string | null;
+  },
+): BroadcastDraftRevisionChanges {
+  return {
+    ...(changes.title === undefined ? {} : { title: changes.title }),
+    ...(changes.subject === undefined ? {} : { subject: changes.subject }),
+    ...(changes.preheader === undefined
+      ? {} : { preheader: changes.preheader }),
+    ...(changes.text_body === undefined
+      ? {} : { textBody: changes.text_body }),
+    ...(changes.active_source === undefined
+      ? {} : { activeSource: changes.active_source }),
+    ...(changes.composer_body === undefined
+      ? {} : { composerBody: changes.composer_body }),
+    ...(changes.html_body === undefined
+      ? {} : { htmlBody: changes.html_body }),
   };
 }
 
