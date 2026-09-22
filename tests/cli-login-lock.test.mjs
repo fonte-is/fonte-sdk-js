@@ -6,7 +6,26 @@ import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
-import { LoopbackLoginLock } from "../packages/cli/dist/login-lock.js";
+import {
+  CLIENT_AUTH_LOCK_PORT,
+  LoopbackLoginLock,
+} from "../packages/cli/dist/login-lock.js";
+
+test("the v1 session slot is isolated from the historical MCP port", async () => {
+  assert.equal(CLIENT_AUTH_LOCK_PORT, 49_673);
+  const historicalMcp = createServer();
+  await listen(historicalMcp, 49_672);
+  try {
+    assert.equal(
+      await new LoopbackLoginLock(CLIENT_AUTH_LOCK_PORT, 200, 10).run(
+        async () => "isolated",
+      ),
+      "isolated",
+    );
+  } finally {
+    await close(historicalMcp);
+  }
+});
 
 test("separate owners serialize operations and release after failures", async () => {
   const port = await unusedPort();

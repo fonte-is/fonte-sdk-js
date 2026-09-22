@@ -1,272 +1,537 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runProgram } from "../packages/cli/dist/program.js";
+
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
+import { parseSessionRecord } from "../packages/cli/dist/persistent-login-record.js";
+import {
+  binding,
+  deferred,
+  model,
+  reason,
+} from "./fixtures/cli-persistent-login.mjs";
 
-import { hosted, model, program } from "./fixtures/cli-persistent-login.mjs";
+const interactive = { switchAccount: false, interactive: true };
 
-test("ten distinct session instances reuse one browser login and commit every rotation", async () => {
+test("ten independent sessions reuse one explicit login and serialize every rotation", async () => {
   const m = model();
-  await m.session().login(hosted);
-  for (let i = 0; i < 10; i++) {
-    const session = m.session();
-    const result = await runProgram(
-      ["auth", "exec", "--", "synthetic-child"],
-      program(session),
+  await m.session().login(binding, interactive);
+  const handles = [];
+  for (let index = 0; index < 10; index++)
+    handles.push(await m.session().authorize(binding));
+  assert.equal(m.state.opened, 1);
+  assert.equal(m.state.renewals.length, 10);
+  assert.deepEqual(
+    m.state.renewals,
+    Array.from({ length: 10 }, (_, index) => `refresh-${index + 1}`),
+  );
+  assert.equal(new Set(handles.map(({ accessToken }) => accessToken)).size, 10);
+  assert.ok(
+    m.state.replacements.every(
+      (record) => !JSON.stringify(record).includes("access-"),
+    ),
+  );
+});
+
+test("concurrent fresh processes rotate in order without stale writeback", async () => {
+  const m = model();
+  await m.session().login(binding, interactive);
+  const handles = await Promise.all(
+    Array.from({ length: 10 }, () => m.session().authorize(binding)),
+  );
+  assert.equal(new Set(handles.map(({ accessToken }) => accessToken)).size, 10);
+  assert.deepEqual(
+    m.state.renewals,
+    Array.from({ length: 10 }, (_, index) => `refresh-${index + 1}`),
+  );
+});
+
+test("force refresh for an observed generation coalesces after another call advances it", async () => {
+  const m = model();
+  const session = m.session();
+  const first = await session.login(binding, interactive);
+  const handles = await Promise.all(
+    Array.from({ length: 10 }, () =>
+      session.refresh(binding, { observedGeneration: first.generation }),
+    ),
+  );
+  assert.equal(m.state.renewals.length, 1);
+  assert.equal(new Set(handles.map(({ accessToken }) => accessToken)).size, 1);
+  assert.ok(handles[0].generation > first.generation);
+});
+
+test("pre-exchange provider and configuration failures preserve ready custody", async () => {
+  for (const outcome of [
+    {
+      tag: "retryable_before_exchange",
+      reason: "provider_unavailable",
+      exchangeSubmitted: false,
+      expected: "login_refresh_unavailable",
+    },
+    {
+      tag: "rejected_configuration",
+      reason: "configuration_rejected",
+      exchangeSubmitted: false,
+      expected: "authorization_failed",
+    },
+  ]) {
+    const m = model();
+    await m.session().login(binding, interactive);
+    const ready = structuredClone(m.state.record);
+    m.state.renewHook = async () => outcome;
+    await assert.rejects(
+      m.session().authorize(binding),
+      reason(outcome.expected),
     );
-    assert.deepEqual(result, { exitCode: 0, stdout: "", stderr: "" });
-    assert.equal(JSON.parse(m.state.stored).refreshToken, `refresh-${i + 2}`);
-    assert.equal(await session.authorize(hosted), `access-${i + 2}`);
+    assert.deepEqual(m.state.record, ready);
   }
-  assert.equal(m.state.opened, 1);
-  assert.equal(m.state.refreshes.length, 10);
-  assert.deepEqual(
-    m.state.refreshes,
-    Array.from({ length: 10 }, (_, i) => `refresh-${i + 1}`),
-  );
-  assert.ok(m.state.writes.every((value) => !value.includes("access-")));
 });
 
-test("parallel invocations consume the latest rotation under exclusion", async () => {
+test("definitive pre-exchange outcomes after the marker restore ready custody", async () => {
+  for (const outcome of [
+    {
+      tag: "retryable_before_exchange",
+      reason: "provider_unavailable",
+      exchangeSubmitted: false,
+      expected: "login_refresh_unavailable",
+    },
+    {
+      tag: "rejected_configuration",
+      reason: "configuration_rejected",
+      exchangeSubmitted: false,
+      expected: "authorization_failed",
+    },
+    {
+      tag: "cancelled_before_exchange",
+      reason: "cancelled",
+      exchangeSubmitted: false,
+      expected: "authorization_cancelled",
+    },
+  ]) {
+    const m = model();
+    await m.session().login(binding, interactive);
+    const refreshToken = m.state.record.refreshToken;
+    const generation = m.state.record.generation;
+    m.state.renewHook = async ({ beforeExchange }) => {
+      await beforeExchange();
+      return outcome;
+    };
+    await assert.rejects(
+      m.session().authorize(binding),
+      reason(outcome.expected),
+    );
+    assert.equal(m.state.record.state, "ready");
+    assert.equal(m.state.record.refreshToken, refreshToken);
+    assert.ok(m.state.record.generation > generation);
+  }
+});
+
+test("beforeExchange storage failure submits nothing and preserves ready custody", async () => {
   const m = model();
-  await m.session().login(hosted);
-  const result = await Promise.all(
-    Array.from({ length: 10 }, () => m.session().authorize(hosted)),
+  await m.session().login(binding, interactive);
+  const ready = structuredClone(m.state.record);
+  let submitted = false;
+  m.state.replaceHook = async (record) => {
+    if (record.state === "refresh_pending")
+      throw new HostedTestBlockedError("secure_storage_unavailable");
+  };
+  m.state.renewHook = async ({ beforeExchange, grant }) => {
+    await beforeExchange();
+    submitted = true;
+    return { tag: "success", exchangeSubmitted: true, ...grant() };
+  };
+  await assert.rejects(
+    m.session().authorize(binding),
+    reason("secure_storage_unavailable"),
   );
-  assert.equal(new Set(result).size, 10);
-  assert.equal(m.state.opened, 1);
-  assert.deepEqual(
-    m.state.refreshes,
-    Array.from({ length: 10 }, (_, i) => `refresh-${i + 1}`),
-  );
+  assert.equal(submitted, false);
+  assert.deepEqual(m.state.record, ready);
 });
 
-test("logout waits for a pending rotation, removes custody, and fences an existing process", async () => {
+test("lost exchange response and failed successor commit retain quarantined state", async () => {
+  const uncertain = model();
+  await uncertain.session().login(binding, interactive);
+  uncertain.state.renewHook = async ({ beforeExchange }) => {
+    await beforeExchange();
+    return {
+      tag: "exchange_uncertain",
+      reason: "exchange_uncertain",
+      exchangeSubmitted: true,
+    };
+  };
+  await assert.rejects(
+    uncertain.session().authorize(binding),
+    reason("login_refresh_uncertain"),
+  );
+  assert.equal(uncertain.state.record.state, "refresh_uncertain");
+  assert.match(uncertain.state.record.refreshToken, /^refresh-/);
+
+  const failedCommit = model();
+  await failedCommit.session().login(binding, interactive);
+  failedCommit.state.replaceHook = async (record) => {
+    if (record.state === "ready" && record.generation > 1)
+      throw new HostedTestBlockedError("secure_storage_unavailable");
+  };
+  await assert.rejects(
+    failedCommit.session().authorize(binding),
+    reason("secure_storage_unavailable"),
+  );
+  assert.equal(failedCommit.state.record.state, "refresh_pending");
+  await assert.rejects(
+    failedCommit.session().authorize(binding),
+    reason("login_refresh_uncertain"),
+  );
+  assert.equal(failedCommit.state.record.state, "refresh_uncertain");
+});
+
+test("an abandoned refresh marker is quarantined and never replayed", async () => {
+  const m = model();
+  await m.session().login(binding, interactive);
+  m.state.record = {
+    ...m.state.record,
+    state: "refresh_pending",
+    generation: m.state.record.generation + 1,
+  };
+  m.state.renewHook = async () =>
+    assert.fail("an abandoned rotating credential must not be replayed");
+  await assert.rejects(
+    m.session().authorize(binding),
+    reason("login_refresh_uncertain"),
+  );
+  assert.equal(m.state.record.state, "refresh_uncertain");
+});
+
+test("logout fences a browser completion that was already waiting", async () => {
+  const m = model();
+  const entered = deferred();
+  const release = deferred();
+  m.state.loginHook = async ({ grant }) => ({
+    complete: async (commit) => {
+      m.state.opened += 1;
+      entered.resolve();
+      await release.promise;
+      const candidate = grant();
+      await commit(candidate);
+      return candidate;
+    },
+  });
+  const login = m.session().login(binding, interactive);
+  await entered.promise;
+  const logout = await m.session().logout();
+  assert.equal(logout.local, "cleared");
+  assert.equal(logout.remote, "unsupported");
+  release.resolve();
+  await assert.rejects(login, reason("login_changed"));
+  assert.equal(m.state.record.state, "signed_out");
+  assert.equal("refreshToken" in m.state.record, false);
+});
+
+test("logout waits through a living refresh owner then replaces its result", async () => {
   const m = model();
   const active = m.session();
-  await active.login(hosted);
-  let release;
-  let entered;
-  const began = new Promise((resolve) => {
-    entered = resolve;
-  });
-  const original = m.deps.refreshGrant;
-  m.deps.refreshGrant = async (...args) => {
-    entered();
-    await new Promise((resolve) => {
-      release = resolve;
-    });
-    return original(...args);
+  await active.login(binding, interactive);
+  const entered = deferred();
+  const release = deferred();
+  m.state.renewHook = async ({ beforeExchange, subject, grant }) => {
+    await beforeExchange();
+    entered.resolve();
+    await release.promise;
+    return {
+      tag: "success",
+      exchangeSubmitted: true,
+      ...grant(subject),
+    };
   };
-  const refreshing = active.refresh(hosted);
-  await began;
+  const refresh = active.refresh(binding, {
+    observedGeneration: m.state.record.generation,
+  });
+  await entered.promise;
   const logout = m.session().logout();
-  release();
-  await refreshing;
-  await logout;
-  assert.equal(m.state.stored, null);
-  await assert.rejects(active.authorize(hosted), /login_required/);
-  assert.equal(m.state.opened, 1);
-  await m.session().authorize(hosted);
+  release.resolve();
+  await refresh;
+  assert.equal((await logout).local, "cleared");
+  assert.equal(m.state.record.state, "signed_out");
+});
+
+test("late cancellation cannot remove a newer account login", async () => {
+  const m = model();
+  const entered = deferred();
+  const release = deferred();
+  let attempt = 0;
+  m.state.loginHook = async ({ grant }) => {
+    attempt += 1;
+    if (attempt === 1)
+      return {
+        complete: async (commit) => {
+          m.state.opened += 1;
+          entered.resolve();
+          await release.promise;
+          const candidate = grant("synthetic-person-a");
+          await commit(candidate);
+          return candidate;
+        },
+      };
+    return {
+      complete: async (commit) => {
+        m.state.opened += 1;
+        const candidate = grant("synthetic-person-b");
+        await commit(candidate);
+        return candidate;
+      },
+    };
+  };
+  const cancellation = new AbortController();
+  const oldLogin = m
+    .session()
+    .login(binding, { ...interactive, signal: cancellation.signal });
+  await entered.promise;
+  await m.session().logout();
+  await m.session().login(binding, { ...interactive, switchAccount: true });
+  const newer = structuredClone(m.state.record);
+  cancellation.abort();
+  release.resolve();
+  await assert.rejects(oldLogin);
+  assert.deepEqual(m.state.record, newer);
+  assert.equal(m.state.record.subject, "synthetic-person-b");
+});
+
+test("a surviving process rejects an explicit account replacement", async () => {
+  const m = model();
+  const survivor = m.session();
+  await survivor.login(binding, interactive);
+  await m.session().login(binding, { ...interactive, switchAccount: true });
+  await assert.rejects(survivor.authorize(binding), reason("login_changed"));
   assert.equal(m.state.opened, 2);
 });
 
-test("issuer, client, scope, API, callback and identity changes never reuse an old sign-in", async () => {
-  for (const change of [
-    { authorizationServer: "https://foreign.example.test" },
-    { clientId: "different-client" },
+test("missing, inaccessible, interaction-required and corrupt custody stay distinct", async () => {
+  const missing = model();
+  await assert.rejects(
+    missing.session().authorize(binding),
+    reason("login_required"),
+  );
+  for (const failure of [
+    "secure_storage_unavailable",
+    "secure_storage_interaction_required",
+  ]) {
+    const m = model();
+    m.state.storeFault = failure;
+    await assert.rejects(m.session().authorize(binding), reason(failure));
+  }
+  const corrupt = model();
+  corrupt.state.record = { schema: "foreign", refreshToken: "secret" };
+  await assert.rejects(
+    corrupt.session().authorize(binding),
+    reason("login_invalid"),
+  );
+});
+
+test("slow storage cannot extend or return an expired bearer", async () => {
+  const m = model();
+  m.state.replaceHook = async (record) => {
+    if (record.state === "ready") m.state.now += 3_600_001;
+  };
+  await assert.rejects(
+    m.session().login(binding, interactive),
+    reason("authorization_failed"),
+  );
+  assert.equal(m.state.record.state, "ready");
+  assert.equal(m.state.opened, 1);
+  m.state.replaceHook = null;
+  await m.session().authorize(binding);
+  assert.equal(m.state.renewals.length, 1);
+});
+
+test("logout returns a failed local receipt when custody cannot be replaced", async () => {
+  const m = model();
+  await m.session().login(binding, interactive);
+  m.state.storeFault = "secure_storage_unavailable";
+  assert.deepEqual(await m.session().logout(), {
+    local: "failed",
+    remote: "unsupported",
+  });
+  m.state.storeFault = null;
+  assert.equal(m.state.record.state, "ready");
+});
+
+test("exact binding mismatch does not refresh or fall back", async () => {
+  const m = model();
+  await m.session().login(binding, interactive);
+  for (const changed of [
+    { issuer: "https://other.example.test" },
+    { clientId: "synthetic-other" },
     { scopes: ["email", "profile"] },
-    { coreApiBaseUrl: "https://other.example.test" },
+    { coreApiTarget: "https://other-api.example.test" },
     { redirectUri: "http://127.0.0.1:49999/callback" },
   ]) {
-    const m = model();
-    await m.session().login(hosted);
     await assert.rejects(
-      m.session().authorize({ ...hosted, ...change }),
-      /login_changed/,
+      m.session().authorize({ ...binding, ...changed }),
+      reason("login_changed"),
     );
-    assert.equal(m.state.refreshes.length, 0);
-    assert.equal(m.state.opened, 1);
   }
-  const m = model();
-  const active = m.session();
-  await active.login(hosted);
-  m.state.subject = "synthetic-person-b";
-  await m.session().login(hosted, true);
-  await assert.rejects(active.authorize(hosted), /login_changed/);
-  assert.equal(m.state.opened, 2);
+  assert.equal(m.state.renewals.length, 0);
 });
 
-test("revoked, mismatched, or uncertain refresh fails closed without opening the browser", async () => {
-  for (const behavior of [
-    async () => {
-      throw new Error("refresh-secret-in-provider-error");
-    },
-    async () => ({
-      accessToken: "foreign-access",
-      refreshToken: "foreign-refresh",
-      subject: "foreign",
-      expiresInSeconds: 60,
-    }),
-  ]) {
-    const m = model();
-    await m.session().login(hosted);
-    m.deps.refreshGrant = behavior;
-    const result = await runProgram(
-      ["auth", "exec", "--", "child"],
-      program(m.session()),
-    );
-    assert.equal(result.exitCode, 3);
-    assert.match(result.stderr, /fonte auth login/);
-    assert.doesNotMatch(
-      JSON.stringify(result),
-      /refresh-secret|foreign-access|foreign-refresh/,
-    );
-    assert.equal(m.state.stored, null);
-    assert.equal(m.state.opened, 1);
-  }
-});
-
-test("missing login status and offline logout need neither browser nor project", async () => {
+test("pending login expires after process death and late completion cannot resurrect it", async () => {
   const m = model();
-  const absent = await runProgram(
-    ["auth", "status", "--json"],
-    program(m.session()),
-  );
-  assert.equal(absent.exitCode, 3);
-  assert.equal(JSON.parse(absent.stdout).state, "signed_out");
-  await m.session().login(hosted);
-  const session = m.session();
-  const result = await runProgram(
-    ["auth", "logout", "--json"],
-    program(session, {
-      auth: {
-        session,
-        fetch: async () => assert.fail("logout must not fetch discovery"),
+  const entered = deferred();
+  const release = deferred();
+  let attempt = 0;
+  m.state.loginHook = async ({ grant }) => {
+    attempt += 1;
+    if (attempt === 1)
+      return {
+        complete: async (commit) => {
+          entered.resolve();
+          await release.promise;
+          const candidate = grant();
+          await commit(candidate);
+          return candidate;
+        },
+      };
+    return {
+      complete: async (commit) => {
+        const candidate = grant();
+        await commit(candidate);
+        return candidate;
       },
-    }),
-  );
-  assert.equal(result.exitCode, 0);
-  assert.equal(m.state.stored, null);
-  assert.equal(m.state.opened, 1);
-});
-
-test("unavailable/corrupt store gives bounded recovery before browser or child", async () => {
-  for (const fault of ["unavailable", "corrupt"]) {
-    const m = model();
-    m.state.unavailable = fault === "unavailable";
-    m.state.stored = fault === "corrupt" ? "malformed-secret" : null;
-    const result = await runProgram(
-      ["auth", "exec", "--", "child"],
-      program(m.session()),
-    );
-    assert.equal(result.exitCode, 3);
-    assert.equal(m.state.opened, 0);
-    assert.match(result.stderr, /fonte auth login/);
-    assert.doesNotMatch(result.stderr, /malformed-secret/);
-  }
-});
-
-test("failed durable write does not display callback success or return a bearer", async () => {
-  const m = model();
-  m.deps.store.write = async () => {
-    throw new HostedTestBlockedError("secure_storage_unavailable");
+    };
   };
-  await assert.rejects(m.session().login(hosted), /secure_storage_unavailable/);
-  assert.equal(m.state.phases.includes("complete"), false);
-  assert.equal(m.state.stored, null);
+  const abandoned = m.session().login(binding, interactive);
+  await entered.promise;
+  m.state.now += 300_001;
+  await assert.rejects(
+    m.session().authorize(binding),
+    reason("login_required"),
+  );
+  await m.session().login(binding, interactive);
+  const replacement = structuredClone(m.state.record);
+  release.resolve();
+  await assert.rejects(abandoned, reason("login_changed"));
+  assert.deepEqual(m.state.record, replacement);
 });
 
-test("auth commands admit only their own flags and safe help", async () => {
+test("noninteractive login fails before storage or browser effects", async () => {
   const m = model();
-  for (const argv of [
-    ["auth", "status", "--switch-account"],
-    ["auth", "login", "--token", "secret"],
-    ["auth", "logout", "--json", "--json"],
-  ]) {
-    const result = await runProgram(argv, program(m.session()));
-    assert.equal(result.exitCode, 2);
-    assert.doesNotMatch(result.stdout + result.stderr, /secret/);
-  }
-  const help = await runProgram(
-    ["auth", "login", "--help"],
-    program(m.session()),
+  await assert.rejects(
+    m.session().login(binding, {
+      switchAccount: false,
+      interactive: false,
+    }),
+    reason("authorization_interaction_required"),
   );
-  assert.equal(help.exitCode, 0);
-  assert.match(help.stdout, /OS credential store/);
+  assert.equal(m.state.reads, 0);
   assert.equal(m.state.opened, 0);
 });
 
-test("a crash or failed cleanup after refresh leaves a marker that a new process cannot reuse", async () => {
-  const m = model();
-  await m.session().login(hosted);
-  let captured;
-  m.deps.refreshGrant = async () => {
-    captured = m.state.stored;
-    throw new Error("lost rotation response");
-  };
-  m.deps.store.remove = async () => {
-    throw new HostedTestBlockedError("secure_storage_unavailable");
-  };
-  await assert.rejects(
-    m.session().authorize(hosted),
-    /secure_storage_unavailable/,
-  );
-  assert.deepEqual(JSON.parse(captured), { version: 1, state: "refreshing" });
-  assert.equal(m.state.stored, captured);
-  m.deps.refreshGrant = async () =>
-    assert.fail("an interrupted refresh cannot be retried with its old token");
-  await assert.rejects(m.session().authorize(hosted), /login_invalid/);
-  assert.equal(m.state.opened, 1);
-});
-
-test("cancellation during durable login commit removes that login before returning", async () => {
-  const m = model();
-  const cancellation = new AbortController();
-  const write = m.deps.store.write;
-  m.deps.store.write = async (value) => {
-    await write(value);
-    cancellation.abort();
-  };
-  await assert.rejects(
-    m.session().login(hosted, false, cancellation.signal),
-    /authorization_cancelled/,
-  );
-  assert.equal(m.state.stored, null);
-  assert.equal(m.state.phases.includes("complete"), false);
-});
-
-test("serializing a live session exposes no credential state", async () => {
+test("status is local-only and serialization exposes no bearer or credential", async () => {
   const m = model();
   const session = m.session();
-  await session.login(hosted);
-  const serialized = JSON.stringify(session);
+  await session.login(binding, interactive);
+  const status = await m.session().status();
+  assert.equal(status.state, "ready");
+  assert.equal(status.serverCheck, "not_checked");
+  assert.equal(m.state.renewals.length, 0);
   assert.doesNotMatch(
-    serialized,
+    JSON.stringify(session),
     /access-|refresh-|synthetic-person|refreshToken/,
+  );
+  assert.throws(
+    () =>
+      parseSessionRecord({
+        ...m.state.record,
+        accessToken: "must-not-persist",
+      }),
+    reason("login_invalid"),
   );
 });
 
-test("credential storage latency cannot extend a bearer lifetime or complete an expired login", async () => {
-  for (const elapsed of [3_580_000, 3_600_001]) {
+test("invalid grant is revoked while identity mismatch is quarantined", async () => {
+  for (const outcome of [
+    {
+      tag: "rejected_invalid_grant",
+      reason: "invalid_grant",
+      exchangeSubmitted: true,
+      state: "revoked",
+      error: "login_revoked",
+    },
+    {
+      tag: "identity_mismatch",
+      reason: "subject_mismatch",
+      exchangeSubmitted: true,
+      state: "refresh_uncertain",
+      error: "login_changed",
+    },
+  ]) {
     const m = model();
-    let now = 0;
-    m.deps.now = () => now;
-    const write = m.deps.store.write;
-    m.deps.store.write = async (value) => {
-      await write(value);
-      now += elapsed;
+    await m.session().login(binding, interactive);
+    m.state.renewHook = async ({ beforeExchange }) => {
+      await beforeExchange();
+      return outcome;
     };
-    const session = m.session();
-    if (elapsed > 3_600_000) {
-      await assert.rejects(session.login(hosted), /login_invalid/);
-      assert.equal(m.state.stored, null);
-      assert.equal(m.state.phases.includes("complete"), false);
-    } else {
-      await session.login(hosted);
-      m.deps.store.write = write;
-      await session.authorize(hosted);
-      assert.equal(m.state.refreshes.length, 1);
-    }
+    await assert.rejects(m.session().authorize(binding), reason(outcome.error));
+    assert.equal(m.state.record.state, outcome.state);
+  }
+});
+
+test("a malformed tagged success is quarantined instead of leaving a replayable marker", async () => {
+  const m = model();
+  await m.session().login(binding, interactive);
+  m.state.renewHook = async ({ beforeExchange, grant }) => {
+    await beforeExchange();
+    return {
+      tag: "success",
+      exchangeSubmitted: true,
+      ...grant(),
+      expiresAt: Number.NaN,
+    };
+  };
+  await assert.rejects(
+    m.session().authorize(binding),
+    reason("login_refresh_uncertain"),
+  );
+  assert.equal(m.state.record.state, "refresh_uncertain");
+});
+
+test("submitted success without its marker is quarantined", async () => {
+  const m = model();
+  await m.session().login(binding, interactive);
+  m.state.renewHook = async ({ grant }) => ({
+    tag: "success",
+    exchangeSubmitted: true,
+    ...grant(),
+  });
+  await assert.rejects(
+    m.session().authorize(binding),
+    reason("login_refresh_uncertain"),
+  );
+  assert.equal(m.state.record.state, "refresh_uncertain");
+});
+
+test("generation overflow and malformed pending timestamps fail login_invalid", async () => {
+  const overflow = model();
+  await overflow.session().login(binding, interactive);
+  overflow.state.record.generation = Number.MAX_SAFE_INTEGER;
+  await assert.rejects(
+    overflow.session().authorize(binding),
+    reason("login_invalid"),
+  );
+  assert.equal(overflow.state.record.generation, Number.MAX_SAFE_INTEGER);
+
+  for (const expiresAt of [1_299_999, Number.NaN]) {
+    const malformed = model();
+    malformed.state.record = {
+      schema: "fonte.client_session.v1",
+      state: "login_pending",
+      binding,
+      loginId: "00000000-0000-4000-8000-000000000001",
+      epoch: "00000000-0000-4000-8000-000000000002",
+      generation: 0,
+      createdAt: 1_000_000,
+      expiresAt,
+    };
+    await assert.rejects(
+      malformed.session().authorize(binding),
+      reason("login_invalid"),
+    );
   }
 });

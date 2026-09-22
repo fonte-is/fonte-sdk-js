@@ -53,7 +53,9 @@ export class LoopbackLoginLock {
   }
 }
 
-const processLoginLock = new LoopbackLoginLock(49_672);
+export const CLIENT_AUTH_LOCK_PORT = 49_673;
+
+const processLoginLock = new LoopbackLoginLock(CLIENT_AUTH_LOCK_PORT);
 
 export function withLoginLock<T>(
   operation: () => Promise<T>,

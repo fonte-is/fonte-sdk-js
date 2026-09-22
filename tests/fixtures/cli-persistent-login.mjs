@@ -1,102 +1,147 @@
 import assert from "node:assert/strict";
-import { createPersistentLoginSession } from "../../packages/cli/dist/persistent-login.js";
+import { createClientAuthSession } from "../../packages/cli/dist/persistent-login.js";
 import { HostedTestBlockedError } from "../../packages/cli/dist/hosted-errors.js";
 
-export const hosted = {
-  schema: "fonte.cli.hosted_config.v1",
-  authorizationServer: "https://identity.example.test/auth/v1",
+export const binding = Object.freeze({
+  issuer: "https://identity.example.test/auth/v1",
   clientId: "synthetic-client",
-  coreApiBaseUrl: "https://api.example.test",
+  coreApiTarget: "https://api.example.test",
   redirectUri: "http://127.0.0.1:49671/callback",
-  scopes: ["email"],
-};
+  scopes: Object.freeze(["email"]),
+});
 
 export function model() {
   const state = {
-    stored: null,
+    record: null,
     opened: 0,
-    refreshes: [],
-    writes: [],
-    phases: [],
-    subject: "synthetic-person-a",
+    renewals: [],
+    replacements: [],
+    reads: 0,
+    now: 1_000_000,
     token: 0,
-    unavailable: false,
+    uuid: 0,
+    storeFault: null,
+    replaceHook: null,
+    renewHook: null,
+    loginHook: null,
   };
   let queue = Promise.resolve();
-  const tokens = () => ({
-    accessToken: `access-${++state.token}`,
-    refreshToken: `refresh-${state.token}`,
-    expiresInSeconds: 3600,
-    subject: state.subject,
-    scopes: ["email"],
-  });
+
+  const grant = (subject = "synthetic-person-a") => {
+    const number = ++state.token;
+    return {
+      accessToken: `access-${number}`,
+      refreshToken: `refresh-${number}`,
+      expiresAt: state.now + 3_600_000,
+      subject,
+      scopes: ["email"],
+    };
+  };
+
   const deps = {
-    store: {
-      read: async () => {
-        if (state.unavailable)
-          throw new HostedTestBlockedError("secure_storage_unavailable");
-        return state.stored;
-      },
-      write: async (value) => {
-        state.writes.push(value);
-        state.stored = value;
-      },
-      remove: async () => {
-        state.stored = null;
-      },
-    },
-    withLock: async (operation) => {
+    now: () => state.now,
+    randomUUID: () =>
+      `00000000-0000-4000-8000-${String(++state.uuid).padStart(12, "0")}`,
+    withLock: async (operation, signal) => {
       const prior = queue;
       let release;
       queue = new Promise((resolve) => {
         release = resolve;
       });
       await prior;
+      if (signal?.aborted) {
+        release();
+        throw new HostedTestBlockedError("login_busy");
+      }
       try {
         return await operation();
       } finally {
         release();
       }
     },
-    browser: {
-      prepare: async () => assert.fail("use persistent prepared grant"),
-      openBrowser: async () => {
-        state.opened++;
-        return true;
+    store: {
+      read: async () => {
+        state.reads += 1;
+        if (state.storeFault)
+          throw new HostedTestBlockedError(state.storeFault);
+        return clone(state.record);
       },
-      listenForOAuthCallback: async () => ({
-        callback: Promise.resolve(
-          new URL("http://127.0.0.1:49671/callback?code=synthetic&state=state"),
-        ),
-        transition: (phase) => state.phases.push(phase),
-        finish: (phase) => state.phases.push(phase),
-      }),
+      replace: async (record, options) => {
+        if (state.storeFault)
+          throw new HostedTestBlockedError(state.storeFault);
+        await state.replaceHook?.(record, options);
+        state.record = clone(record);
+        state.replacements.push(clone(record));
+      },
     },
-    prepareLogin: async () => ({
-      state: "state",
-      authorizationUrl: new URL("https://identity.example.test/authorize"),
-      exchange: async () => tokens(),
-    }),
-    refreshGrant: async (_hosted, refreshToken, subject) => {
-      state.refreshes.push(refreshToken);
-      assert.equal(subject, state.subject);
-      return tokens();
+    oauth: {
+      prepareExplicitLogin: async (actualBinding, switchAccount, signal) => {
+        assert.deepEqual(actualBinding, binding);
+        if (state.loginHook)
+          return state.loginHook({ switchAccount, signal, grant });
+        return {
+          complete: async (commit) => {
+            state.opened += 1;
+            const candidate = grant();
+            await commit(candidate);
+            return candidate;
+          },
+        };
+      },
+      renew: async (
+        actualBinding,
+        refreshToken,
+        subject,
+        { beforeExchange, signal },
+      ) => {
+        assert.deepEqual(actualBinding, binding);
+        state.renewals.push(refreshToken);
+        if (state.renewHook)
+          return state.renewHook({
+            refreshToken,
+            subject,
+            beforeExchange,
+            signal,
+            grant,
+          });
+        await beforeExchange();
+        return {
+          tag: "success",
+          exchangeSubmitted: true,
+          ...grant(subject),
+        };
+      },
     },
   };
-  return { state, deps, session: () => createPersistentLoginSession(deps) };
+
+  return {
+    state,
+    deps,
+    grant,
+    session: () => createClientAuthSession(deps),
+  };
 }
 
-export function program(session, additions = {}) {
-  return {
-    cwd: "/synthetic-unused",
-    randomUUID: () => assert.fail("auth creates no operation authority"),
-    runner: {},
-    auth: { session, fetch: async () => Response.json(hosted) },
-    authExec: {
-      fetch: async () => Response.json(hosted),
-      authorize: session.authorize,
-      spawn: async (_command, _args, token) => assert.match(token, /^access-/),
-    },
-    ...additions,
+export function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+export function reason(expected) {
+  return (error) => {
+    assert.ok(error instanceof HostedTestBlockedError);
+    assert.equal(error.reason, expected);
+    assert.equal(error.message, expected);
+    assert.equal(error.cause, undefined);
+    return true;
   };
+}
+
+function clone(value) {
+  return value === null ? null : structuredClone(value);
 }
