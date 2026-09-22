@@ -9,6 +9,9 @@ const surfaces = new Map([
   [
     "packages/core/dist/index.d.ts",
     [
+      "CollectBody",
+      "CollectionReceipt",
+      "CollectionPolicy",
       "Capture",
       "CaptureConfig",
       "CaptureDelivery",
@@ -23,6 +26,8 @@ const surfaces = new Map([
   [
     "packages/core/dist/server.d.ts",
     [
+      "CollectionReceipt",
+      "CollectionPolicy",
       "Client",
       "ClientConfig",
       "CollectBody",

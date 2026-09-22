@@ -13,6 +13,11 @@ test("Next server is the exact Core collection primitive", () => {
 });
 
 const validBody = {
+  schemaVersion: "fonte.acquisition.v1",
+  classifierVersion: "source.v2",
+  collectionVersion: "test-v1",
+  occurrenceId: "10000000-0000-4000-8000-000000000003",
+  occurredAt: "2026-09-17T12:00:00.000Z",
   eventId: "10000000-0000-4000-8000-000000000001",
   eventType: "source_touch",
   journeyId: "10000000-0000-4000-8000-000000000002",
@@ -112,7 +117,7 @@ test("Core source classification keeps each reported-signal branch explicit", ()
     },
     {
       scope: { fonte: "source-token" },
-      expected: ["unknown", "unknown", "fonte", "fonte_source_identity"],
+      expected: ["unknown", "unknown", "unknown", "fonte_source_identity"],
     },
     {
       scope: { utm_source: "newsletter", utm_medium: "email" },
@@ -136,7 +141,7 @@ test("Core source classification keeps each reported-signal branch explicit", ()
     },
     {
       scope: { current_url: "https://example.test/page" },
-      expected: ["direct", "direct", "direct", "direct_landing"],
+      expected: ["unknown", "unknown", "unknown", "no_referrer"],
     },
   ];
 
