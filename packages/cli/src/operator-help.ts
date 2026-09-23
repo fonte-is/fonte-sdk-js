@@ -1,6 +1,8 @@
 import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
 import { providerEvidenceHelpEntries } from "./operator-provider-evidence-help.js";
 import { workspaceMarketingSettingsHelpEntries } from "./operator-marketing-settings-help.js";
+import { CAMPAIGN_OPERATOR_HELP } from "./operator-campaign-help.js";
+import { SEGMENT_OPERATOR_HELP } from "./operator-segment-help.js";
 export interface HelpEntry {
   readonly command: readonly string[];
   readonly usage: readonly (readonly string[])[];
@@ -148,6 +150,8 @@ const entries: readonly HelpEntry[] = [
       "Previews a draft timeline using explicit assumed delivery acceptances; it never enrolls or sends.",
     json: true,
   },
+  ...metadataHelpEntries(CAMPAIGN_OPERATOR_HELP),
+  ...metadataHelpEntries(SEGMENT_OPERATOR_HELP),
   ...workspaceMarketingSettingsHelpEntries,
   {
     command: ["broadcast", "draft", "create"],
@@ -474,9 +478,32 @@ export function operatorRecoveryCommand(argv: readonly string[]): string {
   );
   return entry
     ? `fonte ${entry.command.join(" ")} --help`
-    : argv[0] === "broadcast" || argv[0] === "sequence"
+    : argv[0] === "broadcast" ||
+        argv[0] === "sequence" ||
+        argv[0] === "campaign" ||
+        argv[0] === "segment"
       ? `fonte ${argv[0]} --help`
       : "fonte --help";
+}
+
+function metadataHelpEntries(source: string): readonly HelpEntry[] {
+  return source.split("\n").map((line) => {
+    const [binary, group, operation, ...tokens] = line.trim().split(/\s+/u);
+    if (
+      binary !== "fonte" ||
+      !group ||
+      !operation ||
+      tokens.at(-1) !== "[--json]"
+    ) {
+      throw new Error("operator_metadata_help_invalid");
+    }
+    return {
+      command: [group, operation],
+      usage: [[tokens.slice(0, -1).join(" ")]],
+      detail: `Uses the existing Core ${group} metadata API.`,
+      json: true,
+    };
+  });
 }
 
 function render(entry: HelpEntry): string {

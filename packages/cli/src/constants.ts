@@ -64,6 +64,8 @@ export const USAGE_TEXT = [
   "  fonte broadcast <command> ... [--json]",
   "  fonte bridge <command> ... [--json]",
   "  fonte provider-evidence resend <command> ... --json",
+  "  fonte campaign <list|read|create|update|receipt> ... [--json]",
+  "  fonte segment <list|read|create|update|archive|restore|receipt> ... [--json]",
   "  fonte remove [--yes] [--json]",
   "  fonte --help",
   "  fonte --version",

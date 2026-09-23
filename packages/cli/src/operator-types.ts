@@ -49,11 +49,21 @@ import type {
   SequenceOperatorCommand,
   SequenceOperatorResult,
 } from "./operator-sequence-types.js";
+import type {
+  CampaignMetadataEnvelope,
+  CampaignOperatorCommand,
+} from "./operator-campaign-types.js";
+import type {
+  SegmentMetadataEnvelope,
+  SegmentOperatorCommand,
+} from "./operator-segment-types.js";
 
 export type OperatorCommand =
   | WorkspaceMarketingSettingsOperatorCommand
   | SequenceOperatorCommand
   | BroadcastSendInstructionOperatorCommand
+  | CampaignOperatorCommand
+  | SegmentOperatorCommand
   | {
       readonly kind: "broadcast_test_send";
       readonly workspace: string;
@@ -305,6 +315,11 @@ export type OperatorResult =
   | ProviderEvidenceCandidateGenerationResult
   | ProviderRotationResult;
 
+export type OperatorReceiptResult =
+  | OperatorResult
+  | (CampaignMetadataEnvelope & { readonly kind?: undefined })
+  | (SegmentMetadataEnvelope & { readonly kind?: undefined });
+
 export interface OperatorReceipt {
   readonly schema_version: "fonte.cli.operator_receipt.v1";
   readonly command: OperatorCommand["kind"];
@@ -329,6 +344,8 @@ export interface OperatorReceipt {
       | "fonte.core.workspace_marketing_settings.v1"
       | "fonte.core.sequence_authoring.v1"
       | "fonte.core.sequence_activation.v1"
+      | "fonte.core.campaign_configuration.v1"
+      | "fonte.core.native_segment.v1"
       | "fonte.core.provider_rotation_partition.v1"
       | "unavailable";
   };
@@ -342,5 +359,5 @@ export interface OperatorReceipt {
     | "copied"
     | "unknown";
   readonly next_action?: OperatorNextAction;
-  readonly result: OperatorResult | null;
+  readonly result: OperatorReceiptResult | null;
 }

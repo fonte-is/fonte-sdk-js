@@ -8,6 +8,7 @@ import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
 import {
   createDurableSequenceMcpSession,
   MCP_FONTE_ALLOWLIST,
+  MCP_FONTE_TOOLS,
 } from "../packages/cli/dist/mcp-sequence-server.js";
 import { createSequenceToolHandlers } from "../packages/cli/dist/mcp-sequence-tools.js";
 import {
@@ -319,6 +320,7 @@ test("real stdio initialize and tools/list need no login; tool calls reread inje
     listed.result.tools.map(({ name }) => name),
     MCP_FONTE_ALLOWLIST.tools,
   );
+  assert.deepEqual(MCP_FONTE_ALLOWLIST.tools, [...MCP_FONTE_TOOLS]);
   assert.equal(actual.stderr(), "");
   assertNoSecret(actual.output());
 

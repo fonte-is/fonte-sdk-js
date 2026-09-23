@@ -55,10 +55,7 @@ import {
   createMcpClientAuthProvider,
   type McpClientAuthOptions,
 } from "./mcp-client-auth.js";
-import {
-  MCP_SEQUENCE_TOOLS,
-  type SequenceMcpClientProvider,
-} from "./mcp-sequence-tools.js";
+import { MCP_SEQUENCE_TOOLS } from "./mcp-sequence-tools.js";
 import { registerMcpSequenceTools } from "./mcp-sequence-registration.js";
 import { createBroadcastDraftLifecycleClient } from "./operator-broadcast-draft-lifecycle-client.js";
 import { createBroadcastDraftRevisionClient } from "./operator-broadcast-draft-revision-client.js";
@@ -70,6 +67,16 @@ import { createBroadcastTargetingClient } from "./operator-broadcast-targeting-c
 import { createBroadcastSendInstructionClient } from "./operator-broadcast-send-instruction-client.js";
 import { createWorkspaceCatalogClient } from "./operator-workspace-catalog-client.js";
 import { createSequenceAuthoringClient } from "./operator-sequence-client.js";
+import { createCampaignMetadataClient } from "./operator-campaign-client.js";
+import { createSegmentMetadataClient } from "./operator-segment-client.js";
+import { MCP_CAMPAIGN_TOOLS } from "./mcp-campaign-tools.js";
+import { registerMcpCampaignTools } from "./mcp-campaign-registration.js";
+import { MCP_SEGMENT_TOOLS } from "./mcp-segment-tools.js";
+import { registerMcpSegmentTools } from "./mcp-segment-registration.js";
+import {
+  createCoreOperatorClientWithRequester,
+  type CoreOperatorClient,
+} from "./operator-client.js";
 
 export const MCP_SERVER_NAME = "fonte";
 export const MCP_SEQUENCE_ALLOWLIST = { tools: MCP_SEQUENCE_TOOLS } as const;
@@ -92,13 +99,14 @@ export const MCP_BROADCAST_TOOLS = [
   MCP_BROADCAST_HTML_PREPARE_TOOL,
   MCP_BROADCAST_HTML_REVISE_TOOL,
 ] as const;
-export const MCP_FONTE_ALLOWLIST = {
-  tools: [
-    MCP_WORKSPACE_LIST_TOOL,
-    ...MCP_SEQUENCE_TOOLS,
-    ...MCP_BROADCAST_TOOLS,
-  ],
-} as const;
+export const MCP_FONTE_TOOLS = [
+  MCP_WORKSPACE_LIST_TOOL,
+  ...MCP_SEQUENCE_TOOLS,
+  ...MCP_BROADCAST_TOOLS,
+  ...MCP_CAMPAIGN_TOOLS,
+  ...MCP_SEGMENT_TOOLS,
+] as const;
+export const MCP_FONTE_ALLOWLIST = { tools: MCP_FONTE_TOOLS } as const;
 
 export type SequenceMcpSessionOptions = McpClientAuthOptions;
 export interface FonteMcpClientProviders {
@@ -111,6 +119,8 @@ export interface FonteMcpClientProviders {
   readonly broadcastRenderTest: BroadcastRenderTestClientProvider;
   readonly broadcastSendInstruction: BroadcastSendInstructionClientProvider;
   readonly broadcastHtmlPreparation: BroadcastHtmlPreparationClientProvider;
+  readonly campaignMetadata: () => Promise<Awaited<ReturnType<typeof createCampaignMetadataClient>>>;
+  readonly segmentMetadata: () => Promise<Awaited<ReturnType<typeof createSegmentMetadataClient>>>;
 }
 
 /** Gives every domain client the same current-custody boundary and requester. */
@@ -151,28 +161,47 @@ export function createDurableFonteMcpSession(
       createBroadcastSendInstructionClient((await authenticated()).request),
     broadcastRenderTest: render,
     broadcastHtmlPreparation: async () => htmlPreparation,
+    campaignMetadata: async () =>
+      createCampaignMetadataClient((await authenticated()).request),
+    segmentMetadata: async () =>
+      createSegmentMetadataClient((await authenticated()).request),
   };
 }
+
+export type SequenceMcpSessionOptions = McpClientAuthOptions;
+export type FonteMcpClientProvider = () => Promise<CoreOperatorClient>;
 
 /** Rebuilds a bearer-bound client from current local custody at every tool boundary. */
 export function createDurableSequenceMcpSession(
   options: SequenceMcpSessionOptions,
-): SequenceMcpClientProvider {
-  return createDurableFonteMcpSession(options).sequence;
+): FonteMcpClientProvider {
+  const authenticated = createMcpClientAuthProvider(options);
+  return async () => {
+    const boundary = await authenticated();
+    return createCoreOperatorClientWithRequester(boundary.request);
+  };
 }
 
 /** Compatibility name for the original Sequence-only host factory. */
 export function createEphemeralSequenceMcpSession(
   options: SequenceMcpSessionOptions,
-): SequenceMcpClientProvider {
+): FonteMcpClientProvider {
   return createDurableSequenceMcpSession(options);
 }
 
 export function createFonteSequenceMcpServer(
-  clientProvider: SequenceMcpClientProvider,
+  clientProvider: FonteMcpClientProvider,
 ): McpServer {
   const server = mcpServer(sequenceInstructions);
   registerMcpSequenceTools(server, clientProvider);
+  registerMcpCampaignTools(
+    server,
+    async () => (await clientProvider()).campaignMetadata,
+  );
+  registerMcpSegmentTools(
+    server,
+    async () => (await clientProvider()).segmentMetadata,
+  );
   return server;
 }
 
@@ -201,6 +230,8 @@ export function createFonteMcpServer(
     server,
     providers.broadcastHtmlPreparation,
   );
+  registerMcpCampaignTools(server, providers.campaignMetadata);
+  registerMcpSegmentTools(server, providers.segmentMetadata);
   return server;
 }
 

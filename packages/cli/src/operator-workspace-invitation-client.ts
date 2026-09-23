@@ -1,5 +1,6 @@
 import {
   type CoreRequester,
+  type CoreReadOptions,
   CoreOperatorError,
   parseCoreReceipt,
 } from "./operator-core-request.js";
@@ -83,7 +84,9 @@ export interface WorkspaceInvitationClient {
   claimWorkspaceInvitation(
     input: WorkspaceInvitationClaimInput,
   ): Promise<WorkspaceInvitationClaimResult>;
-  listWorkspaceContexts(): Promise<readonly WorkspaceContextResult[]>;
+  listWorkspaceContexts(
+    options?: CoreReadOptions,
+  ): Promise<readonly WorkspaceContextResult[]>;
 }
 
 export function createWorkspaceInvitationClient(
@@ -157,10 +160,10 @@ export function createWorkspaceInvitationClient(
         "unknown",
       );
     },
-    async listWorkspaceContexts() {
+    async listWorkspaceContexts(options) {
       return parseCoreReceipt(
         parseWorkspaceContexts,
-        await request("/v1/workspaces"),
+        await request("/v1/workspaces", options),
       );
     },
   };

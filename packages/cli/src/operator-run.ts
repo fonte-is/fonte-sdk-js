@@ -49,10 +49,23 @@ import {
   isSequenceCommand,
   sequenceReceiptDescriptor,
 } from "./operator-sequence-run.js";
+import {
+  campaignFailureReceipt,
+  campaignReceiptDescriptor,
+  executeCampaignCommand,
+  isCampaignCommand,
+} from "./operator-campaign-run.js";
+import {
+  executeSegmentCommand,
+  isSegmentCommand,
+  segmentFailureReceipt,
+  segmentReceiptDescriptor,
+} from "./operator-segment-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
+  OperatorReceiptResult,
   OperatorResult,
   SandboxTestResult,
 } from "./operator-types.js";
@@ -105,6 +118,34 @@ export async function runOperatorCommand(
       fetch: dependencies.fetch as typeof fetch,
       signal: dependencies.signal,
     });
+    if (isCampaignCommand(command)) {
+      const result = await executeCampaignCommand(
+        command,
+        client.campaignMetadata,
+      );
+      const descriptor = campaignReceiptDescriptor(command, result);
+      return currentReceipt(
+        command,
+        result,
+        descriptor.outcome,
+        descriptor.reason,
+        descriptor.coreEffect,
+      );
+    }
+    if (isSegmentCommand(command)) {
+      const result = await executeSegmentCommand(
+        command,
+        client.segmentMetadata,
+      );
+      const descriptor = segmentReceiptDescriptor(command, result);
+      return currentReceipt(
+        command,
+        result,
+        descriptor.outcome,
+        descriptor.reason,
+        descriptor.coreEffect,
+      );
+    }
     const result = await execute(
       command,
       client,
@@ -117,6 +158,9 @@ export async function runOperatorCommand(
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
+    if (isCampaignCommand(command))
+      return campaignFailureReceipt(command, error);
+    if (isSegmentCommand(command)) return segmentFailureReceipt(command, error);
     return withAmbiguousSequenceRecovery(
       command,
       withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
@@ -378,7 +422,7 @@ function successReceipt(
 }
 function currentReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
-  result: OperatorResult,
+  result: OperatorReceiptResult,
   outcome: "queued" | "terminal" | "completed" | "blocked",
   reason: string,
   coreEffect:
@@ -420,12 +464,15 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id:
-      command.kind.startsWith("broadcast_send_") ||
-      command.kind === "broadcast_schedule" ||
-      command.kind === "broadcast_schedule_replace" ||
-      command.kind === "broadcast_spend_limit_increase"
-        ? "fonte.core.broadcast_send_instruction.v3"
+    contract_id: command.kind.startsWith("campaign_")
+      ? "fonte.core.campaign_configuration.v1"
+      : command.kind.startsWith("segment_")
+        ? "fonte.core.native_segment.v1"
+        : command.kind.startsWith("broadcast_send_") ||
+            command.kind === "broadcast_schedule" ||
+            command.kind === "broadcast_schedule_replace" ||
+            command.kind === "broadcast_spend_limit_increase"
+          ? "fonte.core.broadcast_send_instruction.v3"
         : command.kind === "sequence_activate"
           ? "fonte.core.sequence_activation.v1"
           : command.kind.startsWith("sequence_")
