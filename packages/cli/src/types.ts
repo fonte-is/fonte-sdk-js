@@ -190,8 +190,17 @@ export type AuthNextAction =
   | { readonly kind: "login"; readonly command: "fonte auth login" }
   | { readonly kind: "retry"; readonly target: "original_command" }
   | { readonly kind: "unlock_credential_store" }
+  | {
+      readonly kind: "select_user_private_store";
+      readonly command: "fonte auth login";
+    }
   | { readonly kind: "use_supported_credential_environment" }
   | null;
+
+export interface AuthStorageInfo {
+  readonly backend: "native_secure_store" | "user_private_file" | null;
+  readonly status: "available" | "unavailable" | "misconfigured";
+}
 
 export interface AuthReceipt {
   readonly schema_version: "fonte.cli.auth.v2";
@@ -215,6 +224,7 @@ export interface AuthReceipt {
   readonly local_logout: "cleared" | "already_signed_out" | "failed" | null;
   readonly remote_revocation: "revoked" | "unsupported" | "unavailable" | null;
   readonly next_action: AuthNextAction;
+  readonly storage?: AuthStorageInfo;
 }
 
 export type AnyCliReceipt =

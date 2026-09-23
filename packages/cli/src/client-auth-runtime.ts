@@ -11,6 +11,10 @@ import type {
   SessionStatus,
   TokenHandle,
 } from "./client-auth-types.js";
+import {
+  ClientAuthStoreSelector,
+  type AuthStorageInfo,
+} from "./credential-store/store-selection.js";
 import { loadHostedConfig, type HostedConfig } from "./hosted-config.js";
 import { HostedTestBlockedError } from "./hosted-errors.js";
 import { withLoginLock } from "./login-lock.js";
@@ -32,6 +36,8 @@ export interface ClientAuthRuntimeDependencies {
   readonly session?: ClientAuthSessionApi;
   readonly browser?: BrowserAuthorizationDependencies;
   readonly store?: ClientAuthDependencies["store"];
+  readonly storageSelection?: ClientAuthStoreSelector;
+  readonly chooseFileStore?: () => Promise<boolean>;
   readonly oauth?: ClientAuthOAuth;
   readonly withLock?: ClientAuthDependencies["withLock"];
   readonly now?: () => number;
@@ -50,9 +56,12 @@ export class ClientAuthRuntime {
   readonly #fetch: typeof fetch;
   readonly #configUrl?: string;
   readonly #session: ClientAuthSessionApi;
+  readonly #storageSelection: ClientAuthStoreSelector | undefined;
+  readonly #chooseFileStore: (() => Promise<boolean>) | undefined;
   readonly #noninteractiveValue: () => string | undefined;
   #lastHandle: TokenHandle | undefined;
   #custody: boolean | null = null;
+  #loginBrowserStarted = false;
 
   constructor(dependencies: ClientAuthRuntimeDependencies) {
     this.#fetch = dependencies.fetch;
@@ -60,13 +69,26 @@ export class ClientAuthRuntime {
     this.#noninteractiveValue =
       dependencies.noninteractiveValue ??
       (() => process.env.FONTE_NONINTERACTIVE);
+    this.#storageSelection =
+      dependencies.storageSelection ??
+      (!dependencies.session && !dependencies.store
+        ? new ClientAuthStoreSelector()
+        : undefined);
+    this.#chooseFileStore = dependencies.chooseFileStore;
     const now = dependencies.now ?? Date.now;
     const browser = dependencies.browser ?? productionDependencies;
     this.#session =
       dependencies.session ??
       createClientAuthSession({
-        store: dependencies.store ?? createOperatingSystemLoginStore(),
-        oauth: dependencies.oauth ?? createOAuthAdapter(browser, now),
+        store:
+          dependencies.store ??
+          this.#storageSelection ??
+          createOperatingSystemLoginStore(),
+        oauth:
+          dependencies.oauth ??
+          createOAuthAdapter(browser, now, () => {
+            this.#loginBrowserStarted = true;
+          }),
         withLock: dependencies.withLock ?? withLoginLock,
         now,
         randomUUID: dependencies.randomUUID,
@@ -81,13 +103,44 @@ export class ClientAuthRuntime {
     if (noninteractive) throw blocked("authorization_interaction_required");
     const hosted = await this.#loadHosted();
     const binding = clientAuthBinding(hosted);
-    const before = await this.#session.status({ signal });
     try {
-      const handle = await this.#session.login(binding, {
-        switchAccount,
-        interactive: true,
-        signal,
-      });
+      this.#loginBrowserStarted = false;
+      let before: SessionStatus | undefined;
+      try {
+        before = await this.#session.status({ signal });
+      } catch (error) {
+        if (!(await this.#selectFileAfterNativeFailure(error))) throw error;
+        before = await this.#session.status({ signal });
+      }
+      if (
+        this.#storageSelection &&
+        (await this.#storageSelection.selectedBackend()) === "native"
+      ) {
+        await this.#storageSelection.selectBackend("native");
+      }
+
+      let handle: TokenHandle;
+      try {
+        handle = await this.#session.login(binding, {
+          switchAccount,
+          interactive: true,
+          signal,
+        });
+      } catch (error) {
+        const safeToOffer =
+          switchAccount ||
+          before?.state === "absent" ||
+          before?.state === "signed_out" ||
+          before?.state === "login_pending_expired";
+        if (!safeToOffer || !(await this.#selectFileAfterNativeFailure(error)))
+          throw error;
+        before = await this.#session.status({ signal });
+        handle = await this.#session.login(binding, {
+          switchAccount,
+          interactive: true,
+          signal,
+        });
+      }
       const status = await this.#session.status({ signal });
       this.#lastHandle = handle;
       this.#custody = true;
@@ -95,8 +148,8 @@ export class ClientAuthRuntime {
         handle,
         status,
         serverCheck:
-          before.epoch === handle.epoch &&
-          before.generation === handle.generation
+          before?.epoch === handle.epoch &&
+          before?.generation === handle.generation
             ? "not_checked"
             : "token_issued",
       };
@@ -116,6 +169,10 @@ export class ClientAuthRuntime {
       this.#observeFailure(error);
       throw error;
     }
+  }
+
+  async storageInfo(): Promise<AuthStorageInfo | undefined> {
+    return this.#storageSelection?.storageInfo();
   }
 
   async logout(signal?: AbortSignal) {
@@ -168,6 +225,21 @@ export class ClientAuthRuntime {
     return loadHostedConfig(this.#fetch, this.#configUrl);
   }
 
+  async #selectFileAfterNativeFailure(error: unknown): Promise<boolean> {
+    if (
+      !this.#storageSelection ||
+      !this.#chooseFileStore ||
+      this.#loginBrowserStarted ||
+      !(error instanceof HostedTestBlockedError) ||
+      error.reason !== "secure_storage_unavailable" ||
+      (await this.#storageSelection.selectedBackend()) !== "native"
+    )
+      return false;
+    if (!(await this.#chooseFileStore())) return false;
+    await this.#storageSelection.selectBackend("file");
+    return true;
+  }
+
   #noninteractive(): boolean {
     const value = this.#noninteractiveValue();
     if (value !== undefined && value !== "1")
@@ -203,12 +275,14 @@ export function createClientAuthRuntime(
 function createOAuthAdapter(
   browser: BrowserAuthorizationDependencies,
   now: () => number,
+  onAuthorizationStart: () => void,
 ): ClientAuthOAuth {
   return {
     prepareExplicitLogin: async (binding, switchAccount, signal) => ({
       complete: async (commit) => {
         const hosted = bindingToHosted(binding);
         let accepted: LoginGrant | undefined;
+        onAuthorizationStart();
         const result = await authorizeGrantWithBrowser(
           hosted,
           { signal },

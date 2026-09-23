@@ -3,10 +3,17 @@ import type { SessionStatus } from "./client-auth-types.js";
 import { EXECUTION_ERROR_TEXT } from "./constants.js";
 import { HostedTestBlockedError } from "./hosted-errors.js";
 import type { CommandResult } from "./runtime-types.js";
-import type { AuthNextAction, AuthReason, AuthReceipt } from "./types.js";
+import type {
+  AuthNextAction,
+  AuthReason,
+  AuthReceipt,
+  AuthStorageInfo,
+} from "./types.js";
 
 export interface AuthCommandDependencies {
-  session: Pick<ClientAuthRuntime, "login" | "status" | "logout">;
+  session: Pick<ClientAuthRuntime, "login" | "status" | "logout"> & {
+    storageInfo?: () => Promise<AuthStorageInfo | undefined>;
+  };
   signal?: AbortSignal;
 }
 
@@ -17,7 +24,8 @@ export const AUTH_HELP_TEXT = [
   "  fonte auth logout [--json]",
   "  fonte auth exec -- <command> [args...]",
   "",
-  "Sign in once; later commands refresh silently using the OS credential store.",
+  "Sign in once; later commands reuse the selected credential store and refresh silently.",
+  "If native storage is unavailable, interactive login can select a private per-user file.",
   "login --switch-account replaces the one active Fonte sign-in.",
   "status reads local custody without contacting Fonte. logout clears local custody.",
   "Logout cannot revoke already issued tokens or sessions on other installations.",
@@ -76,6 +84,8 @@ export async function runAuthCommand(
     }
     receipt = failureReceipt(action, error);
   }
+  const storage = await deps.session.storageInfo?.();
+  if (storage) receipt = { ...receipt, storage };
   return {
     exitCode: receipt.outcome === "completed" ? 0 : 3,
     stdout: json ? `${JSON.stringify(receipt)}\n` : renderAuthHuman(receipt),
@@ -92,7 +102,7 @@ export function loginRecovery(error: unknown): string {
   if (reason === "secure_storage_interaction_required")
     return "Unlock the OS credential store, then retry this command.\n";
   if (reason === "secure_storage_unavailable")
-    return "Fonte cannot use secure credential storage in this environment.\n";
+    return "Fonte cannot use the selected credential store here. Run fonte auth login interactively to choose a supported store.\n";
   if (reason === "login_busy")
     return "Another Fonte login operation is running. Wait for it to finish, then retry.\n";
   if (reason === "login_refresh_unavailable")
@@ -185,7 +195,8 @@ function failureReceipt(
     });
   if (reason === "secure_storage_unavailable")
     return blockedReceipt(action, "unavailable", reason, {
-      kind: "use_supported_credential_environment",
+      kind: "select_user_private_store",
+      command: "fonte auth login",
     });
   if (
     reason === "login_refresh_unavailable" ||
@@ -279,6 +290,8 @@ function humanNext(action: AuthNextAction): string {
   if (action.kind === "retry") return "Retry the original command.";
   if (action.kind === "unlock_credential_store")
     return "Unlock the OS credential store and retry.";
+  if (action.kind === "select_user_private_store")
+    return `Run ${action.command} interactively and select the private per-user file store.`;
   return "Use an environment with a supported secure credential store.";
 }
 

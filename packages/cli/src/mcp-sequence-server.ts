@@ -42,7 +42,7 @@ export function createFonteSequenceMcpServer(
     { name: MCP_SERVER_NAME, version: CLI_VERSION },
     {
       instructions:
-        "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the current local Fonte customer session; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the credential store and retry; for secure_storage_unavailable, use a supported credential environment. This server cannot enroll, send, deliver, or manage recipients.",
+        "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the selected local Fonte credential store; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the credential store selected by Fonte and retry. For secure_storage_unavailable, choose a supported store during interactive fonte auth login, then restart MCP. MCP never prompts or changes stores. This server cannot enroll, send, deliver, or manage recipients.",
     },
   );
   registerMcpSequenceTools(server, clientProvider);

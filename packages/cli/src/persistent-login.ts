@@ -206,6 +206,7 @@ class ClientAuthSession {
           generation: nextGeneration(current),
         };
         await this.#replace(signedOut, true, options.signal);
+        await this.#deps.store.clearSession?.();
         this.#memory = undefined;
         this.#identity = undefined;
         return {

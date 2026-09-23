@@ -72,6 +72,8 @@ export interface ClientAuthStore {
       readonly signal?: AbortSignal;
     },
   ): Promise<void>;
+  /** Optional final removal for stores whose logout contract deletes a file. */
+  clearSession?(): Promise<void>;
 }
 
 export interface LoginGrant {

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { realpath } from "node:fs/promises";
 
 import { runAuthCommand } from "../packages/cli/dist/auth-commands.js";
 import { createClientAuthRuntime } from "../packages/cli/dist/client-auth-runtime.js";
 import { CLIENT_SESSION_SCHEMA } from "../packages/cli/dist/client-auth-types.js";
+import { ClientAuthStoreSelector } from "../packages/cli/dist/credential-store/store-selection.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
@@ -136,7 +141,7 @@ test("offline status maps every local lifecycle state without discovery or renew
 test("typed custody failures select bounded recovery without raw diagnostics", async () => {
   const cases = [
     ["secure_storage_interaction_required", "unlock_credential_store"],
-    ["secure_storage_unavailable", "use_supported_credential_environment"],
+    ["secure_storage_unavailable", "select_user_private_store"],
     ["login_refresh_unavailable", "retry"],
     ["login_refresh_uncertain", "login"],
     ["login_invalid", "login"],
@@ -161,6 +166,168 @@ test("typed custody failures select bounded recovery without raw diagnostics", a
   assert.equal(failedLogout.exitCode, 3);
   assert.equal(failedLogout.receipt.local_logout, "failed");
   assert.equal(failedLogout.receipt.remote_revocation, "unsupported");
+});
+
+test("interactive login selects file storage once after native custody is unavailable", async () => {
+  const directory = await privateTempDirectory();
+  let nativeReads = 0;
+  let prompts = 0;
+  let browserAuthorizations = 0;
+  const selector = new ClientAuthStoreSelector({
+    directory,
+    nativeStore: {
+      read: async () => {
+        nativeReads += 1;
+        throw new HostedTestBlockedError("secure_storage_unavailable");
+      },
+      replace: async () => {
+        throw new HostedTestBlockedError("secure_storage_unavailable");
+      },
+    },
+  });
+  const runtime = createClientAuthRuntime({
+    fetch: async () => json(config),
+    storageSelection: selector,
+    chooseFileStore: async () => {
+      prompts += 1;
+      return true;
+    },
+    oauth: {
+      prepareExplicitLogin: async () => {
+        browserAuthorizations += 1;
+        return {
+          complete: async (commit) => {
+            const grant = {
+              accessToken: "synthetic-access-token",
+              refreshToken: "synthetic-refresh-token",
+              subject: "synthetic-subject",
+              scopes: ["email"],
+              expiresAt: Date.now() + 3_600_000,
+            };
+            await commit(grant);
+            return grant;
+          },
+        };
+      },
+      renew: async () => assert.fail("fresh session must not refresh"),
+    },
+    withLock: async (operation) => operation(),
+  });
+
+  const login = await runtime.login(false);
+  assert.equal(login.status.state, "ready");
+  assert.equal(prompts, 1);
+  assert.equal(browserAuthorizations, 1);
+  assert.equal(nativeReads, 1);
+  assert.deepEqual(await runtime.storageInfo(), {
+    backend: "user_private_file",
+    status: "available",
+  });
+  const choice = await readFile(
+    join(directory, "storage-choice.v1.json"),
+    "utf8",
+  );
+  assert.deepEqual(JSON.parse(choice), {
+    backend: "file",
+    schema: "fonte.auth_storage_choice.v1",
+  });
+  assert.equal(choice.includes("synthetic-refresh-token"), false);
+
+  const recoveredStatus = await runAuthCommand("status", false, true, {
+    session: runtime,
+  });
+  assert.deepEqual(JSON.parse(recoveredStatus.stdout).storage, {
+    backend: "user_private_file",
+    status: "available",
+  });
+  assert.equal(
+    recoveredStatus.stdout.includes("synthetic-refresh-token"),
+    false,
+  );
+  assert.equal(
+    recoveredStatus.stderr.includes("synthetic-refresh-token"),
+    false,
+  );
+
+  let routineNativeReads = 0;
+  let routinePrompts = 0;
+  let routineRefreshes = 0;
+  const restarted = createClientAuthRuntime({
+    fetch: async () => json(config),
+    storageSelection: new ClientAuthStoreSelector({
+      directory,
+      nativeStore: {
+        read: async () => {
+          routineNativeReads += 1;
+          throw new HostedTestBlockedError("secure_storage_unavailable");
+        },
+        replace: async () => assert.fail("selected file store must be used"),
+      },
+    }),
+    chooseFileStore: async () => {
+      routinePrompts += 1;
+      return assert.fail("routine commands never prompt");
+    },
+    oauth: {
+      prepareExplicitLogin: async () =>
+        assert.fail("routine commands never log in"),
+      renew: async (targetBinding, _refreshToken, subject, options) => {
+        routineRefreshes += 1;
+        await options.beforeExchange();
+        return {
+          tag: "success",
+          exchangeSubmitted: true,
+          accessToken: "synthetic-refreshed-access-token",
+          refreshToken: "synthetic-refresh-after-restart",
+          subject,
+          scopes: targetBinding.scopes,
+          expiresAt: Date.now() + 3_600_000,
+        };
+      },
+    },
+    withLock: async (operation) => operation(),
+    noninteractiveValue: () => "1",
+  });
+  const accessToken = await restarted.authorize(config);
+  assert.equal(accessToken, "synthetic-refreshed-access-token");
+  assert.equal(routineRefreshes, 1);
+  assert.equal(routineNativeReads, 0);
+  assert.equal(routinePrompts, 0);
+  const logoutter = createClientAuthRuntime({
+    fetch: async () => json(config),
+    storageSelection: new ClientAuthStoreSelector({ directory }),
+    oauth: {
+      prepareExplicitLogin: async () => assert.fail("logout must not log in"),
+      renew: async () => assert.fail("logout must not refresh"),
+    },
+    withLock: async (operation) => operation(),
+  });
+  await logoutter.logout();
+  await assert.rejects(
+    restarted.authorize(config),
+    (error) =>
+      error instanceof HostedTestBlockedError &&
+      error.reason === "login_required",
+  );
+  assert.equal(
+    await readFile(join(directory, "session.v1.json")).then(
+      () => true,
+      () => false,
+    ),
+    false,
+  );
+  assert.equal(
+    await readFile(join(directory, "storage-choice.v1.json"), "utf8").then(
+      (text) => text.includes("synthetic-refresh-token"),
+    ),
+    false,
+  );
+  assert.equal(
+    await readFile(join(directory, "storage-choice.v1.json"), "utf8").then(
+      (text) => text.includes("synthetic-refresh-after-restart"),
+    ),
+    false,
+  );
 });
 
 test("unexpected auth failures use the execution exit without a misleading receipt", async () => {
@@ -333,4 +500,8 @@ function json(body) {
   return new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json" },
   });
+}
+
+async function privateTempDirectory() {
+  return mkdtemp(join(await realpath(tmpdir()), "fonte-cli-private-store-"));
 }

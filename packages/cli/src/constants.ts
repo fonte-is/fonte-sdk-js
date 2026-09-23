@@ -76,7 +76,7 @@ export const HELP_TEXT = [
   USAGE_TEXT.trimEnd(),
   "",
   "init and remove print a plan unless --yes is supplied.",
-  "auth login signs in once using your OS credential store; auth logout signs out.",
+  "auth login signs in once and selects a credential store; auth logout signs out.",
   "Later commands refresh silently. Core checks permission for every action.",
   "test requests one sandbox provider proof.",
   "auth exec runs one bearer-bound child using your Fonte sign-in.",

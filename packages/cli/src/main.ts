@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { createInterface } from "node:readline/promises";
 import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
 import { createClientAuthRuntime } from "./client-auth-runtime.js";
@@ -23,6 +24,21 @@ if (handleSignals) {
 const login = createClientAuthRuntime({
   fetch: globalThis.fetch,
   configUrl: process.env.FONTE_CLI_CONFIG_URL,
+  chooseFileStore: async () => {
+    if (!process.stdin.isTTY || !process.stderr.isTTY) return false;
+    const prompt = createInterface({
+      input: process.stdin,
+      output: process.stderr,
+    });
+    try {
+      const answer = await prompt.question(
+        "Native credential storage is unavailable in this process. Use the per-user Fonte session file instead? Its permissions protect it from other OS users, not other processes running as you. [y/N] ",
+      );
+      return /^(y|yes)$/i.test(answer.trim());
+    } finally {
+      prompt.close();
+    }
+  },
   withLock: async (operation, signal) => {
     if (!handleSignals) {
       process.once("SIGINT", cancel);
