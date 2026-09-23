@@ -7,6 +7,8 @@ import { parseProviderEvidenceArguments } from "./operator-provider-evidence-arg
 import { parseProviderRotationArguments } from "./operator-provider-rotation-arguments.js";
 import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import { parseSequenceOperatorArguments } from "./operator-sequence-arguments.js";
+import { parseCampaignOperatorArguments } from "./operator-campaign-arguments.js";
+import { parseSegmentOperatorArguments } from "./operator-segment-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
 const missingBroadcast = new Set([
@@ -37,6 +39,10 @@ const bridgeDeclarations = new Set([
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const campaign = parseCampaignOperatorArguments(argv);
+  if (campaign) return campaign;
+  const segment = parseSegmentOperatorArguments(argv);
+  if (segment) return segment;
   const sequence = parseSequenceOperatorArguments(argv);
   if (sequence) return sequence;
   const marketingSettings = parseWorkspaceMarketingSettingsArguments(argv);

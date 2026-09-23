@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { MCP_SEQUENCE_TOOLS } from "../packages/cli/dist/mcp-sequence-tools.js";
+import {
+  MCP_FONTE_ALLOWLIST,
+  MCP_FONTE_TOOLS,
+} from "../packages/cli/dist/mcp-sequence-server.js";
 import { MCP_CAMPAIGN_TOOLS } from "../packages/cli/dist/mcp-campaign-tools.js";
 import { MCP_SEGMENT_TOOLS } from "../packages/cli/dist/mcp-segment-tools.js";
 import { createCampaignToolHandlers } from "../packages/cli/dist/mcp-campaign-tools.js";
@@ -53,6 +57,8 @@ test("metadata tools register beside the existing Sequence tools on one live std
       names.filter((name) => MCP_SEGMENT_TOOLS.includes(name)),
       [...MCP_SEGMENT_TOOLS],
     );
+    assert.deepEqual(names, [...MCP_FONTE_TOOLS]);
+    assert.deepEqual(MCP_FONTE_ALLOWLIST, { tools: MCP_FONTE_TOOLS });
     assert.equal(new Set(names).size, names.length);
     assert.equal(names.length, 20);
     const campaignCreate = tools.find(

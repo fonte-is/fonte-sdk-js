@@ -168,7 +168,7 @@ test("Campaign list keeps same-name IDs distinct and sends the exact scoped page
     calls[0].path,
     "/v1/workspaces/acme-workspace/campaign-configurations?environment=sandbox&limit=25&includeArchived=true&cursor=page%2Fone",
   );
-  assert.equal(calls[0].options, undefined);
+  assert.deepEqual(calls[0].options, { timeoutMs: 10_000 });
 });
 
 test("Campaign create and update preserve exact Core methods, IDs, and full update content", async () => {
@@ -264,7 +264,7 @@ test("Campaign receipt recovery reads once and returns the receipt revision rath
     calls[1].path,
     `/v1/workspaces/acme-workspace/campaign-configurations/commands/${operationId}?environment=sandbox`,
   );
-  assert.equal(calls[1].options, undefined);
+  assert.deepEqual(calls[1].options, { timeoutMs: 10_000 });
 });
 
 test("Campaign receipt 404 race retains unknown effect and the exact next action without resubmitting", async () => {

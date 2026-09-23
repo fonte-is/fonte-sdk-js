@@ -25,16 +25,20 @@ export function renderBlockedOperator(receipt: OperatorReceipt): string {
   return [
     receipt.command.startsWith("provider_evidence_")
       ? "Fonte provider evidence operation could not continue."
-      : receipt.command.startsWith("bridge_provider_rotation_")
-        ? "Fonte Bridge rotation operation could not continue."
-        : receipt.command.startsWith("bridge_")
-          ? "Fonte Bridge operation could not continue."
-          : receipt.command === "broadcast_preflight"
-            ? "Fonte broadcast preflight could not be observed."
-            : receipt.command === "broadcast_test_send" ||
-                receipt.command === "broadcast_test_status"
-              ? "Fonte sandbox test could not continue."
-              : "Fonte production broadcast operation could not continue.",
+      : receipt.command.startsWith("campaign_")
+        ? "Fonte Campaign metadata operation could not continue."
+        : receipt.command.startsWith("segment_")
+          ? "Fonte Segment metadata operation could not continue."
+          : receipt.command.startsWith("bridge_provider_rotation_")
+            ? "Fonte Bridge rotation operation could not continue."
+            : receipt.command.startsWith("bridge_")
+              ? "Fonte Bridge operation could not continue."
+              : receipt.command === "broadcast_preflight"
+                ? "Fonte broadcast preflight could not be observed."
+                : receipt.command === "broadcast_test_send" ||
+                    receipt.command === "broadcast_test_status"
+                  ? "Fonte sandbox test could not continue."
+                  : "Fonte production broadcast operation could not continue.",
     ...(receipt.command === "broadcast_preflight"
       ? ["Readiness: unknown."]
       : []),

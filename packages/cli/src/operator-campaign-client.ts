@@ -48,7 +48,9 @@ export type CampaignWorkspaceContexts = () => Promise<
 export function createCampaignMetadataClient(
   request: CoreRequester,
   listWorkspaceContexts: CampaignWorkspaceContexts = () =>
-    createWorkspaceInvitationClient(request).listWorkspaceContexts(),
+    createWorkspaceInvitationClient(request).listWorkspaceContexts({
+      timeoutMs: CAMPAIGN_SEGMENT_REQUEST_TIMEOUT_MS,
+    }),
   signal?: AbortSignal,
 ): CampaignMetadataClient {
   async function resolveScope(input: {
@@ -87,7 +89,9 @@ export function createCampaignMetadataClient(
     campaignId?: string,
   ): Promise<CampaignCommandEnvelope> {
     return parseCampaignCommand(
-      await request(receiptPath(scope, operationId)),
+      await request(receiptPath(scope, operationId), {
+        timeoutMs: CAMPAIGN_SEGMENT_REQUEST_TIMEOUT_MS,
+      }),
       { tenantId: scope.workspaceId, environment: scope.environment },
       operationId,
       campaignId,
@@ -117,16 +121,23 @@ export function createCampaignMetadataClient(
     async list(input) {
       validateCampaignPageInput(input);
       const scope = await resolveScope(input);
-      return parseCampaignList(await request(listPath(scope, input)), {
-        tenantId: scope.workspaceId,
-        environment: scope.environment,
-      });
+      return parseCampaignList(
+        await request(listPath(scope, input), {
+          timeoutMs: CAMPAIGN_SEGMENT_REQUEST_TIMEOUT_MS,
+        }),
+        {
+          tenantId: scope.workspaceId,
+          environment: scope.environment,
+        },
+      );
     },
     async read(input) {
       validateCampaignFields({ campaignId: input.campaignId }, "read");
       const scope = await resolveScope(input);
       return parseCampaignRead(
-        await request(itemPath(scope, input.campaignId)),
+        await request(itemPath(scope, input.campaignId), {
+          timeoutMs: CAMPAIGN_SEGMENT_REQUEST_TIMEOUT_MS,
+        }),
         { tenantId: scope.workspaceId, environment: scope.environment },
         input.campaignId,
       );

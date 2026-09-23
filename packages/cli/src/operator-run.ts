@@ -44,10 +44,23 @@ import {
   isSequenceCommand,
   sequenceReceiptDescriptor,
 } from "./operator-sequence-run.js";
+import {
+  campaignFailureReceipt,
+  campaignReceiptDescriptor,
+  executeCampaignCommand,
+  isCampaignCommand,
+} from "./operator-campaign-run.js";
+import {
+  executeSegmentCommand,
+  isSegmentCommand,
+  segmentFailureReceipt,
+  segmentReceiptDescriptor,
+} from "./operator-segment-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
+  OperatorReceiptResult,
   OperatorResult,
   SandboxTestResult,
 } from "./operator-types.js";
@@ -100,6 +113,34 @@ export async function runOperatorCommand(
       fetch: dependencies.fetch as typeof fetch,
       signal: dependencies.signal,
     });
+    if (isCampaignCommand(command)) {
+      const result = await executeCampaignCommand(
+        command,
+        client.campaignMetadata,
+      );
+      const descriptor = campaignReceiptDescriptor(command, result);
+      return currentReceipt(
+        command,
+        result,
+        descriptor.outcome,
+        descriptor.reason,
+        descriptor.coreEffect,
+      );
+    }
+    if (isSegmentCommand(command)) {
+      const result = await executeSegmentCommand(
+        command,
+        client.segmentMetadata,
+      );
+      const descriptor = segmentReceiptDescriptor(command, result);
+      return currentReceipt(
+        command,
+        result,
+        descriptor.outcome,
+        descriptor.reason,
+        descriptor.coreEffect,
+      );
+    }
     const result = await execute(
       command,
       client,
@@ -112,6 +153,9 @@ export async function runOperatorCommand(
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
+    if (isCampaignCommand(command))
+      return campaignFailureReceipt(command, error);
+    if (isSegmentCommand(command)) return segmentFailureReceipt(command, error);
     return withAmbiguousSequenceRecovery(
       command,
       withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
@@ -359,7 +403,7 @@ function successReceipt(
 }
 function currentReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
-  result: OperatorResult,
+  result: OperatorReceiptResult,
   outcome: "queued" | "terminal" | "completed" | "blocked",
   reason: string,
   coreEffect:
@@ -401,36 +445,40 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind === "sequence_activate"
-      ? "fonte.core.sequence_activation.v1"
-      : command.kind.startsWith("sequence_")
-        ? "fonte.core.sequence_authoring.v1"
-      : command.kind === "workspace_marketing_settings_read"
-        ? "fonte.core.workspace_marketing_settings.v1"
-        : command.kind === "broadcast_preflight"
-          ? "fonte.core.broadcast_preflight.v1"
-          : command.kind === "broadcast_audience_append"
-            ? "fonte.core.production_broadcast_audience_append.v1"
-            : command.kind.startsWith("broadcast_") &&
-                command.kind !== "broadcast_test_send" &&
-                command.kind !== "broadcast_test_status"
-              ? "fonte.core.production_broadcast.v1"
-              : command.kind === "bridge_contact_import_status"
-                ? "fonte.core.contact_import.v1"
-                : command.kind.startsWith("bridge_provider_placement_")
-                  ? "fonte.core.provider_placement_application.v1"
-                  : command.kind.startsWith("bridge_provider_rotation_")
-                    ? "fonte.core.provider_rotation_partition.v1"
-                    : command.kind.startsWith("bridge_resend_")
-                      ? "fonte.core.resend_bridge.v1"
-                      : command.kind.startsWith("bridge_connection_")
-                        ? "fonte.core.provider_connections.v1"
-                        : command.kind.startsWith("bridge_provider_")
-                          ? "fonte.core.provider_audience.v1"
-                          : command.kind.startsWith(
-                                "provider_evidence_candidate_",
-                              )
-                            ? "fonte.core.provider_evidence_candidate.v1"
-                            : "fonte.core.sandbox_canary.v1",
+    contract_id: command.kind.startsWith("campaign_")
+      ? "fonte.core.campaign_configuration.v1"
+      : command.kind.startsWith("segment_")
+        ? "fonte.core.native_segment.v1"
+        : command.kind === "sequence_activate"
+          ? "fonte.core.sequence_activation.v1"
+          : command.kind.startsWith("sequence_")
+            ? "fonte.core.sequence_authoring.v1"
+            : command.kind === "workspace_marketing_settings_read"
+              ? "fonte.core.workspace_marketing_settings.v1"
+              : command.kind === "broadcast_preflight"
+                ? "fonte.core.broadcast_preflight.v1"
+                : command.kind === "broadcast_audience_append"
+                  ? "fonte.core.production_broadcast_audience_append.v1"
+                  : command.kind.startsWith("broadcast_") &&
+                      command.kind !== "broadcast_test_send" &&
+                      command.kind !== "broadcast_test_status"
+                    ? "fonte.core.production_broadcast.v1"
+                    : command.kind === "bridge_contact_import_status"
+                      ? "fonte.core.contact_import.v1"
+                      : command.kind.startsWith("bridge_provider_placement_")
+                        ? "fonte.core.provider_placement_application.v1"
+                        : command.kind.startsWith("bridge_provider_rotation_")
+                          ? "fonte.core.provider_rotation_partition.v1"
+                          : command.kind.startsWith("bridge_resend_")
+                            ? "fonte.core.resend_bridge.v1"
+                            : command.kind.startsWith("bridge_connection_")
+                              ? "fonte.core.provider_connections.v1"
+                              : command.kind.startsWith("bridge_provider_")
+                                ? "fonte.core.provider_audience.v1"
+                                : command.kind.startsWith(
+                                      "provider_evidence_candidate_",
+                                    )
+                                  ? "fonte.core.provider_evidence_candidate.v1"
+                                  : "fonte.core.sandbox_canary.v1",
   };
 }

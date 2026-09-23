@@ -28,6 +28,7 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   const sequence = renderSequenceOperatorHuman(receipt);
   if (sequence !== null) return sequence;
   const result = receipt.result!;
+  if (!result.kind) return `${JSON.stringify(result, null, 2)}\n`;
   if (result.kind === "contact_import_status") {
     return [
       "Fonte Contact import: completed.",

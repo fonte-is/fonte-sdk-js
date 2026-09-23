@@ -29,6 +29,7 @@ import type {
 } from "./operator-segment-types.js";
 
 const mutationTails = new Map<string, Promise<void>>();
+const SEGMENT_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface SegmentMetadataClient {
   list(input: SegmentListInput): Promise<SegmentListEnvelope>;
@@ -48,7 +49,9 @@ export type SegmentWorkspaceContexts = () => Promise<
 export function createSegmentMetadataClient(
   request: CoreRequester,
   listWorkspaceContexts: SegmentWorkspaceContexts = () =>
-    createWorkspaceInvitationClient(request).listWorkspaceContexts(),
+    createWorkspaceInvitationClient(request).listWorkspaceContexts({
+      timeoutMs: SEGMENT_REQUEST_TIMEOUT_MS,
+    }),
   signal?: AbortSignal,
 ): SegmentMetadataClient {
   async function resolveScope(input: {
@@ -87,7 +90,9 @@ export function createSegmentMetadataClient(
     segmentId?: string,
   ): Promise<SegmentCommandEnvelope> {
     return parseSegmentCommand(
-      await request(receiptPath(scope, operationId)),
+      await request(receiptPath(scope, operationId), {
+        timeoutMs: SEGMENT_REQUEST_TIMEOUT_MS,
+      }),
       { tenantId: scope.workspaceId, environment: scope.environment },
       operationId,
       segmentId,
@@ -117,10 +122,15 @@ export function createSegmentMetadataClient(
     async list(input) {
       validateSegmentPageInput(input);
       const scope = await resolveScope(input);
-      return parseSegmentList(await request(listPath(scope, input)), {
-        tenantId: scope.workspaceId,
-        environment: scope.environment,
-      });
+      return parseSegmentList(
+        await request(listPath(scope, input), {
+          timeoutMs: SEGMENT_REQUEST_TIMEOUT_MS,
+        }),
+        {
+          tenantId: scope.workspaceId,
+          environment: scope.environment,
+        },
+      );
     },
     async read(input) {
       validateSegmentFields({ segmentId: input.segmentId }, "read");
@@ -132,7 +142,9 @@ export function createSegmentMetadataClient(
       }
       const scope = await resolveScope(input);
       return parseSegmentRead(
-        await request(itemPath(scope, input.segmentId, input.revision)),
+        await request(itemPath(scope, input.segmentId, input.revision), {
+          timeoutMs: SEGMENT_REQUEST_TIMEOUT_MS,
+        }),
         { tenantId: scope.workspaceId, environment: scope.environment },
         input.segmentId,
         input.revision,

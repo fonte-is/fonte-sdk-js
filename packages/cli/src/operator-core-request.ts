@@ -17,9 +17,13 @@ export interface CorePostOptions {
   readonly timeoutMs?: number;
 }
 
+export interface CoreReadOptions {
+  readonly timeoutMs?: number;
+}
+
 export type CoreRequester = (
   path: string,
-  post?: CorePostOptions,
+  options?: CorePostOptions | CoreReadOptions,
 ) => Promise<unknown>;
 
 export class CoreOperatorError extends Error {
@@ -42,11 +46,12 @@ export function createCoreRequester(
     throw new CoreOperatorError("authorization_token_missing", null, "none");
   }
   const maxResponseBytes = responseLimitBytes(options.maxResponseBytes);
-  return async (path, post) => {
+  return async (path, callOptions) => {
     if (options.signal?.aborted) {
       throw new CoreOperatorError("operation_cancelled", null, "none");
     }
-    const timeoutMs = requestTimeoutMs(post?.timeoutMs);
+    const post = callOptions && "body" in callOptions ? callOptions : undefined;
+    const timeoutMs = requestTimeoutMs(callOptions?.timeoutMs);
     const request = preparedRequest(baseUrl, bearer, path, post);
     const deadline = AbortSignal.timeout(timeoutMs);
     const signal = options.signal

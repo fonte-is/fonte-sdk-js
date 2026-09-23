@@ -36,7 +36,9 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     command === "broadcast" ||
     command === "bridge" ||
     command === "provider-evidence" ||
-    command === "sequence"
+    command === "sequence" ||
+    command === "campaign" ||
+    command === "segment"
   ) {
     const operator = parseOperatorArguments(argv);
     return {
