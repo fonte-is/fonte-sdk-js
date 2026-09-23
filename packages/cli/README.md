@@ -80,6 +80,13 @@ await bootstrapLocalCore({ bearer });
 The spawned consumer owns its subsequent API use. This command itself makes
 no Core API, provider, email, or production request.
 
+`fonte release` requires a clean Git working tree, fetches `origin/main`, and
+passes the exact fetched commit to the separately installed targetless release
+runtime. `fonte release --source <sha>` selects one explicit commit after
+verifying that `origin` can fetch it. Both forms invoke the runtime with
+production confirmation; they print its terminal JSON without choosing release
+targets or implementing release behavior in this CLI.
+
 ## Workspace invitation client
 
 `@fonte-is/cli/operator-client` exports `createCoreOperatorClient` for the

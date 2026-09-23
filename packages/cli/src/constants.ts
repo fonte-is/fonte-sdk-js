@@ -61,6 +61,7 @@ export const USAGE_TEXT = [
   "  fonte broadcast <command> ... [--json]",
   "  fonte bridge <command> ... [--json]",
   "  fonte provider-evidence resend <command> ... --json",
+  "  fonte release [--source <sha>]",
   "  fonte remove [--yes] [--json]",
   "  fonte --help",
   "  fonte --version",
@@ -82,8 +83,18 @@ export const HELP_TEXT = [
   "bridge connections list/connect/reconnect use native Resend or Kit OAuth through Core.",
   "bridge collections/reconcile/freeze use Core's provider-audience authority.",
   "provider-evidence resend commands use Core's candidate-scoped GET-only acquisition authority.",
+  "release delegates one exact remote commit to the installed targetless release runtime.",
   "All other broadcast and Bridge declarations have no Core effect.",
   "Transactional application email remains locked.",
+  "",
+].join("\n");
+
+export const RELEASE_HELP_TEXT = [
+  "Usage: fonte release [--source <sha>]",
+  "",
+  "Without --source, requires a clean working tree, fetches origin/main, and",
+  "passes that exact commit to the installed targetless release runtime.",
+  "--source selects an explicit remote-resolvable commit for diagnostics.",
   "",
 ].join("\n");
 

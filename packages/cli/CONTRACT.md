@@ -32,6 +32,8 @@ V0 supports only:
   journey over Core-owned authority; and
 - one thin Resend/Kit native-OAuth connection list, connect, and reconnect
   journey over Core-owned custody; and
+- one thin `fonte release` wrapper over the already-installed targetless
+  release runtime; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
@@ -55,6 +57,7 @@ fonte test --workspace <slug> [--json]
 fonte auth exec -- <command> [args...]
 fonte broadcast <command> ... [--json]
 fonte bridge <command> ... [--json]
+fonte release [--source <sha>]
 fonte remove [--yes] [--json]
 fonte --help
 fonte --version
@@ -72,6 +75,14 @@ There is no terminal prompt. `test` opens the system browser for an existing
 signed-in human to approve the registered public CLI client. The workspace slug
 is explicit, lowercase, and remains subject to server-side Fonte workspace
 membership.
+
+`release` is an operator wrapper, not a release engine. Without `--source` it
+requires a clean working tree, fetches `origin/main`, resolves that exact
+commit, and invokes the installed `release --source <sha> --confirm prod`
+runtime. With `--source`, it requires a clean tree and verifies the exact
+commit can be fetched from `origin` before invoking the same runtime. Preflight
+blockers produce one JSON result and do not invoke the release runtime; a
+successful handoff preserves the runtime's stdout, stderr, and exit status.
 
 `auth exec` is the reusable local authority seam. It performs the same hosted
 browser OAuth Authorization Code flow with mandatory S256 PKCE, then directly

@@ -1,5 +1,6 @@
 import type { ParsedArguments } from "./types.js";
 import { CliUsageError } from "./errors.js";
+import { RELEASE_HELP_TEXT } from "./constants.js";
 import { operatorHelp } from "./operator-help.js";
 import { parseOperatorArguments } from "./operator-arguments.js";
 
@@ -30,6 +31,7 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
       operator: operator.command,
     };
   }
+  if (command === "release") return parseReleaseArguments(argv.slice(1));
   if (
     command !== "init" &&
     command !== "doctor" &&
@@ -62,6 +64,38 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     command,
     apply: flags.has("--yes"),
     json: flags.has("--json"),
+  };
+}
+
+function parseReleaseArguments(argv: readonly string[]): ParsedArguments {
+  if (argv.length === 1 && argv[0] === "--help") {
+    return {
+      command: "help",
+      apply: false,
+      json: false,
+      helpText: RELEASE_HELP_TEXT,
+    };
+  }
+  if (argv.length === 0) {
+    return { command: "release", apply: false, json: false };
+  }
+  if (argv.length !== 2 || argv[0] !== "--source") {
+    throw new CliUsageError("invalid_release_arguments", {
+      kind: "invalid_field",
+      field: argv[0] ?? "command",
+    });
+  }
+  if (!/^[0-9a-f]{40}$/.test(argv[1])) {
+    throw new CliUsageError("invalid_release_source", {
+      kind: "invalid_field",
+      field: "--source",
+    });
+  }
+  return {
+    command: "release",
+    apply: false,
+    json: false,
+    releaseSource: argv[1],
   };
 }
 
