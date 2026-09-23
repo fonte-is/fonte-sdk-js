@@ -1,6 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/server";
 
 import { CLI_VERSION } from "./constants.js";
+import { registerMcpBroadcastHtmlPreparationTools } from "./mcp-broadcast-html-preparation-registration.js";
+import {
+  MCP_BROADCAST_HTML_PREPARE_TOOL,
+  MCP_BROADCAST_HTML_REVISE_TOOL,
+  type BroadcastHtmlPreparationClientProvider,
+} from "./mcp-broadcast-html-preparation-tools.js";
 import { registerMcpBroadcastDraftLifecycleTools } from "./mcp-broadcast-draft-lifecycle-registration.js";
 import {
   MCP_BROADCAST_DRAFT_CREATE_TOOL,
@@ -19,6 +25,12 @@ import {
   MCP_BROADCAST_TEST_REQUEST_TOOL,
   type BroadcastRenderTestClientProvider,
 } from "./mcp-broadcast-render-test-tools.js";
+import { registerMcpBroadcastSenderTools } from "./mcp-broadcast-sender-registration.js";
+import {
+  MCP_BROADCAST_SENDER_LIST_TOOL,
+  MCP_BROADCAST_SENDER_UPDATE_TOOL,
+  type BroadcastSenderClientProvider,
+} from "./mcp-broadcast-sender-tools.js";
 import { registerMcpBroadcastTargetingTool } from "./mcp-broadcast-targeting-registration.js";
 import { registerMcpBroadcastSendInstructionTools } from "./mcp-broadcast-send-instruction-registration.js";
 import {
@@ -46,6 +58,9 @@ import { registerMcpSequenceTools } from "./mcp-sequence-registration.js";
 import { createBroadcastDraftLifecycleClient } from "./operator-broadcast-draft-lifecycle-client.js";
 import { createBroadcastDraftRevisionClient } from "./operator-broadcast-draft-revision-client.js";
 import { createBroadcastRenderTestClient } from "./operator-broadcast-render-test-client.js";
+import { createBroadcastHtmlPreparationClient } from "./operator-broadcast-html-preparation.js";
+import { readBroadcastLocalFile } from "./operator-broadcast-html-file.js";
+import { createBroadcastSenderClient } from "./operator-broadcast-sender-client.js";
 import { createBroadcastTargetingClient } from "./operator-broadcast-targeting-client.js";
 import { createBroadcastSendInstructionClient } from "./operator-broadcast-send-instruction-client.js";
 import { createSequenceAuthoringClient } from "./operator-sequence-client.js";
@@ -56,6 +71,8 @@ export const MCP_BROADCAST_TOOLS = [
   MCP_BROADCAST_DRAFT_CREATE_TOOL,
   MCP_BROADCAST_DRAFT_READ_TOOL,
   MCP_BROADCAST_DRAFT_REVISION_TOOL,
+  MCP_BROADCAST_SENDER_LIST_TOOL,
+  MCP_BROADCAST_SENDER_UPDATE_TOOL,
   MCP_BROADCAST_TARGETING_UPDATE_TOOL,
   MCP_BROADCAST_RENDER_TOOL,
   MCP_BROADCAST_TEST_REQUEST_TOOL,
@@ -66,6 +83,8 @@ export const MCP_BROADCAST_TOOLS = [
   MCP_BROADCAST_SCHEDULE_REPLACE_TOOL,
   MCP_BROADCAST_SEND_CANCEL_TOOL,
   MCP_BROADCAST_SPEND_LIMIT_INCREASE_TOOL,
+  MCP_BROADCAST_HTML_PREPARE_TOOL,
+  MCP_BROADCAST_HTML_REVISE_TOOL,
 ] as const;
 export const MCP_FONTE_ALLOWLIST = {
   tools: [...MCP_SEQUENCE_TOOLS, ...MCP_BROADCAST_TOOLS],
@@ -76,9 +95,11 @@ export interface FonteMcpClientProviders {
   readonly sequence: SequenceMcpClientProvider;
   readonly broadcastDraftLifecycle: BroadcastDraftLifecycleClientProvider;
   readonly broadcastDraftRevision: BroadcastDraftRevisionClientProvider;
+  readonly broadcastSender: BroadcastSenderClientProvider;
   readonly broadcastTargeting: BroadcastTargetingClientProvider;
   readonly broadcastRenderTest: BroadcastRenderTestClientProvider;
   readonly broadcastSendInstruction: BroadcastSendInstructionClientProvider;
+  readonly broadcastHtmlPreparation: BroadcastHtmlPreparationClientProvider;
 }
 
 /** Gives every domain client the same current-custody boundary and requester. */
@@ -86,19 +107,37 @@ export function createDurableFonteMcpSession(
   options: SequenceMcpSessionOptions,
 ): FonteMcpClientProviders {
   const authenticated = createMcpClientAuthProvider(options);
+  const lifecycle: BroadcastDraftLifecycleClientProvider = async () =>
+    createBroadcastDraftLifecycleClient((await authenticated()).request);
+  const revision: BroadcastDraftRevisionClientProvider = async () =>
+    createBroadcastDraftRevisionClient((await authenticated()).request);
+  const render: BroadcastRenderTestClientProvider = async () =>
+    createBroadcastRenderTestClient((await authenticated()).request);
+  const sender: BroadcastSenderClientProvider = async () => {
+    const { request } = await authenticated();
+    return createBroadcastSenderClient(
+      request,
+      createBroadcastDraftRevisionClient(request),
+    );
+  };
+  const htmlPreparation = createBroadcastHtmlPreparationClient({
+    readFile: readBroadcastLocalFile,
+    lifecycle,
+    revision,
+    render,
+  });
   return {
     sequence: async () =>
       createSequenceAuthoringClient((await authenticated()).request),
-    broadcastDraftLifecycle: async () =>
-      createBroadcastDraftLifecycleClient((await authenticated()).request),
-    broadcastDraftRevision: async () =>
-      createBroadcastDraftRevisionClient((await authenticated()).request),
+    broadcastDraftLifecycle: lifecycle,
+    broadcastDraftRevision: revision,
+    broadcastSender: sender,
     broadcastTargeting: async () =>
       createBroadcastTargetingClient((await authenticated()).request),
-    broadcastRenderTest: async () =>
-      createBroadcastRenderTestClient((await authenticated()).request),
     broadcastSendInstruction: async () =>
       createBroadcastSendInstructionClient((await authenticated()).request),
+    broadcastRenderTest: render,
+    broadcastHtmlPreparation: async () => htmlPreparation,
   };
 }
 
@@ -137,11 +176,16 @@ export function createFonteMcpServer(
     server,
     providers.broadcastDraftRevision,
   );
+  registerMcpBroadcastSenderTools(server, providers.broadcastSender);
   registerMcpBroadcastTargetingTool(server, providers.broadcastTargeting);
   registerMcpBroadcastRenderTestTools(server, providers.broadcastRenderTest);
   registerMcpBroadcastSendInstructionTools(
     server,
     providers.broadcastSendInstruction,
+  );
+  registerMcpBroadcastHtmlPreparationTools(
+    server,
+    providers.broadcastHtmlPreparation,
   );
   return server;
 }
@@ -157,4 +201,4 @@ const sequenceInstructions =
   "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the selected local Fonte credential store; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. This server cannot enroll, send, deliver, or manage recipients.";
 
 const fonteInstructions =
-  "The local fonte-mcp stdio host provides Sequence authoring plus content-first Broadcast draft create/read/update, exact stable-ID To/Except persistence, verified sender discovery and binding, canonical render, verified-account test request/readback, and the v3 Send/Schedule operation through Fonte Core using the selected local Fonte session. Initialize and tools/list never log in. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. Target saves do not resolve names, count recipients, prepare an audience, or grant Send authority. Preview and tests are optional separate effects and never Send prerequisites. Status reads are observational; internal authorization/package/activation phases are described as Preparing unless diagnostics were requested. This host does not share credentials with hosted MCP or the legacy private transport.";
+  "The local fonte-mcp stdio host provides Sequence authoring plus content-first Broadcast draft create/read/update, local-file draft preparation, verified sender discovery and revision-fenced binding, stable-ID To/Except persistence, canonical render, verified-account test request/readback, and the v3 Send/Schedule operation through Fonte Core using the selected local Fonte session. Initialize and tools/list never log in. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. Local-file preparation keeps one stable draft identity and never tests or sends. Sender discovery exact-matches verified Core profiles and never guesses among ambiguous choices. Target saves do not resolve names, count recipients, prepare an audience, or grant Send authority. Preview and tests are separate effects and never Send prerequisites. Status reads are observational; internal authorization/package/activation phases are described as Preparing unless diagnostics were requested. This host does not share credentials with hosted MCP or the legacy private transport.";

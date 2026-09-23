@@ -12,10 +12,23 @@ const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
 const sendRequestId = "00000000-0000-4000-8000-000000000154";
 const sendOperationId = "00000000-0000-4000-8000-000000000155";
+const senderId = "sender_synthetic_primary";
 const digest = `sha256:${"c".repeat(64)}`;
 const html =
   "<!doctype html><p>Hello {{{contact.email}}}</p>" +
   '<a href="{{{unsubscribe_url}}}">Leave</a>';
+let currentHtml = html;
+let currentRevision = 1;
+let currentSender = null;
+let currentReplyTo = null;
+let currentSource = {
+  title: "Synthetic draft",
+  subject: "Synthetic subject",
+  preheader: "Synthetic preheader",
+  activeSource: "html",
+  composerBody: null,
+  htmlBody: html,
+};
 const hosted = {
   schema: "fonte.cli.hosted_config.v1",
   authorizationServer: "https://identity.example.test/auth/v1",
@@ -33,7 +46,7 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    if (authorizations > 8) {
+    if (authorizations > 10) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";
@@ -66,7 +79,7 @@ function route(url, init) {
           schema: "broadcast_send_intent.v3",
           requestId: sendRequestId,
           executionRail: "canonical_execution_cell_v1",
-          expectedDraftVersion: 3,
+          expectedDraftVersion: 4,
           timing: { mode: "now" },
         })
     )
@@ -77,11 +90,36 @@ function route(url, init) {
     );
   }
   if (
+    init.method === "GET" &&
+    path ===
+      `/v1/workspaces/${workspace}/delivery/sender-domains` +
+        "?environment=production"
+  ) {
+    return response(
+      bound({
+        senderProfiles: [
+          {
+            senderId,
+            fromName: "Synthetic Sender",
+            emailAddress: "sender@example.test",
+            defaultReplyTo: "reply@example.test",
+          },
+        ],
+      }),
+    );
+  }
+  if (
     init.method === "POST" &&
     path ===
       `/v1/workspaces/${workspace}/broadcast-drafts` + "?environment=production"
-  )
-    return response(lifecycleReceipt("applied", body));
+  ) {
+    currentHtml = body.htmlBody;
+    currentRevision = 1;
+    currentSender = body.sender;
+    currentReplyTo = body.replyTo;
+    currentSource = body;
+    return response(lifecycleReceipt("applied"));
+  }
   if (
     init.method === "GET" &&
     path ===
@@ -126,11 +164,7 @@ function sendOperation() {
   return {
     schema: "broadcast_send_operation.v2",
     operationId: sendOperationId,
-    scope: {
-      workspaceId: "workspace-internal",
-      environment: "production",
-      draftId,
-    },
+    scope: { workspaceId: "workspace-internal", environment: "production", draftId },
     instructionGeneration: 1,
     approvalGeneration: 1,
     acceptedAt: "2026-09-22T16:00:00.000Z",
@@ -142,17 +176,10 @@ function sendOperation() {
     nextAttemptAt: "2026-09-22T16:00:01.000Z",
     total: null,
     timestamps: {
-      preparationStartedAt: null,
-      snapshotAt: null,
-      authorizationCommittedAt: null,
-      firstSubmissionAt: null,
-      terminalAt: null,
+      preparationStartedAt: null, snapshotAt: null, authorizationCommittedAt: null,
+      firstSubmissionAt: null, terminalAt: null,
     },
-    delivery: {
-      status: "unavailable",
-      reason: "provider_submission_not_started",
-      observedAt: null,
-    },
+    delivery: { status: "unavailable", reason: "provider_submission_not_started", observedAt: null },
     requiredAction: null,
     allowedActions: ["cancel"],
     executionAuthorized: false,
@@ -161,35 +188,48 @@ function sendOperation() {
 }
 
 function revisionReceipt(body) {
-  const htmlBody = body.changes.htmlBody;
+  if (Object.hasOwn(body.changes, "htmlBody")) {
+    currentHtml = body.changes.htmlBody;
+  }
+  if (Object.hasOwn(body.changes, "sender")) {
+    currentSender = body.changes.sender;
+  }
+  if (Object.hasOwn(body.changes, "replyTo")) {
+    currentReplyTo = body.changes.replyTo;
+  }
+  currentRevision = body.baseRevision + 1;
   return {
-    revision: 2,
+    revision: currentRevision,
     savedAt: "2026-09-22T14:00:00.000Z",
-    draft: draft(htmlBody, 2, "2026-09-22T14:00:00.000Z"),
+    draft: draft(currentHtml, currentRevision, "2026-09-22T14:00:00.000Z"),
   };
 }
 
 function targetingReceipt(body) {
   const recipientSelection = body.changes.recipientSelection;
+  currentRevision = body.baseRevision + 1;
   return {
-    revision: 3,
+    revision: currentRevision,
     savedAt: "2026-09-22T15:00:00.000Z",
-    draft: draft(html, 3, "2026-09-22T15:00:00.000Z", {}, recipientSelection),
+    draft: draft(
+      currentHtml,
+      currentRevision,
+      "2026-09-22T15:00:00.000Z",
+      {},
+      recipientSelection,
+    ),
   };
 }
 
-function lifecycleReceipt(outcome, body = null) {
-  const source = body ?? {
-    title: "Synthetic draft",
-    subject: "Synthetic subject",
-    preheader: "Synthetic preheader",
-    activeSource: "html",
-    composerBody: null,
-    htmlBody: html,
-  };
+function lifecycleReceipt(outcome) {
   return bound({
     outcome,
-    draft: draft(source.htmlBody, 1, "2026-09-22T13:00:00.000Z", source),
+    draft: draft(
+      currentHtml,
+      currentRevision,
+      "2026-09-22T13:00:00.000Z",
+      currentSource,
+    ),
   });
 }
 
@@ -204,8 +244,8 @@ function draft(
     broadcastDraftId: draftId,
     version,
     title: source.title ?? "Synthetic draft",
-    sender: null,
-    replyTo: null,
+    sender: currentSender,
+    replyTo: currentReplyTo,
     audienceKind: recipientSelection === null ? null : "recipient_expression",
     audienceContactImportBatchId: null,
     recipientExpression:
@@ -236,16 +276,16 @@ function renderReceipt() {
   return bound({
     broadcastDraftId: draftId,
     status: "preview",
-    senderId: "sender_synthetic",
+    senderId: currentSender ?? senderId,
     renderContentDigest: digest,
-    html,
-    text: html,
-    renderProof: proof(),
+    html: currentHtml,
+    text: currentHtml,
+    renderProof: proof(currentRevision),
     render: {
       subject: "Synthetic subject",
       replyTo: null,
       preheader: "Synthetic preheader",
-      textBody: html,
+      textBody: currentHtml,
       postalAddress: null,
       clickTrackingEnabled: true,
     },
@@ -254,8 +294,8 @@ function renderReceipt() {
       unsubscribeUrl: "https://preview.invalid/unsubscribe/preview",
       postalAddress: null,
       finalizerVersion: "fonte-core-recipient-finalizer-v2",
-      html: "<p>Hello preview-recipient@example.invalid</p>",
-      text: "Hello preview-recipient@example.invalid",
+      html: sample(currentHtml),
+      text: sample(currentHtml),
     },
   });
 }
@@ -274,7 +314,7 @@ function testRequestReceipt() {
     refusedCount: 0,
     unknownCount: 0,
     created: true,
-    renderProof: proof(),
+    renderProof: proof(currentRevision),
   });
 }
 
@@ -306,26 +346,36 @@ function testReadReceipt() {
       renderingFailedCount: 0,
     },
     originalDraft: {
-      testDraftVersion: 2,
-      currentVersion: 2,
+      testDraftVersion: currentRevision,
+      currentVersion: currentRevision,
       versionUnchangedSinceTest: true,
     },
-    renderProof: proof(),
+    renderProof: proof(currentRevision),
   });
 }
 
-function proof() {
+function proof(version = 2) {
   return {
     source: "html",
     templateIdentity: "complete_html_v1",
     templateRevision: "fonte-core-render-v2",
-    broadcastVersion: 2,
+    broadcastVersion: version,
     rendererVersion: "fonte-core-email-renderer-v2",
     recipientSlotSchemaVersion: "fonte-core-recipient-slots-v1",
     finalizerVersion: "fonte-core-recipient-finalizer-v2",
     textSource: "draft",
     renderHash: digest,
   };
+}
+
+function sample(value) {
+  return value
+    .replaceAll("{{{contact.email}}}", "preview-recipient@example.invalid")
+    .replaceAll(
+      "{{{unsubscribe_url}}}",
+      "https://preview.invalid/unsubscribe/preview",
+    )
+    .replaceAll("{{{postal_address}}}", "");
 }
 
 function bound(value) {

@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-import type { BroadcastDraftJsonValue } from
-  "./operator-broadcast-draft-snapshot.js";
+import type { BroadcastDraftJsonValue } from "./operator-broadcast-draft-snapshot.js";
 
 const outcomeSchema = z.enum([
   "completed",
@@ -59,11 +58,9 @@ const revisionChangesSchema = z
   .refine(
     (value) =>
       value.text_body === undefined ||
-      (
-        value.active_source === undefined &&
+      (value.active_source === undefined &&
         value.composer_body === undefined &&
-        value.html_body === undefined
-      ),
+        value.html_body === undefined),
     { message: "text_body cannot be mixed with source fields" },
   );
 
@@ -115,7 +112,7 @@ export const broadcastDraftSnapshotSchema = z
     updated_at: z.string().min(1),
   })
   .strict();
-const revisionResultSchema = z
+export const broadcastDraftRevisionResultSchema = z
   .object({
     kind: z.literal("broadcast_draft_revision"),
     draft_id: z.string().uuid(),
@@ -138,6 +135,6 @@ export const reviseBroadcastDraftOutputSchema = z
       .nullable(),
     status_code: z.number().int().min(100).max(599).nullable(),
     core_effect: z.enum(["none", "unknown"]),
-    revision: revisionResultSchema.nullable(),
+    revision: broadcastDraftRevisionResultSchema.nullable(),
   })
   .strict();

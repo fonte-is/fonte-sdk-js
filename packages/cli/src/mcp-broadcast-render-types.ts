@@ -23,10 +23,7 @@ export const mcpOutcomeSchema = z.enum([
 export const mcpRenderProofSchema = z
   .object({
     source: z.enum(["composer", "html"]),
-    template_identity: z.enum([
-      "workspace_broadcast_v1",
-      "complete_html_v1",
-    ]),
+    template_identity: z.enum(["workspace_broadcast_v1", "complete_html_v1"]),
     template_revision: z.string().min(1).max(2_000),
     broadcast_version: mcpRevisionSchema,
     renderer_version: z.string().min(1).max(2_000),
@@ -45,7 +42,7 @@ export const renderBroadcastDraftInputSchema = z
   })
   .strict();
 
-const renderResultSchema = z
+export const broadcastDraftRenderResultSchema = z
   .object({
     kind: z.literal("broadcast_draft_render"),
     draft_id: z.string().uuid(),
@@ -79,6 +76,6 @@ export const renderBroadcastDraftOutputSchema = z
     reason: z.string().min(1).max(100).nullable(),
     status_code: z.number().int().min(100).max(599).nullable(),
     core_effect: z.enum(["none", "unknown"]),
-    render: renderResultSchema.nullable(),
+    render: broadcastDraftRenderResultSchema.nullable(),
   })
   .strict();

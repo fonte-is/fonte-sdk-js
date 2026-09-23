@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createInterface } from "node:readline";
 import test from "node:test";
 
@@ -12,10 +15,66 @@ const operationId = "synthetic-test-composition-v2";
 const systemId = "00000000-0000-4000-8000-000000000153";
 const sendRequestId = "00000000-0000-4000-8000-000000000154";
 const sendOperationId = "00000000-0000-4000-8000-000000000155";
+const senderId = "sender_synthetic_primary";
 const digest = `sha256:${"c".repeat(64)}`;
 const html =
   "<!doctype html><p>Hello {{{contact.email}}}</p>" +
   '<a href="{{{unsubscribe_url}}}">Leave</a>';
+
+test("fresh fonte-mcp prepares and corrects a local HTML file", async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "fonte-mcp-html-"));
+  const sourceFile = path.join(directory, "source.html");
+  const correctedFile = path.join(directory, "corrected.html");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(sourceFile, htmlWith("Source A"));
+  await writeFile(correctedFile, htmlWith("Source B"));
+  const child = await startMcp();
+  t.after(() => child.close());
+  await child.request("initialize", {
+    protocolVersion: "2025-11-25",
+    capabilities: {},
+    clientInfo: { name: "fonte-file-test", version: "1.0.0" },
+  });
+  child.notify("notifications/initialized", {});
+
+  const prepared = await call(child, "fonte_prepare_broadcast_html_file", {
+    workspace,
+    draft_id: draftId,
+    title: "Synthetic draft",
+    subject: "Synthetic subject",
+    preheader: "Synthetic preheader",
+    source_file: sourceFile,
+    reference_file: null,
+    postal_address_literal: null,
+    literal_fallbacks: {},
+  });
+  assert.equal(prepared.outcome, "completed");
+  assert.equal(prepared.stage, "complete");
+  assert.equal(prepared.readback.draft.html_body, htmlWith("Source A"));
+  assert.equal(prepared.render.revision, 1);
+  assert.equal(
+    prepared.source.visual_verification,
+    "unverified_missing_reference",
+  );
+
+  const revised = await call(child, "fonte_revise_broadcast_html_file", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 1,
+    operation_id: "source-file-correction-v2",
+    source_file: correctedFile,
+    reference_file: null,
+    postal_address_literal: null,
+    literal_fallbacks: {},
+  });
+  assert.equal(revised.outcome, "completed");
+  assert.equal(revised.save.draft_id, draftId);
+  assert.equal(revised.save.revision, 2);
+  assert.equal(revised.readback.draft.html_body, htmlWith("Source B"));
+  assert.equal(revised.render.revision, 2);
+  assert.equal(child.stderr(), "");
+  assertNoSecret(child.output());
+});
 
 test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async (t) => {
   const child = await startMcp();
@@ -66,10 +125,38 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(revised.outcome, "completed");
   assert.equal(revised.revision.draft.html_body, html);
 
+  const senders = await call(child, "fonte_list_broadcast_senders", {
+    workspace,
+    match: "sender@example.test",
+  });
+  assert.equal(senders.outcome, "completed");
+  assert.equal(senders.catalog.resolution.outcome, "selected");
+  assert.equal(senders.catalog.resolution.sender_profile_id, senderId);
+
+  const bound = await call(child, "fonte_update_broadcast_sender", {
+    workspace,
+    draft_id: draftId,
+    base_revision: 2,
+    operation_id: "bind-synthetic-sender-v1",
+    sender_profile_id: senderId,
+  });
+  assert.equal(bound.outcome, "completed");
+  assert.equal(bound.revision.revision, 3);
+  assert.equal(bound.revision.draft.sender_profile_id, senderId);
+  assert.equal(bound.revision.draft.html_body, html);
+
+  const boundReadback = await call(child, "fonte_read_broadcast_draft", {
+    workspace,
+    draft_id: draftId,
+  });
+  assert.equal(boundReadback.draft.revision, 3);
+  assert.equal(boundReadback.draft.draft.sender_profile_id, senderId);
+  assert.equal(boundReadback.draft.draft.html_body, html);
+
   const rendered = await call(child, "fonte_render_broadcast_draft", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 3,
   });
   assert.equal(rendered.outcome, "completed");
   assert.equal(rendered.render.render_content_digest, digest);
@@ -78,7 +165,7 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   const requested = await call(child, "fonte_request_broadcast_test", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 3,
     operation_id: operationId,
     render_proof: rendered.render.render_proof,
   });
@@ -102,7 +189,7 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
     workspace,
     draft_id: draftId,
     request_id: sendRequestId,
-    expected_draft_version: 3,
+    expected_draft_version: 4,
   });
   assert.equal(sent.outcome, "completed");
   assert.equal(sent.operation.operation.operation_id, sendOperationId);
@@ -115,7 +202,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   const loggedOut = await call(child, "fonte_render_broadcast_draft", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 4,
   });
   assert.equal(loggedOut.reason, "login_required");
   assert.equal(loggedOut.core_effect, "none");
@@ -123,7 +210,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   const loggedOutRevision = await call(child, "fonte_update_broadcast_draft", {
     workspace,
     draft_id: draftId,
-    base_revision: 2,
+    base_revision: 4,
     operation_id: "blocked-replace-html-v3",
     changes: { active_source: "html", html_body: html },
   });
@@ -135,7 +222,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   const loggedOutTest = await call(child, "fonte_request_broadcast_test", {
     workspace,
     draft_id: draftId,
-    revision: 2,
+    revision: 4,
     operation_id: "blocked-test-composition-v2",
     render_proof: renderProof,
   });
@@ -155,7 +242,7 @@ async function verifyTargeting(child) {
   const targeted = await call(child, "fonte_update_broadcast_targeting", {
     workspace,
     draft_id: draftId,
-    base_revision: 2,
+    base_revision: 3,
     operation_id: "target-everyone-except-v1",
     recipient_selection: {
       to: { kind: "everyone" },
@@ -163,7 +250,7 @@ async function verifyTargeting(child) {
     },
   });
   assert.equal(targeted.outcome, "completed");
-  assert.equal(targeted.targeting.revision, 3);
+  assert.equal(targeted.targeting.revision, 4);
   assert.deepEqual(targeted.targeting.recipient_selection, {
     to: { kind: "everyone" },
     except: [{ kind: "system", systemId }],
@@ -175,7 +262,7 @@ async function verifyLoggedOutTargeting(child) {
   const targeted = await call(child, "fonte_update_broadcast_targeting", {
     workspace,
     draft_id: draftId,
-    base_revision: 3,
+    base_revision: 4,
     operation_id: "blocked-target-v2",
     recipient_selection: { to: { kind: "everyone" }, except: [] },
   });
@@ -259,4 +346,12 @@ async function startMcp() {
 function assertNoSecret(value) {
   assert.equal(value.includes("synthetic-stdio-broadcast-bearer"), false);
   assert.equal(value.includes("refreshToken"), false);
+}
+
+function htmlWith(copy) {
+  return (
+    '<!doctype html><html><body style="font-family:Arial,sans-serif">' +
+    `<p>${copy} {{{contact.email}}}</p>` +
+    '<a href="{{{unsubscribe_url}}}">Leave</a></body></html>'
+  );
 }
