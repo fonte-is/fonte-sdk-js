@@ -17,6 +17,10 @@
     "./operator-client": {
       "types": "./dist/operator-client.d.ts",
       "import": "./dist/operator-client.js"
+    },
+    "./repository-push-trigger": {
+      "types": "./dist/repository-push-trigger.d.ts",
+      "import": "./dist/repository-push-trigger.js"
     }
   },
   "bin": {
@@ -26,7 +30,8 @@
     "dist",
     "LICENSE",
     "README.md",
-    "OPERATOR_CONTRACT.md"
+    "OPERATOR_CONTRACT.md",
+    "RELEASE_TRIGGER_CONTRACT.md"
   ],
   "engines": {
     "node": ">=20.9.0"

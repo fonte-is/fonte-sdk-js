@@ -87,6 +87,9 @@ verifying that `origin` can fetch it. Both forms invoke the runtime with
 production confirmation; they print its terminal JSON without choosing release
 targets or implementing release behavior in this CLI.
 
+The provider-neutral authenticated push event contract is documented in
+[`RELEASE_TRIGGER_CONTRACT.md`](./RELEASE_TRIGGER_CONTRACT.md).
+
 ## Workspace invitation client
 
 `@fonte-is/cli/operator-client` exports `createCoreOperatorClient` for the

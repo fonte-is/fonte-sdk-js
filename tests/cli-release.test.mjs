@@ -8,11 +8,7 @@ import { runProgram } from "../packages/cli/dist/program.js";
 const source = "a".repeat(40);
 const runtimeResult = {
   exitCode: 0,
-  stdout: JSON.stringify({
-    status: "VERIFIED",
-    source,
-    requestId: "same-request",
-  }) + "\n",
+  stdout: JSON.stringify({ status: "VERIFIED", source }) + "\n",
   stderr: "",
 };
 
@@ -124,7 +120,7 @@ test("dirty and local-only sources stop before the installed runtime", async () 
   assert.equal(localOnly.calls.some((call) => call.command === "release"), false);
 });
 
-test("manual default and explicit-source entrypoints send the same commit to the same runtime", async () => {
+test("manual default and explicit-source entrypoints invoke the same runtime for the same commit", async () => {
   const manual = makeDependencies();
   const explicit = makeDependencies();
   const manualResult = await runProgram(["release"], manual.dependencies);
@@ -132,5 +128,4 @@ test("manual default and explicit-source entrypoints send the same commit to the
   const invocation = (calls) => calls.find((call) => call.command === "release");
   assert.deepEqual(invocation(manual.calls), invocation(explicit.calls));
   assert.equal(manualResult.stdout, explicitResult.stdout);
-  assert.equal(JSON.parse(manualResult.stdout).requestId, "same-request");
 });
