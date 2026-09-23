@@ -66,6 +66,24 @@ function route(url, init) {
   if (authorization !== "Bearer synthetic-stdio-broadcast-bearer") {
     return response({ error: "human_auth_invalid" }, 401);
   }
+  if (init.method === "GET" && path === "/v1/workspaces") {
+    return response({
+      workspaces: [
+        {
+          workspaceId: "workspace-synthetic",
+          tenantId: "workspace-synthetic",
+          accountId: "account-synthetic",
+          slug: workspace,
+          workspaceSlug: workspace,
+          workspaceCode: "northstar",
+          displayName: "Fonte",
+          role: "owner",
+          availableEnvironments: ["production"],
+          localBootstrapIdentity: null,
+        },
+      ],
+    });
+  }
   if (
     init.method === "POST" &&
     path ===
@@ -164,7 +182,11 @@ function sendOperation() {
   return {
     schema: "broadcast_send_operation.v2",
     operationId: sendOperationId,
-    scope: { workspaceId: "workspace-internal", environment: "production", draftId },
+    scope: {
+      workspaceId: "workspace-internal",
+      environment: "production",
+      draftId,
+    },
     instructionGeneration: 1,
     approvalGeneration: 1,
     acceptedAt: "2026-09-22T16:00:00.000Z",
@@ -176,10 +198,17 @@ function sendOperation() {
     nextAttemptAt: "2026-09-22T16:00:01.000Z",
     total: null,
     timestamps: {
-      preparationStartedAt: null, snapshotAt: null, authorizationCommittedAt: null,
-      firstSubmissionAt: null, terminalAt: null,
+      preparationStartedAt: null,
+      snapshotAt: null,
+      authorizationCommittedAt: null,
+      firstSubmissionAt: null,
+      terminalAt: null,
     },
-    delivery: { status: "unavailable", reason: "provider_submission_not_started", observedAt: null },
+    delivery: {
+      status: "unavailable",
+      reason: "provider_submission_not_started",
+      observedAt: null,
+    },
     requiredAction: null,
     allowedActions: ["cancel"],
     executionAuthorized: false,

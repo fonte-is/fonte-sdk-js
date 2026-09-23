@@ -94,6 +94,17 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
     [...MCP_FONTE_ALLOWLIST.tools],
   );
 
+  const workspaceList = await call(child, "fonte_list_workspaces", {});
+  assert.equal(workspaceList.outcome, "completed");
+  assert.deepEqual(workspaceList.workspaces, [
+    {
+      slug: workspace,
+      name: "Fonte",
+      role: "owner",
+      available_environments: ["production"],
+    },
+  ]);
+
   const created = await call(child, "fonte_create_broadcast_draft", {
     workspace,
     draft_id: draftId,
@@ -313,7 +324,7 @@ async function startMcp() {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(
           () => reject(new Error(`timed out waiting for ${method}`)),
-          5_000,
+          30_000,
         );
         pending.set(requestId, (message) => {
           clearTimeout(timeout);

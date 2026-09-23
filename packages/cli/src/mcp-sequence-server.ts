@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 
 import { CLI_VERSION } from "./constants.js";
 import { registerMcpBroadcastHtmlPreparationTools } from "./mcp-broadcast-html-preparation-registration.js";
+import { registerMcpWorkspaceCatalogTool } from "./mcp-workspace-catalog-registration.js";
 import {
   MCP_BROADCAST_HTML_PREPARE_TOOL,
   MCP_BROADCAST_HTML_REVISE_TOOL,
@@ -47,6 +48,10 @@ import {
   type BroadcastTargetingClientProvider,
 } from "./mcp-broadcast-targeting-tools.js";
 import {
+  MCP_WORKSPACE_LIST_TOOL,
+  type WorkspaceCatalogClientProvider,
+} from "./mcp-workspace-catalog-tools.js";
+import {
   createMcpClientAuthProvider,
   type McpClientAuthOptions,
 } from "./mcp-client-auth.js";
@@ -63,6 +68,7 @@ import { readBroadcastLocalFile } from "./operator-broadcast-html-file.js";
 import { createBroadcastSenderClient } from "./operator-broadcast-sender-client.js";
 import { createBroadcastTargetingClient } from "./operator-broadcast-targeting-client.js";
 import { createBroadcastSendInstructionClient } from "./operator-broadcast-send-instruction-client.js";
+import { createWorkspaceCatalogClient } from "./operator-workspace-catalog-client.js";
 import { createSequenceAuthoringClient } from "./operator-sequence-client.js";
 
 export const MCP_SERVER_NAME = "fonte";
@@ -87,11 +93,16 @@ export const MCP_BROADCAST_TOOLS = [
   MCP_BROADCAST_HTML_REVISE_TOOL,
 ] as const;
 export const MCP_FONTE_ALLOWLIST = {
-  tools: [...MCP_SEQUENCE_TOOLS, ...MCP_BROADCAST_TOOLS],
+  tools: [
+    MCP_WORKSPACE_LIST_TOOL,
+    ...MCP_SEQUENCE_TOOLS,
+    ...MCP_BROADCAST_TOOLS,
+  ],
 } as const;
 
 export type SequenceMcpSessionOptions = McpClientAuthOptions;
 export interface FonteMcpClientProviders {
+  readonly workspaceCatalog: WorkspaceCatalogClientProvider;
   readonly sequence: SequenceMcpClientProvider;
   readonly broadcastDraftLifecycle: BroadcastDraftLifecycleClientProvider;
   readonly broadcastDraftRevision: BroadcastDraftRevisionClientProvider;
@@ -127,6 +138,8 @@ export function createDurableFonteMcpSession(
     render,
   });
   return {
+    workspaceCatalog: async () =>
+      createWorkspaceCatalogClient((await authenticated()).request),
     sequence: async () =>
       createSequenceAuthoringClient((await authenticated()).request),
     broadcastDraftLifecycle: lifecycle,
@@ -167,6 +180,7 @@ export function createFonteMcpServer(
   providers: FonteMcpClientProviders,
 ): McpServer {
   const server = mcpServer(fonteInstructions);
+  registerMcpWorkspaceCatalogTool(server, providers.workspaceCatalog);
   registerMcpSequenceTools(server, providers.sequence);
   registerMcpBroadcastDraftLifecycleTools(
     server,
@@ -201,4 +215,4 @@ const sequenceInstructions =
   "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the selected local Fonte credential store; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. This server cannot enroll, send, deliver, or manage recipients.";
 
 const fonteInstructions =
-  "The local fonte-mcp stdio host provides Sequence authoring plus content-first Broadcast draft create/read/update, local-file draft preparation, verified sender discovery and revision-fenced binding, stable-ID To/Except persistence, canonical render, verified-account test request/readback, and the v3 Send/Schedule operation through Fonte Core using the selected local Fonte session. Initialize and tools/list never log in. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. Local-file preparation keeps one stable draft identity and never tests or sends. Sender discovery exact-matches verified Core profiles and never guesses among ambiguous choices. Target saves do not resolve names, count recipients, prepare an audience, or grant Send authority. Preview and tests are separate effects and never Send prerequisites. Status reads are observational; internal authorization/package/activation phases are described as Preparing unless diagnostics were requested. This host does not share credentials with hosted MCP or the legacy private transport.";
+  "The local fonte-mcp stdio host lists accessible workspaces and provides Sequence authoring plus content-first Broadcast draft create/read/update, local-file draft preparation, verified sender discovery and revision-fenced binding, stable-ID To/Except persistence, canonical render, verified-account test request/readback, and the v3 Send/Schedule operation through Fonte Core using the selected local Fonte session. Use a workspace slug returned by fonte_list_workspaces. Initialize and tools/list never log in. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. Local-file preparation keeps one stable draft identity and never tests or sends. Sender discovery exact-matches verified Core profiles and never guesses among ambiguous choices. Target saves do not resolve names, count recipients, prepare an audience, or grant Send authority. Preview and tests are separate effects and never Send prerequisites. Status reads are observational; internal authorization/package/activation phases are described as Preparing unless diagnostics were requested. This host does not share credentials with hosted MCP or the legacy private transport.";
