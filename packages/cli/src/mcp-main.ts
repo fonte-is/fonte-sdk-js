@@ -5,8 +5,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { createClientAuthRuntime } from "./client-auth-runtime.js";
 import { withLoginLock } from "./login-lock.js";
 import {
-  createDurableSequenceMcpSession,
-  createFonteSequenceMcpServer,
+  createDurableFonteMcpSession,
+  createFonteMcpServer,
 } from "./mcp-sequence-server.js";
 
 const coreRequestLimitBytes = 1_048_576;
@@ -22,14 +22,14 @@ const authorization = createClientAuthRuntime({
 process.once("SIGINT", cancel);
 process.once("SIGTERM", cancel);
 try {
-  const session = createDurableSequenceMcpSession({
+  const session = createDurableFonteMcpSession({
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,
     authorize: authorization.authorize,
     renewAuthorization: authorization.renewAuthorization,
     signal: cancellation.signal,
   });
-  const server = createFonteSequenceMcpServer(session);
+  const server = createFonteMcpServer(session);
   const transport = new StdioServerTransport(process.stdin, process.stdout, {
     maxBufferSize: coreRequestLimitBytes,
   });

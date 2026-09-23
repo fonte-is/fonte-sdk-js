@@ -10,6 +10,10 @@ import {
   parseCoreReceipt,
 } from "./operator-core-request.js";
 import {
+  createBroadcastSendInstructionClient,
+  type BroadcastSendInstructionClient,
+} from "./operator-broadcast-send-instruction-client.js";
+import {
   createWorkspaceMarketingSettingsClient,
   type WorkspaceMarketingSettingsClient,
 } from "./operator-marketing-settings-client.js";
@@ -56,6 +60,21 @@ export type {
 } from "./operator-types.js";
 export type { BroadcastPreflightInput } from "./operator-preflight-client.js";
 export type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+export type {
+  AcceptBroadcastSendInput,
+  AmendBroadcastSendApprovalInput,
+  BroadcastSendAllowedAction,
+  BroadcastSendDelivery,
+  BroadcastSendOperation,
+  BroadcastSendOperationPhase,
+  BroadcastSendOperationResult,
+  BroadcastSendTiming,
+  BroadcastSpendLimitRequiredAction,
+  CancelBroadcastSendInput,
+  ReadBroadcastSendOperationInput,
+  ReplaceBroadcastSendScheduleInput,
+  ResolveBroadcastSpendLimitInput,
+} from "./operator-broadcast-send-instruction-types.js";
 export type {
   ContactImportStatusInput,
   ContactImportStatusResult,
@@ -190,7 +209,8 @@ export interface CoreOperatorClient
     ProviderEvidenceClient,
     WorkspaceInvitationClient,
     WorkspaceMarketingSettingsClient,
-    SequenceAuthoringClient {
+    SequenceAuthoringClient,
+    BroadcastSendInstructionClient {
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -239,6 +259,7 @@ export function createCoreOperatorClient(
     ...createWorkspaceInvitationClient(request),
     ...createWorkspaceMarketingSettingsClient(request),
     ...createSequenceAuthoringClient(request),
+    ...createBroadcastSendInstructionClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,

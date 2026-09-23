@@ -227,6 +227,79 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["broadcast", "send", "now"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-version <n> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Accepts one saved Broadcast instruction immediately. This is the one explicit Send effect; it performs no review, audience preparation, quote, payment, or provider work.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "schedule"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-version <n> --not-before <ISO-8601> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Accepts one saved Broadcast instruction for the exact future time. Expensive work remains backend-owned and does not begin before it is due.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "status"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid> [--watch]",
+      ],
+    ],
+    detail:
+      "Observes the durable Send operation with GET only. It never prepares, authorizes, retries, or otherwise advances work.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "replace-schedule"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-instruction-generation <n> --expected-version <n>",
+        "--not-before <ISO-8601> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Atomically replaces an unclaimed scheduled instruction with the current saved draft revision and exact timing.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "cancel"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-instruction-generation <n> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Requests the generation-fenced v3 cancellation through Core; it never calls a queue or provider directly.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "increase-limit"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-instruction-generation <n> --expected-approval-generation <n>",
+        "--request-id <uuid>",
+      ],
+    ],
+    detail:
+      "After explicit customer authority, applies Core's exact required recurring account limit and amends approval for the same operation. The client performs no cost math.",
+    json: true,
+  },
+  {
     command: ["broadcast", "preflight"],
     usage: [
       [
@@ -273,7 +346,7 @@ const entries: readonly HelpEntry[] = [
       "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one bound sign-in.",
     json: true,
   },
-  ...(["pause", "resume", "close"] as const).map((operation) => ({
+  ...(["pause", "resume", "cancel", "close"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [
       [
@@ -353,7 +426,7 @@ const entries: readonly HelpEntry[] = [
   ]),
   ...providerAudienceHelpEntries,
   ...providerEvidenceHelpEntries,
-  ...(["prepare", "send", "reconcile", "watch", "duplicate"] as const).map(
+  ...(["prepare", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({
       command: ["broadcast", operation],
       usage: [[]],

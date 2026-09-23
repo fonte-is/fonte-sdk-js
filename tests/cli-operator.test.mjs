@@ -69,7 +69,6 @@ test("sandbox test grammar binds workspace, revision, and idempotency", () => {
 test("every absent broadcast and Bridge declaration is generically unsupported", async () => {
   for (const argv of [
     ["broadcast", "prepare"],
-    ["broadcast", "send"],
     ["broadcast", "reconcile"],
     ["broadcast", "watch"],
     ["broadcast", "duplicate"],

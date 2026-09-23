@@ -5,7 +5,10 @@ import test from "node:test";
 
 import { createClientAuthRuntime } from "../packages/cli/dist/client-auth-runtime.js";
 import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
-import { createDurableSequenceMcpSession } from "../packages/cli/dist/mcp-sequence-server.js";
+import {
+  createDurableSequenceMcpSession,
+  MCP_FONTE_ALLOWLIST,
+} from "../packages/cli/dist/mcp-sequence-server.js";
 import { createSequenceToolHandlers } from "../packages/cli/dist/mcp-sequence-tools.js";
 import {
   definition,
@@ -312,7 +315,10 @@ test("real stdio initialize and tools/list need no login; tool calls reread inje
   t.after(() => actual.close());
   await initialize(actual);
   const listed = await actual.request("tools/list", {});
-  assert.equal(listed.result.tools.length, 9);
+  assert.deepEqual(
+    listed.result.tools.map(({ name }) => name),
+    MCP_FONTE_ALLOWLIST.tools,
+  );
   assert.equal(actual.stderr(), "");
   assertNoSecret(actual.output());
 
