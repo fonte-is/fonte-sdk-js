@@ -5,6 +5,7 @@ import {
   MCP_FONTE_ALLOWLIST,
   createDurableFonteMcpSession,
 } from "../packages/cli/dist/mcp-sequence-server.js";
+import { HOSTED_CONFIG_URL } from "../packages/cli/dist/hosted-config.js";
 import { createWorkspaceCatalogClient } from "../packages/cli/dist/operator-workspace-catalog-client.js";
 
 test("workspace discovery reads the accessible catalog without exposing internal identities", async () => {
@@ -44,9 +45,9 @@ test("workspace discovery reads the accessible catalog without exposing internal
 test("workspace discovery uses the same durable auth provider", async () => {
   let authorizations = 0;
   const session = createDurableFonteMcpSession({
-    configUrl: "https://config.example.test/fonte",
+    configUrl: HOSTED_CONFIG_URL,
     fetch: async (input) => {
-      if (String(input) === "https://config.example.test/fonte") {
+      if (String(input) === HOSTED_CONFIG_URL) {
         return new Response(
           JSON.stringify({
             schema: "fonte.cli.hosted_config.v1",

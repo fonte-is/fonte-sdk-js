@@ -249,6 +249,7 @@ async function verifyLoggedOutSession(child, renderProof) {
   assertNoSecret(child.output());
 }
 
+
 async function verifyTargeting(child) {
   const targeted = await call(child, "fonte_update_broadcast_targeting", {
     workspace,
@@ -260,7 +261,7 @@ async function verifyTargeting(child) {
       except: [{ kind: "system", systemId }],
     },
   });
-  assert.equal(targeted.outcome, "completed");
+  assert.equal(targeted.outcome, "completed", JSON.stringify(targeted));
   assert.equal(targeted.targeting.revision, 4);
   assert.deepEqual(targeted.targeting.recipient_selection, {
     to: { kind: "everyone" },
