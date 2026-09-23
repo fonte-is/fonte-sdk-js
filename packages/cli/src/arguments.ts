@@ -31,6 +31,7 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     return { command: "help", apply: false, json: false, helpText };
   }
   const command = argv[0];
+  if (command === "setup") return parseSetupArguments(argv.slice(1));
   if (command === "auth") return parseAuthArguments(argv.slice(1));
   if (
     command === "broadcast" ||
@@ -80,6 +81,54 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     command,
     apply: flags.has("--yes"),
     json: flags.has("--json"),
+  };
+}
+
+function parseSetupArguments(argv: readonly string[]): ParsedArguments {
+  let json = false;
+  let workspaceSlug: string | undefined;
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--json" && !json) {
+      json = true;
+      continue;
+    }
+    if (value === "--workspace" && workspaceSlug === undefined) {
+      const next = argv[index + 1];
+      if (!next || next.startsWith("--"))
+        throw new CliUsageError("invalid_setup_flags", {
+          kind: "missing_field",
+          field: "--workspace",
+        });
+      workspaceSlug = next;
+      index += 1;
+      continue;
+    }
+    throw new CliUsageError("invalid_setup_flags", {
+      kind: value === "--workspace" ? "missing_field" : "unknown_field",
+      field: value ?? "setup",
+    });
+  }
+  if (!json)
+    throw new CliUsageError("invalid_setup_flags", {
+      kind: "missing_field",
+      field: "--json",
+    });
+  if (
+    workspaceSlug !== undefined &&
+    (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])$/.test(workspaceSlug) ||
+      workspaceSlug.includes("--"))
+  ) {
+    throw new CliUsageError("invalid_workspace", {
+      kind: "invalid_field",
+      field: "--workspace",
+    });
+  }
+  return {
+    command: "setup",
+    apply: false,
+    json: true,
+    ...(workspaceSlug === undefined ? {} : { workspaceSlug }),
   };
 }
 

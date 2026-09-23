@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 
 import { createClientAuthRuntime } from "./client-auth-runtime.js";
 import { withLoginLock } from "./login-lock.js";
+import { createLocalFonteReadinessReader } from "./local-readiness-adapter.js";
 import {
   createDurableFonteMcpSession,
   createFonteMcpServer,
@@ -29,7 +30,12 @@ try {
     renewAuthorization: authorization.renewAuthorization,
     signal: cancellation.signal,
   });
-  const server = createFonteMcpServer(session);
+  const readinessReader = createLocalFonteReadinessReader({
+    auth: authorization,
+    workspaceCatalog: session.workspaceCatalog,
+    signal: cancellation.signal,
+  });
+  const server = createFonteMcpServer(session, readinessReader);
   const transport = new StdioServerTransport(process.stdin, process.stdout, {
     maxBufferSize: coreRequestLimitBytes,
   });

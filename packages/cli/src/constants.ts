@@ -54,6 +54,7 @@ export const RECONCILE_COMMAND = [
 
 export const USAGE_TEXT = [
   "Usage:",
+  "  fonte setup --json [--workspace <slug>]",
   "  fonte init [--yes] [--json]",
   "  fonte doctor [--json]",
   "  fonte test --workspace <slug> [--json]",

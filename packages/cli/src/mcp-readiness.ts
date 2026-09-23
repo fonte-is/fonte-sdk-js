@@ -1,58 +1,12 @@
 import type { SessionStatus } from "./client-auth-types.js";
 import { CLI_VERSION } from "./constants.js";
-import {
-  MCP_BROADCAST_DRAFT_CREATE_TOOL,
-  MCP_BROADCAST_DRAFT_READ_TOOL,
-} from "./mcp-broadcast-draft-lifecycle-tools.js";
-import { MCP_BROADCAST_DRAFT_REVISION_TOOL } from "./mcp-broadcast-draft-revision-tools.js";
-import {
-  MCP_BROADCAST_HTML_PREPARE_TOOL,
-  MCP_BROADCAST_HTML_REVISE_TOOL,
-} from "./mcp-broadcast-html-preparation-tools.js";
-import {
-  MCP_BROADCAST_RENDER_TOOL,
-  MCP_BROADCAST_TEST_READ_TOOL,
-  MCP_BROADCAST_TEST_REQUEST_TOOL,
-} from "./mcp-broadcast-render-test-tools.js";
-import {
-  MCP_BROADCAST_SENDER_LIST_TOOL,
-  MCP_BROADCAST_SENDER_UPDATE_TOOL,
-} from "./mcp-broadcast-sender-tools.js";
-import {
-  MCP_BROADCAST_SCHEDULE_REPLACE_TOOL,
-  MCP_BROADCAST_SCHEDULE_TOOL,
-  MCP_BROADCAST_SEND_CANCEL_TOOL,
-  MCP_BROADCAST_SEND_NOW_TOOL,
-  MCP_BROADCAST_SEND_READ_TOOL,
-  MCP_BROADCAST_SPEND_LIMIT_INCREASE_TOOL,
-} from "./mcp-broadcast-send-instruction-tools.js";
-import { MCP_BROADCAST_TARGETING_UPDATE_TOOL } from "./mcp-broadcast-targeting-tools.js";
-import { MCP_SEQUENCE_TOOLS } from "./mcp-sequence-tools.js";
-import { MCP_WORKSPACE_LIST_TOOL } from "./mcp-workspace-catalog-tools.js";
+import { MCP_FONTE_TOOLS } from "./mcp-tool-inventory.js";
 
 export const MCP_PRODUCT_CAPABILITY_VERSION = "fonte-mcp-catalog.v1" as const;
 
-export const REQUIRED_PRODUCT_TOOLS = [
-  MCP_WORKSPACE_LIST_TOOL,
-  ...MCP_SEQUENCE_TOOLS,
-  MCP_BROADCAST_DRAFT_CREATE_TOOL,
-  MCP_BROADCAST_DRAFT_READ_TOOL,
-  MCP_BROADCAST_DRAFT_REVISION_TOOL,
-  MCP_BROADCAST_SENDER_LIST_TOOL,
-  MCP_BROADCAST_SENDER_UPDATE_TOOL,
-  MCP_BROADCAST_TARGETING_UPDATE_TOOL,
-  MCP_BROADCAST_RENDER_TOOL,
-  MCP_BROADCAST_TEST_REQUEST_TOOL,
-  MCP_BROADCAST_TEST_READ_TOOL,
-  MCP_BROADCAST_SEND_NOW_TOOL,
-  MCP_BROADCAST_SCHEDULE_TOOL,
-  MCP_BROADCAST_SEND_READ_TOOL,
-  MCP_BROADCAST_SCHEDULE_REPLACE_TOOL,
-  MCP_BROADCAST_SEND_CANCEL_TOOL,
-  MCP_BROADCAST_SPEND_LIMIT_INCREASE_TOOL,
-  MCP_BROADCAST_HTML_PREPARE_TOOL,
-  MCP_BROADCAST_HTML_REVISE_TOOL,
-] as const;
+export const REQUIRED_PRODUCT_TOOLS = MCP_FONTE_TOOLS;
+
+export const REQUIRED_PRODUCT_TOOL_COUNT = REQUIRED_PRODUCT_TOOLS.length;
 
 export type ReadinessState =
   | "ready"

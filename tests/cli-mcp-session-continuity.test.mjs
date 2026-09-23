@@ -314,7 +314,7 @@ test("refresh failure remains typed and does not submit a second product request
 test("real stdio initialize and tools/list need no login; tool calls reread injected custody", async (t) => {
   const actual = await startMcp("packages/cli/dist/mcp-main.js");
   t.after(() => actual.close());
-  await initialize(actual);
+  await initialize(actual, true);
   const listed = await actual.request("tools/list", {});
   assert.deepEqual(
     listed.result.tools.map(({ name }) => name),
@@ -326,7 +326,7 @@ test("real stdio initialize and tools/list need no login; tool calls reread inje
 
   const injected = await startMcp("tests/fixtures/cli-mcp-session-stdio.mjs");
   t.after(() => injected.close());
-  await initialize(injected);
+  await initialize(injected, false);
   const first = await injected.request("tools/call", {
     name: "fonte_list_sequences",
     arguments: scope,
@@ -341,7 +341,7 @@ test("real stdio initialize and tools/list need no login; tool calls reread inje
   assertNoSecret(injected.output());
 });
 
-async function initialize(process) {
+async function initialize(process, pavedSurface) {
   const response = await process.request("initialize", {
     protocolVersion: "2025-11-25",
     capabilities: {},
@@ -349,7 +349,11 @@ async function initialize(process) {
   });
   assert.equal(response.result.serverInfo.name, "fonte");
   assert.match(response.result.instructions, /fonte auth login/);
-  assert.match(response.result.instructions, /unlock the credential store/);
+  if (pavedSurface) {
+    assert.match(response.result.instructions, /fonte_status/);
+    assert.match(response.result.instructions, /fonte_prepare_broadcast/);
+    assert.doesNotMatch(response.result.instructions, /credential store/u);
+  }
   process.notify("notifications/initialized", {});
 }
 

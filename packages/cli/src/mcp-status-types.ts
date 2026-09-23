@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const MCP_FONTE_STATUS_TOOL = "fonte_status" as const;
+
 export const fonteStatusInputSchema = z.object({}).strict();
 
 const workspaceSchema = z
@@ -39,6 +41,6 @@ export const fonteStatusOutputSchema = z
     selected_workspace: workspaceSchema.nullable(),
     workspace_choices: z.array(workspaceSchema).max(20),
     more_workspace_choices: z.boolean(),
-    missing_tools: z.array(z.string().min(1).max(128)).max(27),
+    missing_tools: z.array(z.string().min(1).max(128)).max(41),
   })
   .strict();

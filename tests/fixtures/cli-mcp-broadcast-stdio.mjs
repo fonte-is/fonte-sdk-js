@@ -4,6 +4,7 @@ import { HostedTestBlockedError } from "../../packages/cli/dist/hosted-errors.js
 import {
   createDurableFonteMcpSession,
   createFonteMcpServer,
+  MCP_FONTE_TOOLS,
 } from "../../packages/cli/dist/mcp-sequence-server.js";
 
 const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
@@ -53,7 +54,26 @@ const session = createDurableFonteMcpSession({
     return "synthetic-stdio-broadcast-bearer";
   },
 });
-const server = createFonteMcpServer(session);
+const readinessReader = {
+  async inspectHost() {
+    return { initialized: true, tools: MCP_FONTE_TOOLS };
+  },
+  async readSession() {
+    return {
+      status: { state: "ready", serverCheck: "not_checked" },
+      storageAvailable: true,
+    };
+  },
+  async listWorkspaces() {
+    return (await session.workspaceCatalog())
+      .listWorkspaces()
+      .then((values) => values.map(({ slug, name }) => ({ slug, name })));
+  },
+  async readSelectedWorkspace() {
+    return workspace;
+  },
+};
+const server = createFonteMcpServer(session, readinessReader);
 await server.connect(
   new StdioServerTransport(process.stdin, process.stdout, {
     maxBufferSize: 1_048_576,

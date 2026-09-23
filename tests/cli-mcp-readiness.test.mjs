@@ -29,7 +29,7 @@ function reader(overrides = {}) {
 }
 
 test("signed-in selected workspace projects one ready state", async () => {
-  assert.equal(REQUIRED_PRODUCT_TOOLS.length, 27);
+  assert.equal(REQUIRED_PRODUCT_TOOLS.length, 41);
   const result = await readFonteReadiness(reader());
 
   assert.equal(result.state, "ready");
