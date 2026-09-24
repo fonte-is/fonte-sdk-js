@@ -46,6 +46,7 @@ export const prepareBroadcastPavedInputSchema = z
     text_source: nullableBody.optional(),
     html_source_file: absolutePath.optional(),
     html_reference_file: absolutePath.nullable().optional(),
+    audience_file: absolutePath.optional(),
     postal_address_literal: z
       .string()
       .min(1)
@@ -87,6 +88,13 @@ export const prepareBroadcastPavedInputSchema = z
         message: "An HTML reference requires an HTML source file.",
       });
     }
+    if (value.audience_file && value.audience_selector) {
+      context.addIssue({
+        code: "custom",
+        path: ["audience_file"],
+        message: "Choose a CSV audience file or an audience selector, not both.",
+      });
+    }
   });
 
 const choiceSchema = z
@@ -99,7 +107,7 @@ const choiceSchema = z
 
 export const broadcastPavedPreparationOutputSchema = z
   .object({
-    status: z.enum(["ready_to_send", "needs_input", "blocked"]),
+    status: z.enum(["ready_to_send", "preparing", "needs_input", "blocked"]),
     draft_id: uuid.nullable(),
     revision: z.number().int().positive().safe().nullable(),
     summary: z.string().min(1).max(2_000),
@@ -107,7 +115,13 @@ export const broadcastPavedPreparationOutputSchema = z
     choices: z.array(choiceSchema).max(500),
     warnings: z.array(z.string().min(1).max(300)).max(100),
     send_input: z
-      .object({ preparation_reference: z.string().min(1).max(100) })
+      .object({
+        workspace: selector,
+        draft_id: uuid,
+        expected_revision: z.number().int().positive().safe(),
+        snapshot_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+        request_id: uuid,
+      })
       .strict()
       .nullable(),
   })
@@ -120,7 +134,29 @@ export const broadcastPavedPreparationOutputSchema = z
       context.addIssue({
         code: "custom",
         path: ["send_input"],
-        message: "Ready results require an exact preparation reference and current draft revision.",
+        message: "Ready results require durable facts for the exact current draft revision.",
+      });
+    }
+    if (
+      value.status === "ready_to_send" &&
+      value.send_input !== null &&
+      (value.send_input.draft_id !== value.draft_id ||
+        value.send_input.expected_revision !== value.revision)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["send_input"],
+        message: "Durable Send facts must match the prepared draft and revision.",
+      });
+    }
+    if (
+      value.status === "preparing" &&
+      (value.missing.length > 0 || value.choices.length > 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["choices"],
+        message: "Preparing is automatic and cannot request human input.",
       });
     }
     if (value.status !== "ready_to_send" && value.send_input !== null) {
@@ -134,7 +170,11 @@ export const broadcastPavedPreparationOutputSchema = z
 
 export const sendPreparedBroadcastInputSchema = z
   .object({
-    preparation_reference: z.string().regex(/^bpr1_[0-9a-f-]{36}$/iu),
+    workspace: selector,
+    draft_id: uuid,
+    expected_revision: z.number().int().positive().safe(),
+    snapshot_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+    request_id: uuid,
   })
   .strict();
 
