@@ -48,7 +48,10 @@ import type {
 } from "./operator-types.js";
 import { preflightRecipientExpression } from "./operator-preflight-audience-json.js";
 import type { ProductionDraftClient } from "./operator-production-draft-client.js";
-import type { ProductionAudienceOptionsResult } from "./operator-production-types.js";
+import type {
+  ProductionAudienceInput,
+  ProductionAudienceOptionsResult,
+} from "./operator-production-types.js";
 import type {
   WorkspaceCatalogClient,
   WorkspaceSummary,
@@ -325,6 +328,12 @@ async function prepareNewDraft(
   if (source) context.warnings.push(...source.report.warnings);
 
   const body = source?.html ?? input.text_source!;
+  const initialAudience: ProductionAudienceInput = input.audience_file
+    ? {
+      kind: "recipient_expression",
+      expression: { include: [], exclude: [] },
+    }
+    : { kind: "all_contacts", expression: null };
   const createInput = {
     workspace: workspace.slug,
     idempotencyKey: draftId,
@@ -335,7 +344,7 @@ async function prepareNewDraft(
     senderProfileId: sender.value.sender_profile_id,
     replyTo: null,
     communicationPurposeId: purpose.value.communication_purpose_id,
-    audience: { kind: "all_contacts" as const, expression: null },
+    audience: initialAudience,
   };
 
   const productionDrafts = await dependencies.productionDrafts();
@@ -526,7 +535,11 @@ async function prepareResolvedDraft(
     );
     context.revision = draft.revision;
   }
-  if (input.audience_selector && !isCurrentAllContacts(draft.draft)) {
+  if (
+    !input.audience_file &&
+    input.audience_selector &&
+    !isCurrentAllContacts(draft.draft)
+  ) {
     draft = await applyAudience(workspace.slug, draft, dependencies);
     context.revision = draft.revision;
   }
@@ -1295,6 +1308,7 @@ function sameCreateCoreFields(
     readonly senderProfileId: string;
     readonly communicationPurposeId: string;
     readonly body: string;
+    readonly audience: ProductionAudienceInput;
   },
 ): boolean {
   return draft.title === input.title &&
@@ -1303,7 +1317,19 @@ function sameCreateCoreFields(
     draft.sender_profile_id === input.senderProfileId &&
     draft.communication_purpose_id === input.communicationPurposeId &&
     draft.text_body === input.body &&
-    draft.audience_kind === "all_contacts";
+    sameCreatedAudience(draft, input.audience);
+}
+
+function sameCreatedAudience(
+  draft: BroadcastDraftSnapshot,
+  audience: ProductionAudienceInput,
+): boolean {
+  if (audience.kind === "all_contacts") {
+    return draft.audience_kind === "all_contacts";
+  }
+  return draft.audience_kind === "recipient_expression" &&
+    stableJson(draft.recipient_expression) === stableJson(audience.expression) &&
+    draft.recipient_selection === null;
 }
 
 function matchesChanges(

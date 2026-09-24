@@ -14,6 +14,8 @@ import {
 import {
   createBroadcastPavedOperator,
 } from "../packages/cli/dist/operator-broadcast-paved.js";
+import { preflightRecipientExpression } from
+  "../packages/cli/dist/operator-preflight-audience-json.js";
 import { CoreOperatorError } from
   "../packages/cli/dist/operator-core-request.js";
 
@@ -88,6 +90,10 @@ test("create and repeated preparation retain one exact draft and never Test Send
   assert.equal(first.draft_id, second.draft_id);
   assert.deepEqual(first.send_input, second.send_input);
   assert.equal(fakes.calls.creates, 1);
+  assert.deepEqual(fakes.calls.createdAudiences, [{
+    kind: "all_contacts",
+    expression: null,
+  }]);
   assert.equal(fakes.calls.sends, 0);
   assert.equal(fakes.calls.tests, 0);
   assert.equal(broadcastPavedPreparationOutputSchema.safeParse(first).success, true);
@@ -181,6 +187,7 @@ test("CSV preparation resumes the same durable set after pending and binds only 
   let processA = createBroadcastPavedOperator(fakes.dependencies);
 
   const pending = await processA.prepare(input);
+  const draftWhilePending = structuredClone(fakes.draft);
   processA = null;
   const processB = createBroadcastPavedOperator(fakes.dependencies);
   const ready = await processB.prepare(input);
@@ -189,6 +196,22 @@ test("CSV preparation resumes the same durable set after pending and binds only 
   assert.deepEqual(pending.missing, []);
   assert.deepEqual(pending.choices, []);
   assert.equal(pending.send_input, null);
+  assert.equal(draftWhilePending.audience_kind, "recipient_expression");
+  assert.deepEqual(draftWhilePending.recipient_expression, {
+    include: [],
+    exclude: [],
+  });
+  assert.throws(
+    () => preflightRecipientExpression(draftWhilePending.recipient_expression),
+    /core_operator_receipt_invalid/u,
+  );
+  assert.equal(draftWhilePending.recipient_selection, null);
+  assert.equal(fakes.calls.createdDrafts.length, 1);
+  assert.notEqual(fakes.calls.createdDrafts[0].audience_kind, "all_contacts");
+  assert.deepEqual(fakes.calls.createdAudiences, [{
+    kind: "recipient_expression",
+    expression: { include: [], exclude: [] },
+  }]);
   assert.doesNotMatch(JSON.stringify(pending), /oneTimeSetId|clientRequestKey|synthetic-audience\.csv/u);
   assert.equal(ready.status, "ready_to_send");
   assert.equal(supplierCalls.length, 1);
@@ -215,8 +238,11 @@ test("CSV preparation resumes the same durable set after pending and binds only 
     },
     except: [],
   });
+  assert.equal(fakes.draft.audience_kind, "recipient_expression");
   assert.equal(fakes.calls.targeting, 1);
   assert.deepEqual(fakes.calls.renderedRevisions, [2]);
+  assert.equal(fakes.calls.sends, 0);
+  assert.equal(fakes.calls.tests, 0);
   assert.equal(broadcastPavedPreparationOutputSchema.safeParse(pending).success, true);
   assert.equal(broadcastPavedPreparationOutputSchema.safeParse(ready).success, true);
 });
@@ -495,6 +521,8 @@ function createFakes({
     tests: 0,
     durableSends: 0,
     targeting: 0,
+    createdAudiences: [],
+    createdDrafts: [],
     readDraftWorkspaces: [],
     renderedRevisions: [],
   };
@@ -532,17 +560,22 @@ function createFakes({
     },
     async createProductionDraft(input) {
       calls.creates += 1;
+      calls.createdAudiences.push(structuredClone(input.audience));
       fakes.draft = {
         ...blankDraft(input.idempotencyKey),
         title: input.title,
         sender_profile_id: input.senderProfileId,
         audience_kind: input.audience.kind,
+        recipient_expression: input.audience.kind === "recipient_expression"
+          ? structuredClone(input.audience.expression)
+          : null,
         communication_purpose_id: input.communicationPurposeId,
         subject: input.subject,
         preheader: input.preheader,
         text_body: input.body,
         composer_body: input.body,
       };
+      calls.createdDrafts.push(structuredClone(fakes.draft));
       return lifecycleResult(fakes.draft);
     },
   };
