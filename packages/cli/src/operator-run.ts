@@ -62,6 +62,8 @@ import {
   segmentReceiptDescriptor,
 } from "./operator-segment-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
+import { createBroadcastPavedOperator } from "./operator-broadcast-paved.js";
+import { readBroadcastLocalFile } from "./operator-broadcast-html-file.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
@@ -180,6 +182,37 @@ export async function runOperatorCommand(
     );
   }
 }
+
+/** Compose the direct paved command over the normal authenticated CLI Core client. */
+export async function createDirectBroadcastPavedOperator(
+  dependencies: OperatorDependencies,
+) {
+  const config = await loadHostedConfig(
+    dependencies.fetch as typeof fetch,
+    dependencies.configUrl,
+  );
+  const bearer = await dependencies.authorize(config, dependencies.signal);
+  const client = createCoreOperatorClient({
+    coreApiBaseUrl: config.coreApiBaseUrl,
+    bearer,
+    fetch: dependencies.fetch as typeof fetch,
+    signal: dependencies.signal,
+  });
+  return createBroadcastPavedOperator({
+    workspaceCatalog: async () => client.workspaceCatalog,
+    draftLifecycle: async () => client.broadcastDraftLifecycle,
+    draftRevision: async () => client.broadcastDraftRevision,
+    senders: async () => client.broadcastSender,
+    targeting: async () => client.broadcastTargeting,
+    productionDrafts: async () => client,
+    render: async () => client.broadcastRenderTest,
+    send: async () => client,
+    recipientSetSupplier: async () =>
+      client.broadcastRecipientSets(readBroadcastLocalFile),
+    readFile: readBroadcastLocalFile,
+  });
+}
+
 async function execute(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   client: ReturnType<typeof createCoreOperatorClient>,

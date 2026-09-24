@@ -174,6 +174,18 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["broadcast", "prepare"],
+    usage: [
+      [
+        "--workspace <slug> --draft-id <uuid>",
+        "--audience-file <absolute-csv>",
+      ],
+    ],
+    detail:
+      "Creates or reads one deterministic one-time CSV audience through Core and binds that exact audience to the existing draft with no exclusions. Repeat the same command while status is preparing. It never Sends; ready results return the exact durable send_input.",
+    json: true,
+  },
+  {
     command: ["broadcast", "audience", "options"],
     usage: [["--workspace <slug> --environment production"]],
     detail: "Lists Core-owned purposes and factual audience source IDs.",
@@ -239,7 +251,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Accepts one saved Broadcast instruction immediately. This is the one explicit Send effect; it performs no review, audience preparation, quote, payment, or provider work.",
+      "Accepts one saved Broadcast instruction immediately. For the paved path, pass the exact send_input object returned by broadcast prepare to broadcast send --send-input as one JSON argument. The prepared path preserves its request identity and never resends after an uncertain outcome.",
     json: true,
   },
   {
@@ -430,15 +442,13 @@ const entries: readonly HelpEntry[] = [
   ]),
   ...providerAudienceHelpEntries,
   ...providerEvidenceHelpEntries,
-  ...(["prepare", "reconcile", "watch", "duplicate"] as const).map(
-    (operation) => ({
-      command: ["broadcast", operation],
-      usage: [[]],
-      detail:
-        "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
-      json: true,
-    }),
-  ),
+  ...(["reconcile", "watch", "duplicate"] as const).map((operation) => ({
+    command: ["broadcast", operation],
+    usage: [[]],
+    detail:
+      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
+    json: true,
+  })),
   ...(["status", "diff", "placement-plan"] as const).map((operation) => ({
     command: ["bridge", operation],
     usage: [[]],

@@ -3,6 +3,7 @@ import { CliUsageError } from "./errors.js";
 import { operatorHelp } from "./operator-help.js";
 import { parseOperatorArguments } from "./operator-arguments.js";
 import { AUTH_HELP_TEXT } from "./auth-commands.js";
+import { parseBroadcastPavedArguments } from "./operator-broadcast-paved-cli.js";
 
 /** Implement exactly the invocation grammar in CONTRACT.md. */
 export function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -31,6 +32,15 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     return { command: "help", apply: false, json: false, helpText };
   }
   const command = argv[0];
+  const broadcastPaved = parseBroadcastPavedArguments(argv);
+  if (broadcastPaved) {
+    return {
+      command: "broadcast-paved",
+      apply: false,
+      json: true,
+      broadcastPaved,
+    };
+  }
   if (command === "setup") return parseSetupArguments(argv.slice(1));
   if (command === "auth") return parseAuthArguments(argv.slice(1));
   if (

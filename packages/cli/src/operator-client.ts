@@ -15,6 +15,35 @@ import {
   type BroadcastSendInstructionClient,
 } from "./operator-broadcast-send-instruction-client.js";
 import {
+  createBroadcastDraftLifecycleClient,
+  type BroadcastDraftLifecycleClient,
+} from "./operator-broadcast-draft-lifecycle-client.js";
+import {
+  createBroadcastDraftRevisionClient,
+  type BroadcastDraftRevisionClient,
+} from "./operator-broadcast-draft-revision-client.js";
+import {
+  createBroadcastRenderTestClient,
+  type BroadcastRenderTestClient,
+} from "./operator-broadcast-render-test-client.js";
+import {
+  createBroadcastSenderClient,
+  type BroadcastSenderClient,
+} from "./operator-broadcast-sender-client.js";
+import {
+  createBroadcastTargetingClient,
+  type BroadcastTargetingClient,
+} from "./operator-broadcast-targeting-client.js";
+import {
+  createBroadcastRecipientSetClient,
+  type BroadcastRecipientSetClient,
+} from "./operator-broadcast-recipient-set-client.js";
+import type { BroadcastLocalFileReader } from "./operator-broadcast-html-file.js";
+import {
+  createWorkspaceCatalogClient,
+  type WorkspaceCatalogClient,
+} from "./operator-workspace-catalog-client.js";
+import {
   CAMPAIGN_SEGMENT_RESPONSE_MAX_BYTES,
   createCampaignMetadataClient,
   type CampaignMetadataClient,
@@ -221,6 +250,15 @@ export interface CoreOperatorClient
     WorkspaceMarketingSettingsClient,
     SequenceAuthoringClient,
     BroadcastSendInstructionClient {
+  readonly workspaceCatalog: WorkspaceCatalogClient;
+  readonly broadcastDraftLifecycle: BroadcastDraftLifecycleClient;
+  readonly broadcastDraftRevision: BroadcastDraftRevisionClient;
+  readonly broadcastSender: BroadcastSenderClient;
+  readonly broadcastTargeting: BroadcastTargetingClient;
+  readonly broadcastRenderTest: BroadcastRenderTestClient;
+  broadcastRecipientSets(
+    readFile: BroadcastLocalFileReader,
+  ): BroadcastRecipientSetClient;
   readonly campaignMetadata: CampaignMetadataClient;
   readonly segmentMetadata: SegmentMetadataClient;
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
@@ -273,6 +311,7 @@ export function createCoreOperatorClient(
 export function createCoreOperatorClientWithRequester(
   request: CoreRequester,
 ): CoreOperatorClient {
+  const broadcastDraftRevision = createBroadcastDraftRevisionClient(request);
   return {
     ...createProductionOperatorClient(request),
     ...createProviderAudienceClient(request),
@@ -282,6 +321,17 @@ export function createCoreOperatorClientWithRequester(
     ...createWorkspaceMarketingSettingsClient(request),
     ...createSequenceAuthoringClient(request),
     ...createBroadcastSendInstructionClient(request),
+    workspaceCatalog: createWorkspaceCatalogClient(request),
+    broadcastDraftLifecycle: createBroadcastDraftLifecycleClient(request),
+    broadcastDraftRevision,
+    broadcastSender: createBroadcastSenderClient(
+      request,
+      broadcastDraftRevision,
+    ),
+    broadcastTargeting: createBroadcastTargetingClient(request),
+    broadcastRenderTest: createBroadcastRenderTestClient(request),
+    broadcastRecipientSets: (readFile) =>
+      createBroadcastRecipientSetClient(request, readFile),
     campaignMetadata: createCampaignMetadataClient(request),
     segmentMetadata: createSegmentMetadataClient(request),
     async sendSandboxTest(input) {

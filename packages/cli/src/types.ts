@@ -1,4 +1,5 @@
 import type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
+import type { ParsedBroadcastPavedCommand } from "./operator-broadcast-paved-cli.js";
 
 export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand =
@@ -7,6 +8,7 @@ export type ParsedCommand =
   | "auth-exec"
   | "auth-session"
   | "operator"
+  | "broadcast-paved"
   | "help"
   | "version";
 
@@ -21,6 +23,7 @@ export interface ParsedArguments {
   authAction?: "login" | "status" | "logout";
   switchAccount?: boolean;
   operator?: OperatorCommand;
+  broadcastPaved?: ParsedBroadcastPavedCommand;
 }
 
 export interface InvalidInvocationReceipt {

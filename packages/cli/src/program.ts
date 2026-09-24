@@ -29,7 +29,10 @@ import { blockedReceipt, plannedReceipt } from "./receipts.js";
 import { renderHuman, renderJson } from "./render.js";
 import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
-import { runOperatorCommand } from "./operator-run.js";
+import {
+  createDirectBroadcastPavedOperator,
+  runOperatorCommand,
+} from "./operator-run.js";
 import { runFonteSetup } from "./local-setup.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
@@ -105,6 +108,34 @@ export async function runProgram(
           }
         : receipt;
     return receiptResult(result, parsed.json, receiptExitCode(result));
+  }
+  if (parsed.command === "broadcast-paved") {
+    if (!parsed.broadcastPaved) {
+      return authorizationFailure();
+    }
+    try {
+      const paved =
+        dependencies.broadcastPaved ??
+        (dependencies.operator
+          ? await createDirectBroadcastPavedOperator(dependencies.operator)
+          : null);
+      if (!paved) return authorizationFailure();
+      if (parsed.broadcastPaved.action === "prepare") {
+        const result = await paved.prepare(parsed.broadcastPaved.input);
+        return {
+          exitCode:
+            result.status === "blocked" || result.status === "needs_input"
+              ? 3
+              : 0,
+          stdout: `${JSON.stringify(result)}\n`,
+          stderr: "",
+        };
+      }
+      const receipt = await paved.send(parsed.broadcastPaved.input);
+      return receiptResult(receipt, true, receiptExitCode(receipt));
+    } catch {
+      return executionFailure();
+    }
   }
   const request = { ...parsed, command: parsed.command };
   try {

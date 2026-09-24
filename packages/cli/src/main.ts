@@ -9,7 +9,6 @@ import { createClientAuthRuntime } from "./client-auth-runtime.js";
 import { withLoginLock } from "./login-lock.js";
 import { systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
-import { createDurableFonteMcpSession } from "./mcp-sequence-server.js";
 import { createLocalFonteSetupDependencies } from "./local-readiness-adapter.js";
 
 const cancellation = new AbortController();
@@ -18,6 +17,7 @@ const handleSignals =
   process.argv[2] === "auth" ||
   (process.argv[2] === "broadcast" &&
     (process.argv[3] === "canary" ||
+      process.argv[3] === "prepare" ||
       process.argv[3] === "send" ||
       (process.argv[3] === "audience" && process.argv[4] === "append")));
 if (handleSignals) {
@@ -57,6 +57,23 @@ const login = createClientAuthRuntime({
     }
   },
 });
+const setup =
+  process.argv[2] === "setup"
+    ? await import("./mcp-sequence-server.js").then(
+        ({ createDurableFonteMcpSession }) =>
+          createLocalFonteSetupDependencies({
+            auth: login,
+            workspaceCatalog: createDurableFonteMcpSession({
+              configUrl: process.env.FONTE_CLI_CONFIG_URL,
+              fetch: globalThis.fetch,
+              authorize: login.authorize,
+              renewAuthorization: login.renewAuthorization,
+              signal: cancellation.signal,
+            }).workspaceCatalog,
+            signal: cancellation.signal,
+          }),
+      )
+    : undefined;
 const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
@@ -91,17 +108,7 @@ const result = await runProgram(process.argv.slice(2), {
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   },
-  setup: createLocalFonteSetupDependencies({
-    auth: login,
-    workspaceCatalog: createDurableFonteMcpSession({
-      configUrl: process.env.FONTE_CLI_CONFIG_URL,
-      fetch: globalThis.fetch,
-      authorize: login.authorize,
-      renewAuthorization: login.renewAuthorization,
-      signal: cancellation.signal,
-    }).workspaceCatalog,
-    signal: cancellation.signal,
-  }),
+  ...(setup ? { setup } : {}),
 }).finally(() => {
   if (handleSignals) {
     process.removeListener("SIGINT", cancel);

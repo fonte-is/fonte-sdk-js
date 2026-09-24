@@ -3,6 +3,7 @@ import type { HostedConfig } from "./hosted-config.js";
 import type { OperatorDependencies } from "./operator-run.js";
 import type { AuthCommandDependencies } from "./auth-commands.js";
 import type { FonteSetupDependencies } from "./local-setup.js";
+import type { BroadcastPavedOperator } from "./operator-broadcast-paved.js";
 
 export interface ProjectProfile {
   root: string;
@@ -30,6 +31,7 @@ export interface ProgramDependencies {
   authExec?: AuthorizedConsumerDependencies;
   auth?: AuthCommandDependencies;
   operator?: OperatorDependencies;
+  broadcastPaved?: BroadcastPavedOperator;
   hosted?: HostedTestDependencies;
   setup?: FonteSetupDependencies;
 }
