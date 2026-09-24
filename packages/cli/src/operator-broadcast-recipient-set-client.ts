@@ -12,7 +12,7 @@ import {
   type BroadcastLocalFileReader,
 } from "./operator-broadcast-html-file.js";
 
-export const BROADCAST_RECIPIENT_SET_MAX_BYTES = 16 * 1_048_576;
+export const BROADCAST_RECIPIENT_SET_MAX_BYTES = 32 * 1024 * 1024;
 
 export interface BroadcastRecipientSetCreateInput {
   readonly workspace: string;

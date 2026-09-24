@@ -126,7 +126,7 @@ test("creates from exact local bytes, reads the exact set, and preserves lifecyc
   assert.equal(output.includes('"recipients"'), false);
 });
 
-test("rejects non-absolute, non-regular, oversized, invalid UTF-8, and invalid-header CSV before POST", async (t) => {
+test("enforces local CSV validation and accepts the exact 32 MiB boundary", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "fonte-recipient-set-invalid-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
 
@@ -184,6 +184,25 @@ test("rejects non-absolute, non-regular, oversized, invalid UTF-8, and invalid-h
     client.createBroadcastRecipientSet(input(linkPath)),
     (error) => error.reason === "broadcast_source_not_regular_file",
   );
+
+  const boundaryPath = path.join(directory, "boundary.csv");
+  const boundaryBytes = Buffer.concat([
+    Buffer.from("email\n"),
+    Buffer.alloc(BROADCAST_RECIPIENT_SET_MAX_BYTES - Buffer.byteLength("email\n"), 0x61),
+  ]);
+  await writeFile(boundaryPath, boundaryBytes);
+  const boundaryRequests = [];
+  const boundaryClient = createBroadcastRecipientSetClient(
+    async (...args) => {
+      boundaryRequests.push(args);
+      return envelope("pending");
+    },
+    readBroadcastLocalFile,
+  );
+  const boundary = await boundaryClient.createBroadcastRecipientSet(input(boundaryPath));
+  assert.equal(boundary.source.byte_length, 33_554_432);
+  assert.equal(boundary.source.row_count, 1);
+  assert.equal(boundaryRequests.length, 2);
 
   const oversizedPath = path.join(directory, "oversized.csv");
   await writeFile(oversizedPath, Buffer.alloc(BROADCAST_RECIPIENT_SET_MAX_BYTES + 1, 0x61));
