@@ -18,11 +18,116 @@ import { preflightRecipientExpression } from
   "../packages/cli/dist/operator-preflight-audience-json.js";
 import { CoreOperatorError } from
   "../packages/cli/dist/operator-core-request.js";
+import {
+  BroadcastDiagnostics,
+  withBroadcastDiagnostics,
+} from "../packages/cli/dist/operator-broadcast-diagnostics.js";
 
 const workspace = "workspace-synthetic";
 const draftId = "00000000-0000-4000-8000-000000000740";
 const senderId = "sender-synthetic";
 const purposeId = "purpose-synthetic";
+
+test("verbose Prepare identifies failed Core stages", async () => {
+  const csvBytes = Buffer.from("email\nmember@example.test\n", "utf8");
+  const cases = [
+    {
+      stage: "sender_catalog", reason: "oauth_client_route_denied", status: 403,
+      setup() {
+        const fakes = createFakes({ existingDraft: readyDraft() });
+        fakes.dependencies.senders = async () => ({
+          listBroadcastSenders: async () => {
+            throw new CoreOperatorError("oauth_client_route_denied", 403, "none");
+          },
+        });
+        return { dependencies: fakes.dependencies, input: { draft_id: draftId } };
+      },
+    },
+    {
+      stage: "audience_options", reason: "oauth_client_route_denied", status: 403,
+      setup() {
+        const fakes = createFakes({ existingDraft: readyDraft() });
+        fakes.dependencies.productionDrafts = async () => ({
+          listProductionAudienceOptions: async () => {
+            throw new CoreOperatorError("oauth_client_route_denied", 403, "none");
+          },
+        });
+        return { dependencies: fakes.dependencies, input: { draft_id: draftId } };
+      },
+    },
+    {
+      stage: "recipient_set_read", reason: "oauth_client_route_denied", status: 403,
+      setup() {
+        const recipientSetSupplier = {
+          createBroadcastRecipientSet: async () => { throw new Error("unused"); },
+          readBroadcastRecipientSet: async () => {
+            throw new CoreOperatorError("oauth_client_route_denied", 403, "none");
+          },
+        };
+        const fakes = createFakes({ existingDraft: readyDraft(), recipientSetSupplier,
+          readFile: async (filePath) => ({ path: filePath, bytes: Buffer.from(csvBytes) }) });
+        return { dependencies: fakes.dependencies,
+          input: { draft_id: draftId, audience_file: "/private/tmp/synthetic-audience.csv" } };
+      },
+    },
+    {
+      stage: "recipient_set_create", reason: "broadcast_recipient_set_create_denied", status: 400,
+      setup() {
+        const recipientSetSupplier = {
+          createBroadcastRecipientSet: async () => {
+            throw new CoreOperatorError("broadcast_recipient_set_create_denied", 400, "none");
+          },
+          readBroadcastRecipientSet: async () => {
+            throw new CoreOperatorError("broadcast_recipient_set_not_found", 404, "none");
+          },
+        };
+        const fakes = createFakes({ existingDraft: readyDraft(), recipientSetSupplier,
+          readFile: async (filePath) => ({ path: filePath, bytes: Buffer.from(csvBytes) }) });
+        return { dependencies: fakes.dependencies,
+          input: { draft_id: draftId, audience_file: "/private/tmp/synthetic-audience.csv" } };
+      },
+    },
+    {
+      stage: "targeting_bind", reason: "broadcast_targeting_conflict", status: 409,
+      setup() {
+        const draft = { ...readyDraft(), audience_kind: "recipient_expression",
+          recipient_expression: { include: [], exclude: [] } };
+        const fakes = createFakes({ existingDraft: draft });
+        fakes.dependencies.targeting = async () => ({
+          updateBroadcastTargeting: async () => {
+            throw new CoreOperatorError("broadcast_targeting_conflict", 409, "none");
+          },
+        });
+        return { dependencies: fakes.dependencies,
+          input: { draft_id: draftId, audience_selector: "all_contacts" } };
+      },
+    },
+    {
+      stage: "render", reason: "broadcast_render_unavailable", status: 503,
+      setup() {
+        const fakes = createFakes({ existingDraft: readyDraft() });
+        fakes.dependencies.render = async () => ({
+          renderBroadcastDraft: async () => {
+            throw new CoreOperatorError("broadcast_render_unavailable", 503, "none");
+          },
+        });
+        return { dependencies: fakes.dependencies, input: { draft_id: draftId } };
+      },
+    },
+  ];
+
+  for (const scenario of cases) {
+    const { dependencies, input } = scenario.setup();
+    const diagnostics = new BroadcastDiagnostics("prepare");
+    const operator = createBroadcastPavedOperator(dependencies);
+    const result = await withBroadcastDiagnostics(diagnostics, () => operator.prepare(input));
+    const output = diagnostics.output();
+    assert.equal(result.status, "blocked", scenario.stage);
+    assert.match(output, new RegExp(`prepare\\.${scenario.stage}\\s+\\d+ms`, "u"));
+    assert.match(output, new RegExp(`${scenario.status} ${scenario.reason}`, "u"));
+    assert.match(output, new RegExp(`prepare\\.failed_at ${scenario.stage}`, "u"));
+  }
+});
 
 test("workspace selection returns exact choices instead of selecting a first match", async () => {
   const fakes = createFakes({ workspaces: [workspaceSummary(), {

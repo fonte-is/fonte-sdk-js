@@ -28,6 +28,10 @@ import {
 import type { BroadcastTargetingClient } from "./operator-broadcast-targeting-client.js";
 import { CoreOperatorError } from "./operator-core-request.js";
 import {
+  runBroadcastDiagnosticStage,
+  withBroadcastDiagnosticAttempt,
+} from "./operator-broadcast-diagnostics.js";
+import {
   prepareBroadcastHtmlSource,
   type BroadcastHtmlSource,
 } from "./operator-broadcast-html-source.js";
@@ -183,10 +187,14 @@ export function createBroadcastPavedOperator(
           });
         }
 
+        const workspaces = await runBroadcastDiagnosticStage(
+          "workspace_catalog",
+          async () => (await dependencies.workspaceCatalog()).listWorkspaces(),
+        );
         const workspaceResolution = await resolveWorkspace(
           input.workspace_selector,
           input.environment,
-          await (await dependencies.workspaceCatalog()).listWorkspaces(),
+          workspaces,
           input.workspace_selector === undefined
             ? await dependencies.readSelectedWorkspace?.()
             : null,
@@ -289,18 +297,26 @@ async function prepareNewDraft(
     );
   }
 
-  const senders = await (await dependencies.senders()).listBroadcastSenders({
-    workspace: workspace.slug,
-    match: null,
-  });
+  const senders = await runBroadcastDiagnosticStage(
+    "sender_catalog",
+    async () =>
+      (await dependencies.senders()).listBroadcastSenders({
+        workspace: workspace.slug,
+        match: null,
+      }),
+  );
   const sender = resolveSender(senders.sender_profiles, null, input.sender_selector);
   if (sender.kind !== "selected") {
     return resolutionResult(context, sender, "A verified sender choice is required before creating the draft.");
   }
 
-  const purposeOptions = await (
-    await dependencies.productionDrafts()
-  ).listProductionAudienceOptions({ workspace: workspace.slug });
+  const purposeOptions = await runBroadcastDiagnosticStage(
+    "audience_options",
+    async () =>
+      (await dependencies.productionDrafts()).listProductionAudienceOptions({
+        workspace: workspace.slug,
+      }),
+  );
   const purpose = resolvePurpose(purposeOptions, null, input.communication_purpose_selector);
   if (purpose.kind !== "selected") {
     return resolutionResult(context, purpose, "A current communication purpose is required before creating the draft.");
@@ -350,14 +366,20 @@ async function prepareNewDraft(
   const productionDrafts = await dependencies.productionDrafts();
   let draft: BroadcastDraftLifecycleResult | null = null;
   try {
-    await productionDrafts.createProductionDraft(createInput);
+    await runBroadcastDiagnosticStage("draft_create", () =>
+      productionDrafts.createProductionDraft(createInput),
+    );
   } catch (error) {
     if (!isUnknownEffect(error)) throw error;
     context.warnings.push("Create acknowledgement was lost; the same draft identity was read once before any retry.");
     draft = await readDraftIfExists(lifecycle, workspace.slug, draftId);
     if (!draft) {
       try {
-        await productionDrafts.createProductionDraft(createInput);
+        await runBroadcastDiagnosticStage(
+          "draft_create",
+          () => productionDrafts.createProductionDraft(createInput),
+          2,
+        );
       } catch (retryError) {
         if (!isUnknownEffect(retryError)) throw retryError;
         draft = await readDraftIfExists(lifecycle, workspace.slug, draftId);
@@ -365,10 +387,10 @@ async function prepareNewDraft(
       }
     }
   }
-  draft ??= await lifecycle.readBroadcastDraft({
-    workspace: workspace.slug,
-    draftId,
-  });
+  draft ??= await runBroadcastDiagnosticStage(
+    "final_draft_read",
+    () => lifecycle.readBroadcastDraft({ workspace: workspace.slug, draftId }),
+  );
   context.revision = draft.revision;
   if (!sameCreateCoreFields(draft.draft, createInput)) {
     return blocked(context, "The exact created draft readback does not match the supplied create fields.", [
@@ -395,10 +417,12 @@ async function prepareExistingDraft(
   dependencies: BroadcastPavedDependencies,
 ): Promise<BroadcastPavedPreparationResult> {
   const lifecycle = await dependencies.draftLifecycle();
-  let draft = await lifecycle.readBroadcastDraft({
-    workspace: workspace.slug,
-    draftId: input.draft_id!,
-  });
+  let draft = await runBroadcastDiagnosticStage("draft_read", () =>
+    lifecycle.readBroadcastDraft({
+      workspace: workspace.slug,
+      draftId: input.draft_id!,
+    }),
+  );
   context.draftId = draft.draft_id;
   context.revision = draft.revision;
 
@@ -418,13 +442,17 @@ async function prepareExistingDraft(
   if (source) context.warnings.push(...source.report.warnings);
 
   const [senderCatalog, purposeOptions] = await Promise.all([
-    (await dependencies.senders()).listBroadcastSenders({
-      workspace: workspace.slug,
-      match: null,
-    }),
-    (await dependencies.productionDrafts()).listProductionAudienceOptions({
-      workspace: workspace.slug,
-    }),
+    runBroadcastDiagnosticStage("sender_catalog", async () =>
+      (await dependencies.senders()).listBroadcastSenders({
+        workspace: workspace.slug,
+        match: null,
+      }),
+    ),
+    runBroadcastDiagnosticStage("audience_options", async () =>
+      (await dependencies.productionDrafts()).listProductionAudienceOptions({
+        workspace: workspace.slug,
+      }),
+    ),
   ]);
   const sender = resolveSender(
     senderCatalog.sender_profiles,
@@ -588,10 +616,14 @@ async function finishPreparation(
   sender: BroadcastSenderProfile,
   purpose: ProductionAudienceOptionsResult["communication_purposes"][number],
 ): Promise<BroadcastPavedPreparationResult> {
-  const current = await (await dependencies.draftLifecycle()).readBroadcastDraft({
-    workspace: workspace.slug,
-    draftId: draft.draft_id,
-  });
+  const current = await runBroadcastDiagnosticStage(
+    "final_draft_read",
+    async () =>
+      (await dependencies.draftLifecycle()).readBroadcastDraft({
+        workspace: workspace.slug,
+        draftId: draft.draft_id,
+      }),
+  );
   if (
     current.draft_id !== draft.draft_id ||
     current.revision !== draft.revision ||
@@ -629,13 +661,13 @@ async function finishPreparation(
 
   let rendered: { draft_id: string; revision: number };
   try {
-    rendered = await (
-      await dependencies.render()
-    ).renderBroadcastDraft({
-      workspace: workspace.slug,
-      draftId: draft.draft_id,
-      revision: draft.revision,
-    });
+    rendered = await runBroadcastDiagnosticStage("render", async () =>
+      (await dependencies.render()).renderBroadcastDraft({
+        workspace: workspace.slug,
+        draftId: draft.draft_id,
+        revision: draft.revision,
+      }),
+    );
   } catch {
     return blocked(context, "The exact prepared draft revision could not be rendered.", [
       "broadcast_render_unavailable",
@@ -692,20 +724,22 @@ async function applySuppliedDraftChanges(
     return initial;
   }
   const revision = await dependencies.draftRevision();
-  return applyRevision(
-    initial,
-    workspace,
-    changes,
-    (baseRevision, operationId) =>
-      revision.reviseBroadcastDraft({
-        workspace,
-        draftId: initial.draft_id,
-        baseRevision,
-        operationId,
-        changes,
-      }),
-    (snapshot) => matchesChanges(snapshot, changes),
-    dependencies,
+  return runBroadcastDiagnosticStage("draft_revision", () =>
+    applyRevision(
+      initial,
+      workspace,
+      changes,
+      (baseRevision, operationId) =>
+        revision.reviseBroadcastDraft({
+          workspace,
+          draftId: initial.draft_id,
+          baseRevision,
+          operationId,
+          changes,
+        }),
+      (snapshot) => matchesChanges(snapshot, changes),
+      dependencies,
+    ),
   );
 }
 
@@ -716,20 +750,22 @@ async function applySender(
   dependencies: BroadcastPavedDependencies,
 ): Promise<BroadcastDraftLifecycleResult> {
   const client = await dependencies.senders();
-  return applyRevision(
-    initial,
-    workspace,
-    { sender: sender.sender_profile_id },
-    (baseRevision, operationId) =>
-      client.updateBroadcastSender({
-        workspace,
-        draftId: initial.draft_id,
-        baseRevision,
-        operationId,
-        senderProfileId: sender.sender_profile_id,
-      }),
-    (snapshot) => snapshot.sender_profile_id === sender.sender_profile_id,
-    dependencies,
+  return runBroadcastDiagnosticStage("draft_revision", () =>
+    applyRevision(
+      initial,
+      workspace,
+      { sender: sender.sender_profile_id },
+      (baseRevision, operationId) =>
+        client.updateBroadcastSender({
+          workspace,
+          draftId: initial.draft_id,
+          baseRevision,
+          operationId,
+          senderProfileId: sender.sender_profile_id,
+        }),
+      (snapshot) => snapshot.sender_profile_id === sender.sender_profile_id,
+      dependencies,
+    ),
   );
 }
 
@@ -743,22 +779,24 @@ async function applyPurpose(
     communicationPurposeId: purpose.communication_purpose_id,
   };
   const revision = await dependencies.draftRevision();
-  return applyRevision(
-    initial,
-    workspace,
-    changes,
-    (baseRevision, operationId) =>
-      revision.reviseBroadcastDraft({
-        workspace,
-        draftId: initial.draft_id,
-        baseRevision,
-        operationId,
-        changes,
-      }),
-    (snapshot) =>
-      snapshot.communication_purpose_id ===
-      purpose.communication_purpose_id,
-    dependencies,
+  return runBroadcastDiagnosticStage("draft_revision", () =>
+    applyRevision(
+      initial,
+      workspace,
+      changes,
+      (baseRevision, operationId) =>
+        revision.reviseBroadcastDraft({
+          workspace,
+          draftId: initial.draft_id,
+          baseRevision,
+          operationId,
+          changes,
+        }),
+      (snapshot) =>
+        snapshot.communication_purpose_id ===
+        purpose.communication_purpose_id,
+      dependencies,
+    ),
   );
 }
 
@@ -782,29 +820,31 @@ async function applyRecipientSelection(
   dependencies: BroadcastPavedDependencies,
 ): Promise<BroadcastDraftLifecycleResult> {
   const client = await dependencies.targeting();
-  return applyRevision(
-    initial,
-    workspace,
-    { recipientSelection: selection },
-    (baseRevision, operationId) =>
-      client.updateBroadcastTargeting({
-        workspace,
-        draftId: initial.draft_id,
-        baseRevision,
-        operationId,
-        recipientSelection: selection,
-      }),
-    (snapshot) => {
-      try {
-        return sameBroadcastRecipientSelection(
-          parseBroadcastRecipientSelection(snapshot.recipient_selection),
-          selection,
-        );
-      } catch {
-        return false;
-      }
-    },
-    dependencies,
+  return runBroadcastDiagnosticStage("targeting_bind", () =>
+    applyRevision(
+      initial,
+      workspace,
+      { recipientSelection: selection },
+      (baseRevision, operationId) =>
+        client.updateBroadcastTargeting({
+          workspace,
+          draftId: initial.draft_id,
+          baseRevision,
+          operationId,
+          recipientSelection: selection,
+        }),
+      (snapshot) => {
+        try {
+          return sameBroadcastRecipientSelection(
+            parseBroadcastRecipientSelection(snapshot.recipient_selection),
+            selection,
+          );
+        } catch {
+          return false;
+        }
+      },
+      dependencies,
+    ),
   );
 }
 
@@ -816,6 +856,7 @@ async function applyCsvAudience(
   dependencies: BroadcastPavedDependencies,
 ): Promise<BroadcastDraftLifecycleResult | BroadcastPavedPreparationResult> {
   if (!input.audience_file) return draft;
+  const audienceFile = input.audience_file;
   if (!dependencies.recipientSetSupplier) {
     return blocked(context, "The internal CSV audience supplier is unavailable.", [
       "broadcast_csv_audience_supplier_unavailable",
@@ -825,7 +866,7 @@ async function applyCsvAudience(
   let sourceSha256: string;
   try {
     const source = await dependencies.readFile(
-      input.audience_file,
+      audienceFile,
       BROADCAST_RECIPIENT_SET_MAX_BYTES,
     );
     try {
@@ -856,16 +897,25 @@ async function applyCsvAudience(
   const readSet = () => supplier.readBroadcastRecipientSet(setInput);
   let recipientSet: BroadcastRecipientSetResult;
   try {
-    recipientSet = await readSet();
+    recipientSet = await runBroadcastDiagnosticStage(
+      "recipient_set_read",
+      readSet,
+      1,
+      isRecipientSetNotFound,
+    );
   } catch (readError) {
     if (!isRecipientSetNotFound(readError)) throw readError;
     try {
-      const created = await supplier.createBroadcastRecipientSet({
-        ...setInput,
-        clientRequestKey: identity.clientRequestKey,
-        expectedDraftVersion: draft.revision,
-        csvFilePath: input.audience_file,
-      });
+      const created = await runBroadcastDiagnosticStage(
+        "recipient_set_create",
+        () =>
+          supplier.createBroadcastRecipientSet({
+            ...setInput,
+            clientRequestKey: identity.clientRequestKey,
+            expectedDraftVersion: draft.revision,
+            csvFilePath: audienceFile,
+          }),
+      );
       if (
         created.source.sha256 !== sourceSha256 ||
         created.recipient_set.one_time_set_id !== identity.oneTimeSetId ||
@@ -879,7 +929,11 @@ async function applyCsvAudience(
     } catch (createError) {
       if (!isUnknownEffect(createError)) throw createError;
       try {
-        recipientSet = await readSet();
+        recipientSet = await runBroadcastDiagnosticStage(
+          "recipient_set_read",
+          readSet,
+          2,
+        );
       } catch (recoveryError) {
         if (isRecipientSetNotFound(recoveryError)) throw createError;
         throw recoveryError;
@@ -901,7 +955,11 @@ async function applyCsvAudience(
     attempt < MAX_RECIPIENT_SET_READ_ATTEMPTS;
     attempt += 1
   ) {
-    recipientSet = await readSet();
+    recipientSet = await runBroadcastDiagnosticStage(
+      "recipient_set_poll",
+      readSet,
+      attempt + 1,
+    );
     if (
       recipientSet.one_time_set_id !== identity.oneTimeSetId ||
       recipientSet.draft_id !== draft.draft_id
@@ -980,10 +1038,12 @@ async function applyRevision(
     });
   let receipt: RevisionedDraft;
   try {
-    receipt = await mutate(initial.revision, operationId);
+    receipt = await withBroadcastDiagnosticAttempt(1, () =>
+      mutate(initial.revision, operationId),
+    );
   } catch (error) {
     if (!isUnknownEffect(error)) throw error;
-    let current = await read();
+    let current = await withBroadcastDiagnosticAttempt(1, read);
     if (matches(current.draft)) return current;
     if (current.revision !== initial.revision) {
       throw new CoreOperatorError(
@@ -993,11 +1053,13 @@ async function applyRevision(
       );
     }
     try {
-      await mutate(initial.revision, operationId);
+      await withBroadcastDiagnosticAttempt(2, () =>
+        mutate(initial.revision, operationId),
+      );
     } catch (retryError) {
       if (!isUnknownEffect(retryError)) throw retryError;
     }
-    current = await read();
+    current = await withBroadcastDiagnosticAttempt(2, read);
     if (matches(current.draft)) return current;
     throw new CoreOperatorError(
       "broadcast_draft_revision_recovery_unresolved",
@@ -1005,7 +1067,7 @@ async function applyRevision(
       "unknown",
     );
   }
-  const current = await read();
+  const current = await withBroadcastDiagnosticAttempt(1, read);
   if (
     receipt.draft_id !== initial.draft_id ||
     current.draft_id !== initial.draft_id ||
@@ -1382,7 +1444,12 @@ async function readDraftIfExists(
   draftId: string,
 ): Promise<BroadcastDraftLifecycleResult | null> {
   try {
-    return await lifecycle.readBroadcastDraft({ workspace, draftId });
+    return await runBroadcastDiagnosticStage(
+      "draft_read",
+      () => lifecycle.readBroadcastDraft({ workspace, draftId }),
+      1,
+      (error) => error instanceof CoreOperatorError && error.statusCode === 404,
+    );
   } catch (error) {
     if (error instanceof CoreOperatorError && error.statusCode === 404) return null;
     throw error;
@@ -1508,12 +1575,14 @@ async function sendPrepared(
     expectedDraftVersion: input.expected_revision,
   };
   try {
-    const current = await (
-      await dependencies.draftLifecycle()
-    ).readBroadcastDraft({
-      workspace: input.workspace,
-      draftId: input.draft_id,
-    });
+    const current = await runBroadcastDiagnosticStage(
+      "draft_read",
+      async () =>
+        (await dependencies.draftLifecycle()).readBroadcastDraft({
+          workspace: input.workspace,
+          draftId: input.draft_id,
+        }),
+    );
     if (
       current.draft_id !== input.draft_id ||
       current.revision !== input.expected_revision ||
@@ -1538,7 +1607,11 @@ async function sendPrepared(
     try {
       return sendSuccessReceipt(
         command,
-        await client.acceptBroadcastSend(sendInput),
+        await runBroadcastDiagnosticStage(
+          "send_acceptance",
+          () => client.acceptBroadcastSend(sendInput),
+          1,
+        ),
       );
     } catch (error) {
       if (!isUnknownEffect(error)) {
@@ -1550,10 +1623,15 @@ async function sendPrepared(
         );
       }
       try {
-        await client.readBroadcastSendOperation({
-          workspace: input.workspace,
-          draftId: input.draft_id,
-        });
+        await runBroadcastDiagnosticStage(
+          "send_readback",
+          () =>
+            client.readBroadcastSendOperation({
+              workspace: input.workspace,
+              draftId: input.draft_id,
+            }),
+          1,
+        );
       } catch {
         return sendFailureReceipt(
           input.workspace,
@@ -1563,15 +1641,24 @@ async function sendPrepared(
         );
       }
       try {
-        const retried = await client.acceptBroadcastSend(sendInput);
+        const retried = await runBroadcastDiagnosticStage(
+          "send_acceptance",
+          () => client.acceptBroadcastSend(sendInput),
+          2,
+        );
         return sendSuccessReceipt(command, retried);
       } catch (retryError) {
         if (isUnknownEffect(retryError)) {
           try {
-            await client.readBroadcastSendOperation({
-              workspace: input.workspace,
-              draftId: input.draft_id,
-            });
+            await runBroadcastDiagnosticStage(
+              "send_readback",
+              () =>
+                client.readBroadcastSendOperation({
+                  workspace: input.workspace,
+                  draftId: input.draft_id,
+                }),
+              2,
+            );
           } catch {
             // The first Send outcome remains unknown even when its final read is unavailable.
           }

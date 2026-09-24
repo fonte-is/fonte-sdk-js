@@ -37,7 +37,8 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     return {
       command: "broadcast-paved",
       apply: false,
-      json: true,
+      json: broadcastPaved.json,
+      ...(broadcastPaved.verbose ? { verbose: true } : {}),
       broadcastPaved,
     };
   }

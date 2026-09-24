@@ -1,4 +1,5 @@
 import { coreError } from "./operator-json.js";
+import { recordCoreRequestDiagnostic } from "./operator-broadcast-diagnostics.js";
 
 export interface CoreRequestOptions {
   readonly coreApiBaseUrl: string;
@@ -47,12 +48,44 @@ export function createCoreRequester(
   }
   const maxResponseBytes = responseLimitBytes(options.maxResponseBytes);
   return async (path, callOptions) => {
+    const post = callOptions && "body" in callOptions ? callOptions : undefined;
+    const diagnosticMethod = requestMethodForDiagnostic(post);
     if (options.signal?.aborted) {
+      recordCoreRequestDiagnostic({
+        method: diagnosticMethod,
+        path,
+        statusCode: null,
+        reason: "operation_cancelled",
+        coreEffect: post?.lostResponseEffect ?? "none",
+      });
       throw new CoreOperatorError("operation_cancelled", null, "none");
     }
-    const post = callOptions && "body" in callOptions ? callOptions : undefined;
-    const timeoutMs = requestTimeoutMs(callOptions?.timeoutMs);
-    const request = preparedRequest(baseUrl, bearer, path, post);
+    let timeoutMs: number;
+    try {
+      timeoutMs = requestTimeoutMs(callOptions?.timeoutMs);
+    } catch (error) {
+      recordCoreRequestDiagnostic({
+        method: diagnosticMethod,
+        path,
+        statusCode: null,
+        reason: error instanceof CoreOperatorError ? error.reason : "core_request_timeout_invalid",
+        coreEffect: error instanceof CoreOperatorError ? error.coreEffect : "none",
+      });
+      throw error;
+    }
+    let request: PreparedRequest;
+    try {
+      request = preparedRequest(baseUrl, bearer, path, post);
+    } catch (error) {
+      recordCoreRequestDiagnostic({
+        method: diagnosticMethod,
+        path,
+        statusCode: null,
+        reason: error instanceof CoreOperatorError ? error.reason : "core_request_invalid",
+        coreEffect: error instanceof CoreOperatorError ? error.coreEffect : "none",
+      });
+      throw error;
+    }
     const deadline = AbortSignal.timeout(timeoutMs);
     const signal = options.signal
       ? AbortSignal.any([options.signal, deadline])
@@ -68,12 +101,26 @@ export function createCoreRequester(
       });
     } catch {
       if (options.signal?.aborted) {
+        recordCoreRequestDiagnostic({
+          method: request.method,
+          path,
+          statusCode: null,
+          reason: "operation_cancelled",
+          coreEffect: post?.lostResponseEffect ?? "none",
+        });
         throw new CoreOperatorError(
           "operation_cancelled",
           null,
           post?.lostResponseEffect ?? "none",
         );
       }
+      recordCoreRequestDiagnostic({
+        method: request.method,
+        path,
+        statusCode: null,
+        reason: "core_api_unavailable",
+        coreEffect: post?.lostResponseEffect ?? "none",
+      });
       throw new CoreOperatorError(
         "core_api_unavailable",
         null,
@@ -85,21 +132,44 @@ export function createCoreRequester(
       rawBody = await readResponseBody(response, maxResponseBytes, signal);
     } catch (error) {
       if (error instanceof ResponseLimitExceeded) {
+        const reason = "core_response_too_large";
+        const effect = response.ok
+          ? (post?.lostResponseEffect ?? "none")
+          : failureEffect(post, response.status, reason);
+        recordCoreRequestDiagnostic({
+          method: request.method,
+          path,
+          statusCode: response.status,
+          reason,
+          coreEffect: effect,
+        });
         throw new CoreOperatorError(
-          "core_response_too_large",
+          reason,
           response.ok ? null : response.status,
-          response.ok
-            ? (post?.lostResponseEffect ?? "none")
-            : failureEffect(post, response.status, "core_response_too_large"),
+          effect,
         );
       }
       if (options.signal?.aborted) {
+        recordCoreRequestDiagnostic({
+          method: request.method,
+          path,
+          statusCode: null,
+          reason: "operation_cancelled",
+          coreEffect: post?.lostResponseEffect ?? "none",
+        });
         throw new CoreOperatorError(
           "operation_cancelled",
           null,
           post?.lostResponseEffect ?? "none",
         );
       }
+      recordCoreRequestDiagnostic({
+        method: request.method,
+        path,
+        statusCode: null,
+        reason: "core_api_unavailable",
+        coreEffect: post?.lostResponseEffect ?? "none",
+      });
       throw new CoreOperatorError(
         "core_api_unavailable",
         null,
@@ -112,21 +182,52 @@ export function createCoreRequester(
         parsed.ok ? parsed.value : null,
         response.status,
       );
+      const effect = failureEffect(post, response.status, reason);
+      recordCoreRequestDiagnostic({
+        method: request.method,
+        path,
+        statusCode: response.status,
+        reason,
+        coreEffect: effect,
+      });
       throw new CoreOperatorError(
         reason,
         response.status,
-        failureEffect(post, response.status, reason),
+        effect,
       );
     }
     if (!parsed.ok || parsed.value === null) {
+      const reason = "core_operator_receipt_invalid";
+      const effect = post?.lostResponseEffect ?? "none";
+      recordCoreRequestDiagnostic({
+        method: request.method,
+        path,
+        statusCode: response.status,
+        reason,
+        coreEffect: effect,
+      });
       throw new CoreOperatorError(
-        "core_operator_receipt_invalid",
+        reason,
         null,
-        post?.lostResponseEffect ?? "none",
+        effect,
       );
     }
+    recordCoreRequestDiagnostic({
+      method: request.method,
+      path,
+      statusCode: response.status,
+      reason: null,
+      coreEffect: "none",
+    });
     return parsed.value;
   };
+}
+
+function requestMethodForDiagnostic(
+  post: CorePostOptions | undefined,
+): PreparedRequest["method"] {
+  if (!post) return "GET";
+  return post.method === "PUT" || post.method === "PATCH" ? post.method : "POST";
 }
 
 interface PreparedRequest {

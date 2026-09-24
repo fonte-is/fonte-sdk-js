@@ -6,6 +6,7 @@ import {
   parseCoreReceipt,
   type CoreRequester,
 } from "./operator-core-request.js";
+import { runBroadcastDiagnosticStage } from "./operator-broadcast-diagnostics.js";
 import { instant, object, uuid } from "./operator-json.js";
 import {
   BroadcastLocalFileError,
@@ -102,7 +103,10 @@ export function createBroadcastRecipientSetClient(
 
         let recipientSet: BroadcastRecipientSetResult;
         try {
-          recipientSet = await readRecipientSet(request, input, "unknown");
+          recipientSet = await runBroadcastDiagnosticStage(
+            "recipient_set_read",
+            () => readRecipientSet(request, input, "unknown"),
+          );
         } catch (error) {
           if (error instanceof CoreOperatorError) {
             throw new CoreOperatorError(

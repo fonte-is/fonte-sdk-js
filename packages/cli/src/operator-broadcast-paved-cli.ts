@@ -15,10 +15,14 @@ export type ParsedBroadcastPavedCommand =
   | {
       readonly action: "prepare";
       readonly input: BroadcastPavedRequest;
+      readonly json: boolean;
+      readonly verbose: boolean;
     }
   | {
       readonly action: "send";
       readonly input: BroadcastPavedSendInput;
+      readonly json: boolean;
+      readonly verbose: boolean;
     };
 
 export function parseBroadcastPavedArguments(
@@ -37,8 +41,7 @@ function prepare(argv: readonly string[]): ParsedBroadcastPavedCommand {
     "--workspace",
     "--draft-id",
     "--audience-file",
-  ]);
-  if (!options.json) invalidProductionArguments("missing_field", "--json");
+  ], [], ["--verbose"]);
   const audienceFile = required(options, "--audience-file");
   if (!path.isAbsolute(audienceFile)) {
     invalidProductionArguments("invalid_field", "--audience-file");
@@ -50,12 +53,13 @@ function prepare(argv: readonly string[]): ParsedBroadcastPavedCommand {
       draft_id: uuid(required(options, "--draft-id"), "--draft-id"),
       audience_file: audienceFile,
     },
+    json: options.json,
+    verbose: options.flags.has("--verbose"),
   };
 }
 
 function send(argv: readonly string[]): ParsedBroadcastPavedCommand {
-  const options = parseProductionOptions(argv, ["--send-input"]);
-  if (!options.json) invalidProductionArguments("missing_field", "--json");
+  const options = parseProductionOptions(argv, ["--send-input"], [], ["--verbose"]);
   const serialized = required(options, "--send-input");
   let value: unknown;
   try {
@@ -63,7 +67,12 @@ function send(argv: readonly string[]): ParsedBroadcastPavedCommand {
   } catch {
     invalidProductionArguments("invalid_field", "--send-input");
   }
-  return { action: "send", input: sendInput(value) };
+  return {
+    action: "send",
+    input: sendInput(value),
+    json: options.json,
+    verbose: options.flags.has("--verbose"),
+  };
 }
 
 function sendInput(value: unknown): BroadcastPavedSendInput {

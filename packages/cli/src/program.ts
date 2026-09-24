@@ -27,6 +27,14 @@ import { assertManagedPathSafe } from "./paths.js";
 import { detectProject } from "./project.js";
 import { blockedReceipt, plannedReceipt } from "./receipts.js";
 import { renderHuman, renderJson } from "./render.js";
+import {
+  BroadcastDiagnostics,
+  withBroadcastDiagnostics,
+} from "./operator-broadcast-diagnostics.js";
+import {
+  renderBroadcastPavedPreparationHuman,
+  renderBroadcastPavedSendHuman,
+} from "./operator-broadcast-paved-render.js";
 import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
 import {
@@ -137,32 +145,48 @@ export async function runProgram(
     );
   }
   if (parsed.command === "broadcast-paved") {
-    if (!parsed.broadcastPaved) {
-      return authorizationFailure();
-    }
-    try {
-      const paved =
-        dependencies.broadcastPaved ??
-        (dependencies.operator
-          ? await createDirectBroadcastPavedOperator(dependencies.operator)
-          : null);
-      if (!paved) return authorizationFailure();
-      if (parsed.broadcastPaved.action === "prepare") {
-        const result = await paved.prepare(parsed.broadcastPaved.input);
-        return {
-          exitCode:
-            result.status === "blocked" || result.status === "needs_input"
-              ? 3
-              : 0,
-          stdout: `${JSON.stringify(result)}\n`,
-          stderr: "",
-        };
+    const broadcastPaved = parsed.broadcastPaved;
+    if (!broadcastPaved) return authorizationFailure();
+    const diagnostics = broadcastPaved.verbose
+      ? new BroadcastDiagnostics(broadcastPaved.action)
+      : undefined;
+    const result: CommandResult = await withBroadcastDiagnostics(diagnostics, async () => {
+      try {
+        const paved =
+          dependencies.broadcastPaved ??
+          (dependencies.operator
+            ? await createDirectBroadcastPavedOperator(dependencies.operator)
+            : null);
+        if (!paved) return authorizationFailure();
+        if (broadcastPaved.action === "prepare") {
+          const prepared = await paved.prepare(broadcastPaved.input);
+          return {
+            exitCode:
+              prepared.status === "blocked" || prepared.status === "needs_input"
+                ? 3 as const
+                : 0 as const,
+            stdout: broadcastPaved.json
+              ? `${JSON.stringify(prepared)}\n`
+              : renderBroadcastPavedPreparationHuman(prepared),
+            stderr: "",
+          };
+        }
+        const receipt = await paved.send(broadcastPaved.input);
+        return broadcastPaved.json
+          ? receiptResult(receipt, true, receiptExitCode(receipt))
+          : {
+              exitCode: receiptExitCode(receipt),
+              stdout: renderBroadcastPavedSendHuman(receipt),
+              stderr: "",
+              receipt,
+            };
+      } catch {
+        return executionFailure();
       }
-      const receipt = await paved.send(parsed.broadcastPaved.input);
-      return receiptResult(receipt, true, receiptExitCode(receipt));
-    } catch {
-      return executionFailure();
-    }
+    });
+    return diagnostics
+      ? { ...result, stderr: `${result.stderr}${diagnostics.output()}` }
+      : result;
   }
   const request = { ...parsed, command: parsed.command };
   try {
