@@ -102,6 +102,7 @@ export interface BroadcastPreflightResult {
       readonly observed_at: string;
       readonly max_24_hour_send: number;
       readonly effective_sent_last_24_hours: number;
+      readonly protected_transactional_reserve: number;
       readonly daily_remaining: number;
       readonly max_send_rate: number;
       readonly operating_sends_per_second: number;

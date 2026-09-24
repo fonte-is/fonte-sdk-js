@@ -32,6 +32,206 @@ const additionalReleaseKeys = Array.from(
     `20000000-0000-4000-8000-${String(176 + index).padStart(12, "0")}`,
 );
 
+test("exact terminal completion succeeds without a pause mutation", async () => {
+  const held = progress({ released: 0, held: 5, accepted: 0 });
+  const pending = progress({ released: 5, held: 0, accepted: 0, pending: 5 });
+  const completed = progress({
+    released: 5,
+    held: 0,
+    accepted: 5,
+    status: "terminal",
+  });
+  for (const scenario of [
+    { responses: [completed], methods: ["GET"], effect: "none" },
+    {
+      responses: [held, completed],
+      methods: ["GET", "POST"],
+      effect: "controlled",
+    },
+    {
+      responses: [held, pending, completed],
+      methods: ["GET", "POST", "GET"],
+      effect: "controlled",
+    },
+    {
+      responses: [
+        progress({
+          released: 5,
+          held: 0,
+          accepted: 0,
+          pending: 5,
+          status: "paused",
+          controlState: "paused",
+        }),
+        completed,
+      ],
+      methods: ["GET", "POST"],
+      effect: "controlled",
+    },
+  ]) {
+    const harness = canaryHarness(scenario.responses);
+    const result = await runProgram(
+      argumentsForCanary(5),
+      harness.dependencies,
+    );
+    const receipt = JSON.parse(result.stdout);
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(receipt.outcome, "completed");
+    assert.equal(
+      receipt.reason,
+      "broadcast_canary_ceiling_accepted_and_completed",
+    );
+    assert.equal(receipt.core_effect, scenario.effect);
+    assert.equal(receipt.result.final.status, "terminal");
+    assert.equal(receipt.result.final.accepted_recipient_count, 5);
+    assert.equal(
+      receipt.result.completed_steps.includes("safety_pause"),
+      false,
+    );
+    assert.deepEqual(
+      harness.coreRequests().map(({ method }) => method),
+      scenario.methods,
+    );
+    assert.equal(
+      harness.coreRequests().some(({ body }) => body?.operation === "pause"),
+      false,
+    );
+  }
+});
+
+test("terminal completion preserves historical adverse counts and reports new cancellations distinctly", async () => {
+  for (const scenario of [
+    {
+      responses: [
+        progress({
+          released: 3,
+          held: 5,
+          accepted: 0,
+          refused: 1,
+          unknown: 1,
+          cancelled: 1,
+        }),
+        progress({
+          released: 8,
+          held: 0,
+          accepted: 5,
+          refused: 1,
+          unknown: 1,
+          cancelled: 1,
+          status: "terminal",
+        }),
+      ],
+      reason: "broadcast_canary_ceiling_accepted_and_completed",
+    },
+    {
+      responses: [
+        progress({ released: 1, held: 5, accepted: 0, pending: 1 }),
+        progress({ released: 5, held: 1, accepted: 4, cancelled: 1 }),
+        progress({
+          released: 6,
+          held: 0,
+          accepted: 5,
+          cancelled: 1,
+          status: "terminal",
+        }),
+      ],
+      reason:
+        "broadcast_canary_ceiling_settled_with_cancellation_and_completed",
+    },
+  ]) {
+    const harness = canaryHarness(scenario.responses);
+    const result = await runProgram(
+      argumentsForCanary(5),
+      harness.dependencies,
+    );
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(result.exitCode, 0);
+    assert.equal(receipt.reason, scenario.reason);
+    assert.equal(receipt.result.final.cancelled_recipient_count, 1);
+    assert.equal(
+      harness.coreRequests().some(({ body }) => body?.operation === "pause"),
+      false,
+    );
+  }
+});
+
+test("a terminal label cannot conceal incomplete, unsafe, stale, or inconsistent progress", async () => {
+  for (const [change, reason, baselineOnly = false] of [
+    [{ heldRecipientCount: 1 }, "core_operator_receipt_invalid", true],
+    [
+      {
+        acceptedRecipientCount: 4,
+        pendingRecipientCount: 1,
+        remainingRecipientCount: 1,
+      },
+      "core_operator_receipt_invalid",
+      true,
+    ],
+    [
+      {
+        acceptedRecipientCount: 4,
+        claimedRecipientCount: 1,
+        remainingRecipientCount: 1,
+      },
+      "core_operator_receipt_invalid",
+      true,
+    ],
+    [{ remainingRecipientCount: 1 }, "core_operator_receipt_invalid", true],
+    [{ eligibleRecipientCount: 6 }, "core_operator_receipt_invalid", true],
+    [
+      {
+        requestedRecipientCount: 6,
+        eligibleRecipientCount: 6,
+        releasedRecipientCount: 6,
+        acceptedRecipientCount: 6,
+      },
+      "broadcast_canary_release_ceiling_not_exact",
+    ],
+    [
+      { acceptedRecipientCount: 4, unknownRecipientCount: 1 },
+      "broadcast_canary_unknown_increase",
+    ],
+    [
+      { acceptedRecipientCount: 4, refusedRecipientCount: 1 },
+      "broadcast_canary_refused_increase",
+    ],
+    [
+      { acceptedRecipientCount: 4, cancelledRecipientCount: 1 },
+      "broadcast_canary_authority_changed",
+    ],
+    [{ controlState: "cancelled" }, "broadcast_canary_authority_changed"],
+    [{ asOf: "2026-08-24T11:59:00.000Z" }, "broadcast_canary_authority_stale"],
+  ]) {
+    const unsafe = {
+      ...progress({ released: 5, held: 0, accepted: 5, status: "terminal" }),
+      ...change,
+    };
+    const harness = canaryHarness(
+      baselineOnly
+        ? [unsafe]
+        : [
+            progress({ released: 0, held: 5, accepted: 0 }),
+            unsafe,
+            { ...unsafe, status: "paused", controlState: "paused" },
+          ],
+    );
+    const result = await runProgram(
+      argumentsForCanary(5),
+      harness.dependencies,
+    );
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(result.exitCode, 3, JSON.stringify(change));
+    assert.equal(receipt.reason, reason, JSON.stringify(change));
+    assert.deepEqual(
+      harness
+        .coreRequests()
+        .map(({ method, body }) => body?.operation ?? method),
+      baselineOnly ? ["GET"] : ["GET", "release", "pause"],
+    );
+  }
+});
+
 test("historical pending overlaps held release and cancellation headroom reaches the exact accepted target", async () => {
   const harness = canaryHarness([
     progress({ ...overlapInitial, status: "paused", controlState: "paused" }),

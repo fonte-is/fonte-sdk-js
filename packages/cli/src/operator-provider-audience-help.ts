@@ -121,7 +121,7 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         ],
       ],
       detail:
-        "Starts one fresh private two-pass Resend population and exact named-broadcast recipient acquisition through Core's stored GET-only credential, bound to the placement segment used by the sealed Fonte intake. Next run rotation read; the CLI emits aggregate receipts only and never accepts candidate rows or provider credentials.",
+        "Starts one fresh private two-pass Resend population and exact named-broadcast recipient acquisition through Core's stored GET-only credential. Repeat ordered broadcast IDs newest-to-oldest. The iteration is bound to the placement segment used by the sealed Fonte intake. Next run rotation read; the CLI emits aggregate receipts only and never accepts candidate rows or provider credentials.",
       json: true,
     },
     {
@@ -160,7 +160,7 @@ export const providerAudienceHelpEntries: readonly ProviderAudienceHelpEntry[] =
         ],
       ],
       detail:
-        "Seals the fresh exhaustive E/W/X/U partition from Core-held evidence, then requires a final rotation read. Any U identity blocks the outgoing selector; response loss requires rotation read and never permits another blind seal.",
+        "Seals the fresh exhaustive E/W/X/U partition from Core-held evidence, with repeated broadcast IDs in the same newest-to-oldest order used at start, then requires a final rotation read. Any U identity blocks the outgoing selector; response loss requires rotation read and never permits another blind seal.",
       json: true,
     },
   ];

@@ -23,4 +23,8 @@ export type WorkspaceMarketingSettingsResult =
   | (WorkspaceMarketingSettingsResultBase & {
       readonly postalAddress: null;
       readonly updatedAt: null;
+    })
+  | (WorkspaceMarketingSettingsResultBase & {
+      readonly postalAddress: null;
+      readonly updatedAt: string;
     });

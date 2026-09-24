@@ -26,11 +26,25 @@ export function renderProviderRotation(
     `Outgoing/cold remaining: ${partition ? `${partition.outgoingCount}/${partition.coldRemaining}` : `pending/${result.coldRemaining}`}.`,
     `Outgoing selector: ${partition?.outgoing ? selector(partition.outgoing) : partition ? "blocked-or-empty" : "pending"}.`,
     `Partition union/checksum: ${partition ? `${partition.unionConservationSha256}/${partition.partitionChecksumSha256}` : "pending"}.`,
+    `Freshness evaluated/max ages: ${partition ? freshness(partition.freshnessPolicy) : "pending"}.`,
     `Candidate/partition generations: ${result.candidateGenerationId ?? "pending"}/${result.partitionGenerationId ?? "pending"}.`,
-    `Authority: stored-credential ${result.authority.providerAccess}; provider mutation ${result.authority.providerMutation}; unknown allows effect ${result.authority.unknownAllowsEffect}.`,
+    `Authority: stored-credential ${result.authority.providerAccess}; provider mutation ${result.authority.providerMutation}; Contact mutation ${result.authority.contactMutation}; unknown allows effect ${result.authority.unknownAllowsEffect}.`,
     `Core effect: ${receipt.core_effect}.`,
     "",
   ].join("\n");
+}
+
+function freshness(
+  value: NonNullable<ProviderRotationResult["partition"]>["freshnessPolicy"],
+): string {
+  return [
+    value.evaluatedAt,
+    value.populationMaxAgeSeconds,
+    value.suppressionMaxAgeSeconds,
+    value.broadcastObservationMaxAgeSeconds,
+    value.positiveSignalMaxAgeSeconds,
+    value.candidateGenerationMaxAgeSeconds,
+  ].join("/");
 }
 
 function counters(value: {

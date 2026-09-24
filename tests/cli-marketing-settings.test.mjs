@@ -23,6 +23,8 @@ const settings = {
   workspaceId: "10000000-0000-4000-8000-000000000223",
   environment: "production",
   postalAddress: "Fonte, Inc.\n1 Aggregate Way\nSan Francisco, CA 94107",
+  postalAddressStatus: "configured",
+  version: 1,
   updatedAt: "2026-08-28T09:15:00.000Z",
 };
 
@@ -117,7 +119,10 @@ test("marketing settings uses one authenticated Core GET and emits aggregate fie
   );
   assert.deepEqual(receipt.result, {
     kind: "workspace_marketing_settings",
-    ...settings,
+    workspaceId: settings.workspaceId,
+    environment: settings.environment,
+    postalAddress: settings.postalAddress,
+    updatedAt: settings.updatedAt,
   });
   assert.deepEqual(Object.keys(receipt.result).sort(), [
     "environment",
@@ -136,6 +141,8 @@ test("marketing settings represents the exact unset state without inventing conf
     workspaceId: settings.workspaceId,
     environment: settings.environment,
     postalAddress: null,
+    postalAddressStatus: "not_configured",
+    version: 0,
     updatedAt: null,
   };
   let coreRequests = 0;
@@ -153,7 +160,10 @@ test("marketing settings represents the exact unset state without inventing conf
   assert.equal(result.receipt.core_effect, "none");
   assert.deepEqual(result.receipt.result, {
     kind: "workspace_marketing_settings",
-    ...unset,
+    workspaceId: unset.workspaceId,
+    environment: unset.environment,
+    postalAddress: null,
+    updatedAt: null,
   });
 
   const human = await runProgram(
@@ -177,8 +187,54 @@ test("marketing settings represents the exact unset state without inventing conf
   );
 });
 
+test("marketing settings accepts a cleared authoritative setting without exposing control fields", async () => {
+  const cleared = {
+    workspaceId: settings.workspaceId,
+    environment: settings.environment,
+    postalAddress: null,
+    postalAddressStatus: "not_configured",
+    version: 2,
+    updatedAt: "2026-08-28T10:15:00.000Z",
+  };
+  const result = await runProgram(
+    argumentsFor().filter((value) => value !== "--json"),
+    dependencies(async (input) =>
+      String(input) === configUrl ? json(config) : json(cleared),
+    ),
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(result.receipt.result, {
+    kind: "workspace_marketing_settings",
+    workspaceId: cleared.workspaceId,
+    environment: cleared.environment,
+    postalAddress: null,
+    updatedAt: cleared.updatedAt,
+  });
+  assert.equal(
+    result.stdout,
+    [
+      "Fonte workspace marketing settings: not configured.",
+      `Workspace: ${settings.workspaceId}.`,
+      "Environment: production.",
+      "Postal address: not configured.",
+      `Updated: ${cleared.updatedAt}.`,
+      "Core effect: none.",
+      "",
+    ].join("\n"),
+  );
+  assert.equal(result.stdout.includes("not_configured"), false);
+  assert.equal(result.stdout.includes("version"), false);
+});
+
 test("marketing settings rejects malformed, extra, blank, and scope-mismatched receipts", async () => {
   const invalidReceipts = [
+    {
+      workspaceId: settings.workspaceId,
+      environment: settings.environment,
+      postalAddress: settings.postalAddress,
+      updatedAt: settings.updatedAt,
+    },
     { ...settings, recipient: "hidden@example.test" },
     { ...settings, updatedAt: undefined },
     { ...settings, workspaceId: " " },
@@ -187,8 +243,24 @@ test("marketing settings rejects malformed, extra, blank, and scope-mismatched r
     { ...settings, updatedAt: "2026-08-28 09:15:00Z" },
     { ...settings, postalAddress: null },
     { ...settings, updatedAt: null },
-    { ...settings, postalAddress: null, updatedAt: "" },
-    { ...settings, postalAddress: "", updatedAt: null },
+    { ...settings, postalAddressStatus: "not_configured" },
+    { ...settings, version: 0 },
+    { ...settings, version: -1 },
+    { ...settings, version: 1.5 },
+    { ...settings, version: Number.MAX_SAFE_INTEGER + 1 },
+    { ...settings, version: "1" },
+    {
+      ...settings,
+      postalAddress: null,
+      postalAddressStatus: "not_configured",
+      version: 0,
+    },
+    {
+      ...settings,
+      postalAddress: null,
+      postalAddressStatus: "not_configured",
+      updatedAt: null,
+    },
   ];
   for (const body of invalidReceipts) {
     let coreRequests = 0;

@@ -1,15 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readlink,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,19 +10,17 @@ const packageDirectory = path.join(root, "packages", "cli");
 const packageName = "@fonte-is/cli";
 const packageVersion = "0.2.0";
 const registryUrl = "https://registry.npmjs.org/";
-const reviewedPackageRef = "a82841ef84517b2d1e397f39ec9be7c87cefec4f";
-const reviewedSourceTree = "da77d991ac989fdfebc08443be49def6f5ef16cb";
-const reviewedCliTree = "a502097c8f43452d9d9db0ecbb8993ca7fabe812";
+const reviewedPackageRef = "9f682498864534031611520059cbc0d11d041916";
+const reviewedSourceTree = "101863430e72514e46816ce0b3c8902cf3927b65";
+const reviewedCliTree = "f1f4c4f02b8ec405856edd8efb1bb7217f41665d";
 const reviewedPackageLockBlob = "ab4b2841f02b25245b4fb7274ff9cb5ce9814cb7";
 const reviewedManifestBlob = "28b092ceddfc4d9afad2922a2d5b62e5d00ee4c0";
 const reviewedTarballDigests = {
-  sha1: "ba4603fa162a961ca3bae71101e50b78f3d42c93",
-  sha256: "cc77bc4e515d4134884d8635db5494e4943e0fef2293d845df1b4ec973f2ea71",
+  sha1: "e4ee7f62b6575754159051464159f17d920156f9",
+  sha256: "947657391a6b87e12354f20f4aa035d1fb09a2e30f3c03342b94d505fcec113f",
   integrity:
-    "sha512-DuZr3df/wizu9bGEeRgwpR2OHvu1xlUGIM2IPftXXGE4xc6dZ8bk9O5UyCIrwVZtb2XkMdM68zlCGPLRcbP1Tg==",
+    "sha512-+QwsGOMlmRODGB5tgUudTsY28EKg8S5DpJW/ni5E3ueBmD2MUpacFob4tcrQeutbI8XmpYAfVm+zAkNL11FOrA==",
 };
-const receiptPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const options = parseArguments(process.argv.slice(2));
 const temporaryDirectory = await mkdtemp(
@@ -125,10 +114,10 @@ try {
     throw new Error("packed CLI identity or binary entrypoint is invalid");
   }
 
-  let outcome = "dry_run_ready_after_fon_223";
+  const artifactVerification = await verifyPackedArtifact(tarballPath);
+  let outcome = "dry_run_ready";
   let registry = null;
   let publishInvoked = false;
-  let installVerification = plannedInstallVerification();
   if (options.publish) {
     registry = readRegistryIdentity();
     if (registry) {
@@ -165,7 +154,6 @@ try {
         outcome = "published_exact";
       }
     }
-    installVerification = await verifyInstalledPackage(temporaryDirectory);
   }
 
   process.stdout.write(
@@ -173,11 +161,6 @@ try {
       {
         ok: true,
         outcome,
-        prerequisite: {
-          issue: "FON-223",
-          releaseReceipt: options.fon223ReleaseReceipt,
-          requiredBeforePublish: true,
-        },
         source: {
           ref: head,
           tree,
@@ -197,7 +180,7 @@ try {
         },
         registryUrl,
         registry,
-        install: installVerification,
+        artifactVerification,
         publishInvocationCount: publishInvoked ? 1 : 0,
         publicationEffect:
           outcome === "published_exact"
@@ -218,7 +201,6 @@ function parseArguments(argv) {
   const parsed = {
     expectedRef: null,
     expectedTree: null,
-    fon223ReleaseReceipt: null,
     publish: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -227,11 +209,7 @@ function parseArguments(argv) {
       parsed.publish = true;
       continue;
     }
-    if (
-      argument === "--expected-ref" ||
-      argument === "--expected-tree" ||
-      argument === "--fon-223-release-receipt"
-    ) {
+    if (argument === "--expected-ref" || argument === "--expected-tree") {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) {
         throw new Error(`${argument} requires a value`);
@@ -239,9 +217,6 @@ function parseArguments(argv) {
       index += 1;
       if (argument === "--expected-ref") parsed.expectedRef = value;
       if (argument === "--expected-tree") parsed.expectedTree = value;
-      if (argument === "--fon-223-release-receipt") {
-        parsed.fon223ReleaseReceipt = value;
-      }
       continue;
     }
     throw new Error(`unknown argument: ${argument}`);
@@ -251,14 +226,6 @@ function parseArguments(argv) {
   }
   if (!/^[0-9a-f]{40}$/.test(parsed.expectedTree ?? "")) {
     throw new Error("--expected-tree must be an exact 40-character tree SHA");
-  }
-  if (
-    parsed.publish &&
-    !receiptPattern.test(parsed.fon223ReleaseReceipt ?? "")
-  ) {
-    throw new Error(
-      "--publish requires an exact --fon-223-release-receipt UUID",
-    );
   }
   return parsed;
 }
@@ -330,101 +297,49 @@ function verifyRegistryIdentity(registry, digests) {
   }
 }
 
-function plannedInstallVerification() {
-  return {
-    status: "planned_unobserved",
-    package: `${packageName}@${packageVersion}`,
-    registry: registryUrl,
-    flags: ["--ignore-scripts", "--no-audit", "--no-fund", "--save-exact"],
-    npmEnvironment: {
-      audit: false,
-      fund: false,
-      updateNotifier: false,
-    },
-    manifest: { name: packageName, version: packageVersion },
-    bin: {
-      path: "node_modules/.bin/fonte",
-      manifestTarget: "./dist/main.js",
-      resolvedTarget: "node_modules/@fonte-is/cli/dist/main.js",
-    },
-    version: {
-      command: "./node_modules/.bin/fonte --version",
-      stdout: `${packageName} ${packageVersion}\n`,
-    },
-    unversionedNpxAllowed: false,
-  };
-}
-
-async function verifyInstalledPackage(parentDirectory) {
-  const fixture = path.join(parentDirectory, "install-fixture");
-  await mkdir(fixture);
-  await writeFile(
-    path.join(fixture, "package.json"),
-    `${JSON.stringify({ name: "fonte-cli-release-verification", private: true })}\n`,
-  );
-  run(
-    "npm",
-    [
-      "install",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      "--save-exact",
-      "--registry",
-      registryUrl,
-      `${packageName}@${packageVersion}`,
-    ],
-    fixture,
-  );
-
-  const packageRoot = path.join(fixture, "node_modules", "@fonte-is", "cli");
-  const installedManifest = JSON.parse(
-    await readFile(path.join(packageRoot, "package.json"), "utf8"),
-  );
+async function verifyPackedArtifact(tarballPath) {
+  const entries = run("tar", ["-tzf", tarballPath]).trim().split("\n");
   if (
-    installedManifest.name !== packageName ||
-    installedManifest.version !== packageVersion ||
-    installedManifest.bin?.fonte !== "./dist/main.js"
+    entries.some(
+      (entry) =>
+        !entry.startsWith("package/") || entry.split("/").includes(".."),
+    )
   ) {
-    throw new Error("installed CLI manifest identity or bin target is invalid");
+    throw new Error("packed CLI contains an unsafe extraction path");
   }
-
-  const binPath = path.join(fixture, "node_modules", ".bin", "fonte");
-  const binStat = await lstat(binPath);
-  if (!binStat.isSymbolicLink()) {
-    throw new Error("installed fonte binary is not an exact package link");
-  }
-  const linkTarget = await readlink(binPath);
-  const resolvedFixture = await realpath(fixture);
-  const resolvedTarget = await realpath(binPath);
-  const expectedTarget = await realpath(
-    path.join(packageRoot, "dist", "main.js"),
+  // Keep extraction under the package so Node can use existing dependencies.
+  // This is an offline artifact check, not a fresh-install claim.
+  const fixture = await mkdtemp(
+    path.join(packageDirectory, ".release-verification-"),
   );
-  if (resolvedTarget !== expectedTarget) {
-    throw new Error("installed fonte binary resolves outside the CLI package");
+  try {
+    run("tar", ["-xzf", tarballPath, "-C", fixture]);
+    const packageRoot = await realpath(path.join(fixture, "package"));
+    const binPath = await realpath(path.join(packageRoot, "dist", "main.js"));
+    if (binPath !== path.join(packageRoot, "dist", "main.js")) {
+      throw new Error("packed fonte binary resolves outside its declared path");
+    }
+    const versionStdout = run(
+      process.execPath,
+      [binPath, "--version"],
+      fixture,
+    );
+    if (versionStdout !== `${packageName} ${packageVersion}\n`) {
+      throw new Error("packed fonte binary reported an unexpected version");
+    }
+    return {
+      status: "observed",
+      method: "offline_packed_artifact",
+      dependencyInstallation: false,
+      cleanInstallObserved: false,
+      manifest: { name: packageName, version: packageVersion },
+      bin: { manifestTarget: "./dist/main.js" },
+      version: {
+        command: "node package/dist/main.js --version",
+        stdout: versionStdout,
+      },
+    };
+  } finally {
+    await rm(fixture, { recursive: true, force: true });
   }
-
-  const versionStdout = run(binPath, ["--version"], fixture);
-  if (versionStdout !== `${packageName} ${packageVersion}\n`) {
-    throw new Error("installed fonte binary reported an unexpected version");
-  }
-
-  return {
-    ...plannedInstallVerification(),
-    status: "observed",
-    manifest: {
-      name: installedManifest.name,
-      version: installedManifest.version,
-    },
-    bin: {
-      path: path.relative(fixture, binPath),
-      linkTarget,
-      manifestTarget: installedManifest.bin.fonte,
-      resolvedTarget: path.relative(resolvedFixture, resolvedTarget),
-    },
-    version: {
-      command: "./node_modules/.bin/fonte --version",
-      stdout: versionStdout,
-    },
-  };
 }

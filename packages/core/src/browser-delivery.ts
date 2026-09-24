@@ -1,138 +1,197 @@
-import type { InstallationVerificationMetadata } from "./installation-verification.js";
-import { createClientAttemptId } from "./ids.js";
-import { clean } from "./collect-contract.js";
-import type { CaptureDelivery, CaptureEventType } from "./browser-types.js";
-import type { Scope } from "./types.js";
+import type {
+  CaptureDelivery,
+  CaptureDeliveryReason,
+} from "./browser-types.js";
+import type { CollectBody, CollectionReceipt } from "./collect-types.js";
+import { permitted, type CollectionPolicy } from "./collection-policy.js";
 
-const pending = new Set<string>();
-const completed = new Set<string>();
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-interface DeliveryClientConfig {
+type Attempt = {
+  body: CollectBody;
+  json: string;
+  expiresAt: number;
+  attempts: number;
+  active: boolean;
+  terminal: boolean;
+  policy: string;
+};
+const MAX_PENDING = 32;
+const MAX_ATTEMPTS = 3;
+const MAX_AGE_MS = 30 * 60_000;
+const policyKey = (policy: CollectionPolicy) =>
+  JSON.stringify({ ...policy, expiresAt: undefined });
+interface DeliveryConfig {
   collectPath: string;
-  sentStoragePrefix: string;
-  verification: InstallationVerificationMetadata | null;
+  policy: () => CollectionPolicy | null;
   onDelivery?: (delivery: CaptureDelivery) => void;
 }
-
-export interface DeliveryClient {
-  notify(delivery: CaptureDelivery): CaptureDelivery;
-  send(
-    eventType: CaptureEventType,
-    scope: Scope,
-    retryPending: boolean,
-  ): Promise<CaptureDelivery>;
-}
-
-export function createDeliveryClient(
-  config: DeliveryClientConfig,
-): DeliveryClient {
-  const notify = (delivery: CaptureDelivery): CaptureDelivery => {
+export function createDeliveryClient(config: DeliveryConfig) {
+  const pending = new Map<string, Attempt>();
+  const controllers = new Set<AbortController>();
+  const notify = (delivery: CaptureDelivery) => {
     try {
       config.onDelivery?.(delivery);
     } catch {
-      // Installer diagnostics cannot change delivery behavior.
+      /* diagnostics are not authority */
     }
     return delivery;
   };
+  const send = createSender(config, controllers, notify);
+  return {
+    notify,
+    submit(body: CollectBody, policy: CollectionPolicy) {
+      // Bound this document's queue. No unbounded offline or cross-reload replay.
+      for (const [id, a] of pending)
+        if (a.terminal || a.expiresAt <= Date.now()) pending.delete(id);
+      if (pending.size >= MAX_PENDING)
+        return Promise.resolve(
+          notify({
+            eventType: body.eventType,
+            status: "failed",
+            reason: "retry_exhausted",
+          }),
+        );
+      const json = JSON.stringify(body);
+      const a: Attempt = {
+        body: JSON.parse(json),
+        json,
+        expiresAt: Math.min(
+          policy.expiresAt ?? Number.MAX_SAFE_INTEGER,
+          Date.now() + MAX_AGE_MS,
+        ),
+        policy: policyKey(policy),
+        attempts: 0,
+        active: false,
+        terminal: false,
+      };
+      pending.set(body.eventId, a);
+      return send(a, false);
+    },
+    retry: () =>
+      Promise.all(
+        [...pending.values()]
+          .filter((a) => !a.terminal)
+          .map((a) => send(a, true)),
+      ),
+    reset() {
+      for (const controller of controllers) controller.abort();
+      pending.clear();
+    },
+  };
+}
 
-  const send = async (
-    eventType: CaptureEventType,
-    scope: Scope,
-    retryPending: boolean,
-  ): Promise<CaptureDelivery> => {
-    if (typeof window === "undefined") {
-      return notify({
-        eventType,
-        status: "skipped",
-        reason: "browser_unavailable",
-      });
-    }
+const result = (
+  a: Attempt,
+  status: CaptureDelivery["status"],
+  reason?: CaptureDeliveryReason,
+): CaptureDelivery => ({
+  eventType: a.body.eventType,
+  eventId: a.body.eventId,
+  occurrenceId: a.body.occurrenceId,
+  status,
+  ...(reason ? { reason } : {}),
+});
 
-    const journeyId = scope.fonte_journey_id;
-    if (!journeyId) {
-      return notify({
-        eventType,
-        status: "skipped",
-        reason: "missing_journey_id",
-      });
+function createSender(
+  config: DeliveryConfig,
+  controllers: Set<AbortController>,
+  notify: (delivery: CaptureDelivery) => CaptureDelivery,
+) {
+  return async (a: Attempt, retry: boolean): Promise<CaptureDelivery> => {
+    const policy = config.policy();
+    if (
+      !permitted(policy) ||
+      policy.version !== a.body.collectionVersion ||
+      policyKey(policy) !== a.policy
+    ) {
+      a.terminal = true;
+      return notify(result(a, "skipped", "collection_not_permitted"));
     }
-
-    const key = `${config.sentStoragePrefix}:${eventType}:${scope.current_url.slice(0, 1000)}`;
-    let status = "";
-    try {
-      status = window.sessionStorage.getItem(key) ?? "";
-    } catch {
-      // In-memory guards still apply when session storage is unavailable.
+    if (Date.now() >= a.expiresAt) {
+      a.terminal = true;
+      return notify(result(a, "skipped", "expired"));
     }
-    if (completed.has(key) || status.startsWith("sent:")) {
-      return notify({ eventType, status: "skipped", reason: "duplicate" });
+    if (a.active) return notify(result(a, "skipped", "in_flight"));
+    if (a.terminal) return notify(result(a, "skipped", "duplicate"));
+    if (a.attempts && !retry) return notify(result(a, "skipped", "in_flight"));
+    if (a.attempts >= MAX_ATTEMPTS) {
+      a.terminal = true;
+      return notify(result(a, "failed", "retry_exhausted"));
     }
-    if ((pending.has(key) || status.startsWith("pending:")) && !retryPending) {
-      return notify({ eventType, status: "skipped", reason: "in_flight" });
-    }
-
-    const storedEventId = status.startsWith("pending:")
-      ? clean(status.slice("pending:".length), 80).toLowerCase()
-      : "";
-    const eventId = uuidPattern.test(storedEventId)
-      ? storedEventId
-      : createClientAttemptId();
-    pending.add(key);
-    try {
-      window.sessionStorage.setItem(key, `pending:${eventId}`);
-    } catch {
-      // The in-memory guard prevents duplicate posts during this page life.
-    }
-
+    a.active = true;
+    a.attempts++;
+    const controller = new AbortController();
+    controllers.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 3000);
     try {
       const response = await fetch(config.collectPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          eventId,
-          eventType,
-          journeyId,
-          ...(eventType === "source_touch" && config.verification
-            ? { verification: config.verification }
-            : {}),
-          scope,
-        }),
+        body: a.json,
+        signal: controller.signal,
+        credentials: "same-origin",
       });
-      if (!response.ok) {
+      const receipt = (await response
+        .json()
+        .catch(() => null)) as CollectionReceipt | null;
+      // Withdrawal/reset during an in-flight request must not repopulate active context.
+      const currentPolicy = config.policy();
+      if (
+        controller.signal.aborted ||
+        !permitted(currentPolicy) ||
+        policyKey(currentPolicy) !== a.policy
+      )
+        return notify(result(a, "skipped", "collection_not_permitted"));
+      if (
+        response.ok &&
+        receipt?.eventId === a.body.eventId &&
+        ["accepted", "duplicate_of_accepted"].includes(receipt.disposition) &&
+        typeof receipt.recordId === "string" &&
+        receipt.recordId.length > 0 &&
+        receipt.recordId.length <= 160 &&
+        typeof receipt.receivedAt === "string" &&
+        Number.isFinite(Date.parse(receipt.receivedAt))
+      ) {
+        a.terminal = true;
         return notify({
-          eventType,
-          eventId,
-          status: "failed",
-          reason: "http_error",
+          ...result(a, "delivered"),
+          httpStatus: response.status,
+          receipt,
+        });
+      }
+      if (
+        receipt?.disposition === "ignored" ||
+        receipt?.disposition === "rejected"
+      ) {
+        a.terminal = true;
+        return notify({
+          ...result(
+            a,
+            receipt.disposition === "ignored" ? "skipped" : "failed",
+            receipt.disposition,
+          ),
           httpStatus: response.status,
         });
       }
-      completed.add(key);
-      try {
-        window.sessionStorage.setItem(key, `sent:${eventId}`);
-      } catch {
-        // completed remains authoritative for this page life.
-      }
+      if (
+        response.status >= 400 &&
+        response.status < 500 &&
+        ![408, 429].includes(response.status)
+      )
+        a.terminal = true;
       return notify({
-        eventType,
-        eventId,
-        status: "delivered",
+        ...result(
+          a,
+          "failed",
+          response.ok ? "receipt_unavailable" : "http_error",
+        ),
         httpStatus: response.status,
       });
     } catch {
-      return notify({
-        eventType,
-        eventId,
-        status: "failed",
-        reason: "network_error",
-      });
+      return notify(result(a, "failed", "network_error"));
     } finally {
-      pending.delete(key);
+      a.active = false;
+      controllers.delete(controller);
+      clearTimeout(timeout);
     }
   };
-
-  return { notify, send };
 }

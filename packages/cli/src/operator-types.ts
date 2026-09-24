@@ -134,7 +134,7 @@ export type OperatorCommand =
       readonly kind: "broadcast_control";
       readonly workspace: string;
       readonly broadcastId: string;
-      readonly operation: "pause" | "resume" | "cancel_remaining";
+      readonly operation: "pause" | "resume" | "close" | "cancel_remaining";
       readonly expectedControlVersion: string;
     }
   | {

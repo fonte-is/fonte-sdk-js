@@ -64,6 +64,7 @@ export type ProviderRotationReason =
   | "canonical_import_not_completed"
   | "no_message_history"
   | "no_recent_message_history"
+  | "no_positive_signal"
   | "provider_unsubscribe"
   | "provider_bounce"
   | "provider_complaint"
@@ -72,6 +73,12 @@ export type ProviderRotationReason =
   | "provider_eligibility_unknown"
   | "identity_unknown"
   | "evidence_missing"
+  | "freshness_unbound"
+  | "population_evidence_stale"
+  | "suppression_evidence_stale"
+  | "broadcast_evidence_stale"
+  | "positive_signal_stale"
+  | "candidate_generation_stale"
   | "evidence_contradictory"
   | "relationship_evidence_not_preserved";
 
@@ -83,6 +90,7 @@ export interface ProviderRotationResult {
     readonly provider: "resend";
     readonly providerAccess: "get_only_stored_credential";
     readonly providerMutation: "not_granted";
+    readonly contactMutation: "not_granted";
     readonly unknownAllowsEffect: false;
   };
   readonly iterationId: string;
@@ -153,15 +161,7 @@ export interface ProviderRotationResult {
         readonly operationId: string;
       })
     | null;
-  readonly outgoingIntake: null | {
-    readonly schemaVersion: "provider_rotation_intake.v1";
-    readonly contactImportBatchId: string;
-    readonly sourceChecksumSha256: string;
-    readonly fonteIdentitySetSha256: string;
-    readonly count: number;
-    readonly selector: ProviderRotationSelectorResult;
-    readonly bindingChecksumSha256: string;
-  };
+  readonly outgoingIntake: null;
   readonly coldRemaining: number;
   readonly partition: null | {
     readonly schemaVersion: "provider_rotation_partition.v1";
@@ -181,6 +181,14 @@ export interface ProviderRotationResult {
     readonly outgoing: ProviderRotationSelectorResult | null;
     readonly outgoingCount: number;
     readonly coldRemaining: number;
+    readonly freshnessPolicy: {
+      readonly evaluatedAt: string;
+      readonly populationMaxAgeSeconds: number;
+      readonly suppressionMaxAgeSeconds: number;
+      readonly broadcastObservationMaxAgeSeconds: number;
+      readonly positiveSignalMaxAgeSeconds: number;
+      readonly candidateGenerationMaxAgeSeconds: number;
+    };
     readonly unionConservationSha256: string;
     readonly partitionChecksumSha256: string;
   };

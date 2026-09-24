@@ -210,6 +210,20 @@ export async function runBroadcastCanary(
     }
 
     requireActive(state, dependencies.signal, now);
+    if (terminalTargetAccepted(progress, command.releaseCeiling)) {
+      state.pauseRequired = false;
+      return receipt(
+        command,
+        state,
+        now(),
+        "completed",
+        progress.cancelled_recipient_count >
+          releaseBaseline.cancelled_recipient_count
+          ? "broadcast_canary_ceiling_settled_with_cancellation_and_completed"
+          : "broadcast_canary_ceiling_accepted_and_completed",
+        state.mutationObserved ? "controlled" : "none",
+      );
+    }
     await pause(client!, command, state);
     requirePausedTarget(
       state.current!,
@@ -369,6 +383,7 @@ function requireOpenBaseline(
 ): void {
   const headroom = acceptanceHeadroom(progress, releaseCeiling);
   const open =
+    terminalTargetAccepted(progress, releaseCeiling) ||
     (progress.status === "paused" && progress.control_state === "paused") ||
     (progress.status === "processing" && progress.control_state === "active");
   if (
@@ -389,7 +404,8 @@ function requireSettlingBaseline(
   requireFresh(progress, observedAt);
   requireFrozenSafetyCounts(progress, frozen);
   if (
-    progress.status !== "processing" ||
+    (progress.status !== "processing" &&
+      !terminalTargetAccepted(progress, releaseCeiling)) ||
     progress.control_state !== "active" ||
     progress.released_recipient_count !== frozen.released_recipient_count ||
     progress.held_recipient_count !== frozen.held_recipient_count ||
@@ -426,7 +442,8 @@ function requireTargetProgress(
   requireFrozenSafetyCounts(progress, baseline);
   if (
     progress.control_state !== "active" ||
-    progress.status !== "processing" ||
+    (progress.status !== "processing" &&
+      !terminalTargetAccepted(progress, releaseCeiling)) ||
     (maximumRecipientCount === 0 && releasedDelta !== 0) ||
     progress.held_recipient_count !==
       baseline.held_recipient_count - releasedDelta ||
@@ -489,6 +506,21 @@ function targetAccepted(
     progress.accepted_recipient_count === releaseCeiling &&
     progress.pending_recipient_count === 0 &&
     progress.claimed_recipient_count === 0
+  );
+}
+
+function terminalTargetAccepted(
+  progress: ProductionBroadcastProgressResult,
+  releaseCeiling: number,
+): boolean {
+  return (
+    progress.status === "terminal" &&
+    progress.control_state === "active" &&
+    progress.held_recipient_count === 0 &&
+    progress.remaining_recipient_count === 0 &&
+    progress.released_recipient_count === progress.eligible_recipient_count &&
+    releasedAccounting(progress) === progress.released_recipient_count &&
+    targetAccepted(progress, releaseCeiling)
   );
 }
 

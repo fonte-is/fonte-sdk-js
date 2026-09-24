@@ -123,6 +123,51 @@ test("human output lists every current and future typed blocker", async () => {
   assertSanitized(result.stdout);
 });
 
+test("preflight preserves Core's protected transactional reserve", async () => {
+  const response = readyReceipt();
+  Object.assign(response.checks.providerCapacity.evidence, {
+    protectedTransactionalReserve: 50,
+    dailyRemaining: 650,
+  });
+  const result = await runProgram(
+    preflightArguments("--json"),
+    dependencies(async (input) =>
+      String(input) === configUrl ? json(config) : json(response),
+    ),
+  );
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.receipt.reason, "broadcast_preflight_ready");
+  const capacity = result.receipt.result.checks.provider_capacity.evidence;
+  assert.equal(capacity.protected_transactional_reserve, 50);
+  assert.equal(capacity.daily_remaining, 650);
+  assert.equal(result.receipt.core_effect, "none");
+  assertSanitized(result.stdout);
+});
+
+test("preflight rejects missing, malformed, or unaccounted transactional reserve", async () => {
+  for (const patch of [
+    { protectedTransactionalReserve: undefined },
+    { protectedTransactionalReserve: null },
+    { protectedTransactionalReserve: -1 },
+    { protectedTransactionalReserve: 1.5 },
+    { protectedTransactionalReserve: 1_001 },
+    { protectedTransactionalReserve: 50, dailyRemaining: 700 },
+  ]) {
+    const response = readyReceipt();
+    Object.assign(response.checks.providerCapacity.evidence, patch);
+    const result = await runProgram(
+      preflightArguments("--json"),
+      dependencies(async (input) =>
+        String(input) === configUrl ? json(config) : json(response),
+      ),
+    );
+    assert.equal(result.exitCode, 3);
+    assert.equal(result.receipt.reason, "core_operator_receipt_invalid");
+    assert.equal(result.receipt.result, null);
+    assert.equal(result.receipt.core_effect, "none");
+  }
+});
+
 test("unexposed production authority declarations remain unsupported", async () => {
   for (const operation of [
     "prepare",
@@ -230,6 +275,7 @@ function readyReceipt(extra = {}) {
         observedAt: "2026-08-20T12:59:59.000Z",
         max24HourSend: 1_000,
         effectiveSentLast24Hours: 300,
+        protectedTransactionalReserve: 0,
         dailyRemaining: 700,
         maxSendRate: 20,
         operatingSendsPerSecond: 10,

@@ -36,6 +36,7 @@ const isPaidScope = (scope: Scope): boolean =>
     scope.wbraid ||
     scope.fbclid ||
     scope.ttclid ||
+    scope.twclid ||
     paidMediums.has(scope.utm_medium?.toLowerCase() ?? ""),
   );
 
@@ -114,8 +115,6 @@ export function shouldCaptureSourceTouch(
     scope.fonte ||
     measurementQueryKeys.some((key) => scope[key]) ||
     adStorageQueryKeys.some((key) => scope[key]) ||
-    scope.fbc ||
-    scope.fbp ||
     externalReferrer(scope.referrer ?? "", scope.current_url)
   ) {
     return true;

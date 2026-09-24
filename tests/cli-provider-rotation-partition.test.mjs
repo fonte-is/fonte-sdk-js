@@ -14,8 +14,8 @@ const populationGenerationId = "40000000-0000-4000-8000-000000000231";
 const placementSegmentId = "41000000-0000-4000-8000-000000000231";
 const candidateGenerationId = "50000000-0000-4000-8000-000000000231";
 const partitionGenerationId = "60000000-0000-4000-8000-000000000231";
-const qualifyingBroadcastId = "70000000-0000-4000-8000-000000000231";
-const priorBroadcastId = "80000000-0000-4000-8000-000000000231";
+const newestQualifyingBroadcastId = "70000000-0000-4000-8000-000000000231";
+const oldestBroadcastId = "80000000-0000-4000-8000-000000000231";
 const coreUrl = "https://core.example.test";
 const bearer = "synthetic.operator.bearer";
 
@@ -46,8 +46,8 @@ test("four fixed commands parse exact iteration and recovery guards", () => {
     outgoingCandidateOperationId,
     populationSelectorGenerationId: populationGenerationId,
     placementSegmentId,
-    qualifyingBroadcastId,
-    orderedBroadcastIds: [qualifyingBroadcastId, priorBroadcastId],
+    qualifyingBroadcastId: newestQualifyingBroadcastId,
+    orderedBroadcastIds: [newestQualifyingBroadcastId, oldestBroadcastId],
     coldRemaining: 1,
     identityCustody: {
       emailAddressKeyId: "tenant-email-custody-v1",
@@ -56,13 +56,24 @@ test("four fixed commands parse exact iteration and recovery guards", () => {
   });
   assert.equal(commands[1].expectedPageNumber, 1);
   assert.deepEqual(commands[3].orderedBroadcastIds, [
-    qualifyingBroadcastId,
-    priorBroadcastId,
+    newestQualifyingBroadcastId,
+    oldestBroadcastId,
   ]);
   assert.throws(() => parseArguments(advanceArgs(0)));
   assert.throws(() =>
     parseArguments([...sealArgs(), "--recipient", "hidden@example.test"]),
   );
+});
+
+test("rotation help requires newest-to-oldest broadcast order", async () => {
+  for (const operation of ["start", "seal"]) {
+    const result = await runProgram(
+      ["bridge", "rotation", operation, "--help"],
+      {},
+    );
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /newest-to-oldest/);
+  }
 });
 
 test("rotation client accepts an exact aggregate receipt", async () => {
@@ -72,6 +83,34 @@ test("rotation client accepts an exact aggregate receipt", async () => {
     fetch: async () => json(populationReceipt()),
   });
   await client.startProviderRotation(parseArguments(startArgs()).operator);
+});
+
+test("rotation receipt rejects inverted chronology and binds equal-time order", async () => {
+  const inverted = terminalReceipt();
+  inverted.broadcastEvidence.broadcasts[0].sentAt = "2026-08-27T08:00:00.000Z";
+  inverted.broadcastEvidence.broadcasts[1].sentAt = "2026-08-28T08:00:00.000Z";
+  assert.throws(() => providerRotationReceipt(inverted));
+  const rejected = await runProgram(readArgs(), dependencies([], inverted));
+  assert.equal(rejected.receipt.reason, "core_operator_receipt_invalid");
+  assert.equal(rejected.receipt.core_effect, "none");
+  assertAggregateOnly(rejected.stdout);
+
+  const equalTime = terminalReceipt();
+  for (const broadcast of equalTime.broadcastEvidence.broadcasts) {
+    broadcast.sentAt = "2026-08-28T08:00:00.000Z";
+  }
+  assert.doesNotThrow(() => providerRotationReceipt(equalTime));
+
+  const reversedEqualTime = terminalReceipt();
+  reversedEqualTime.broadcastProgress.orderedBroadcastIds = [
+    oldestBroadcastId,
+    newestQualifyingBroadcastId,
+  ];
+  reversedEqualTime.broadcastEvidence.broadcasts.reverse();
+  for (const broadcast of reversedEqualTime.broadcastEvidence.broadcasts) {
+    broadcast.sentAt = "2026-08-28T08:00:00.000Z";
+  }
+  assert.throws(() => providerRotationReceipt(reversedEqualTime));
 });
 
 test("official runner forwards exact Core operations and emits aggregate receipts", async () => {
@@ -114,11 +153,14 @@ test("official runner forwards exact Core operations and emits aggregate receipt
       assert.equal(result.receipt.core_effect, "attempted");
     }
     if (path === "rotation-start") {
-      assert.equal(request.body.qualifyingBroadcastId, qualifyingBroadcastId);
+      assert.equal(
+        request.body.qualifyingBroadcastId,
+        newestQualifyingBroadcastId,
+      );
       assert.equal(request.body.placementSegmentId, placementSegmentId);
       assert.deepEqual(request.body.orderedBroadcastIds, [
-        qualifyingBroadcastId,
-        priorBroadcastId,
+        newestQualifyingBroadcastId,
+        oldestBroadcastId,
       ]);
       assert.equal("recipient" in request.body, false);
       assert.equal("credential" in request.body, false);
@@ -132,6 +174,7 @@ test("official runner forwards exact Core operations and emits aggregate receipt
     assert.equal(human.exitCode, 0);
     assert.match(human.stdout, /Fonte Bridge rotation:/);
     assert.match(human.stdout, /Partition E\/W\/X\/U:/);
+    assert.match(human.stdout, /Contact mutation not_granted/);
     assert.doesNotMatch(human.stdout, /operator_receipt_unrenderable/);
     assertAggregateOnly(human.stdout);
   }
@@ -188,6 +231,46 @@ test("unknown and malformed evidence fail closed; advance loss is not retried", 
   assert.equal(unknownReason.receipt.core_effect, "none");
   assertAggregateOnly(unknownReason.stdout);
 
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      outgoingIntake: { count: 1 },
+    }),
+  );
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      authority: {
+        ...terminalReceipt().authority,
+        contactMutation: "granted",
+      },
+    }),
+  );
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      partition: {
+        ...terminalReceipt().partition,
+        freshnessPolicy: {
+          ...terminalReceipt().partition.freshnessPolicy,
+          evaluatedAt: "2026-08-28T08:09:00.000Z",
+        },
+      },
+    }),
+  );
+  assert.throws(() =>
+    providerRotationReceipt({
+      ...terminalReceipt(),
+      partition: {
+        ...terminalReceipt().partition,
+        freshnessPolicy: {
+          ...terminalReceipt().partition.freshnessPolicy,
+          positiveSignalMaxAgeSeconds: 7_776_001,
+        },
+      },
+    }),
+  );
+
   const readback = `fonte bridge rotation read --workspace northstar --environment production --iteration-id ${iterationId} --json`;
   for (const argv of [startArgs(), advanceArgs(7), sealArgs()]) {
     for (const jsonOutput of [true, false]) {
@@ -241,11 +324,11 @@ function startArgs() {
     "--placement-segment-id",
     placementSegmentId,
     "--qualifying-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    priorBroadcastId,
+    oldestBroadcastId,
     "--cold-remaining",
     "1",
     "--identity-key-id",
@@ -272,11 +355,11 @@ function sealArgs() {
     "--partition-generation-id",
     partitionGenerationId,
     "--qualifying-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    qualifyingBroadcastId,
+    newestQualifyingBroadcastId,
     "--ordered-broadcast-id",
-    priorBroadcastId,
+    oldestBroadcastId,
     "--json",
   ];
 }
@@ -303,6 +386,7 @@ function populationReceipt(overrides = {}) {
       provider: "resend",
       providerAccess: "get_only_stored_credential",
       providerMutation: "not_granted",
+      contactMutation: "not_granted",
       unknownAllowsEffect: false,
     },
     iterationId,
@@ -325,8 +409,8 @@ function populationReceipt(overrides = {}) {
     },
     population: null,
     broadcastProgress: {
-      qualifyingBroadcastId,
-      orderedBroadcastIds: [qualifyingBroadcastId, priorBroadcastId],
+      qualifyingBroadcastId: newestQualifyingBroadcastId,
+      orderedBroadcastIds: [newestQualifyingBroadcastId, oldestBroadcastId],
       nextBroadcastOrdinal: 1,
       nextStage: "metadata",
       nextCursorPresent: false,
@@ -375,8 +459,8 @@ function terminalReceipt(options = {}) {
     },
     population,
     broadcastProgress: {
-      qualifyingBroadcastId,
-      orderedBroadcastIds: [qualifyingBroadcastId, priorBroadcastId],
+      qualifyingBroadcastId: newestQualifyingBroadcastId,
+      orderedBroadcastIds: [newestQualifyingBroadcastId, oldestBroadcastId],
       nextBroadcastOrdinal: null,
       nextStage: null,
       nextCursorPresent: false,
@@ -387,7 +471,7 @@ function terminalReceipt(options = {}) {
       providerThrottles: 0,
     },
     broadcastEvidence: {
-      broadcasts: [qualifyingBroadcastId, priorBroadcastId].map(
+      broadcasts: [newestQualifyingBroadcastId, oldestBroadcastId].map(
         (broadcastId, index) => ({
           broadcastId,
           sentAt: `2026-08-2${8 - index}T08:00:00.000Z`,
@@ -425,26 +509,7 @@ function terminalReceipt(options = {}) {
             "f".repeat(64),
           ),
         },
-    outgoingIntake: blocked
-      ? null
-      : {
-          schemaVersion: "provider_rotation_intake.v1",
-          contactImportBatchId: "90000000-0000-4000-8000-000000000231",
-          sourceChecksumSha256: "6".repeat(64),
-          fonteIdentitySetSha256: "7".repeat(64),
-          count: 1,
-          selector: {
-            selectorId: `${iterationId}:D`,
-            ...selector(
-              1,
-              partitionGenerationId,
-              "d".repeat(64),
-              "e".repeat(64),
-              "f".repeat(64),
-            ),
-          },
-          bindingChecksumSha256: "8".repeat(64),
-        },
+    outgoingIntake: null,
     partition: partition(blocked),
     candidateGenerationId,
     partitionGenerationId,
@@ -484,11 +549,11 @@ function partition(blocked) {
       ? [
           { category: "E", reason: "retirement_evidence_complete", count: 1 },
           { category: "W", reason: "no_message_history", count: 1 },
-          { category: "U", reason: "evidence_missing", count: 1 },
+          { category: "U", reason: "freshness_unbound", count: 1 },
         ]
       : [
           { category: "E", reason: "retirement_evidence_complete", count: 2 },
-          { category: "W", reason: "no_message_history", count: 1 },
+          { category: "W", reason: "no_positive_signal", count: 1 },
         ],
     selectors,
     outgoing: blocked
@@ -505,6 +570,14 @@ function partition(blocked) {
         },
     outgoingCount: blocked ? 0 : 1,
     coldRemaining: 1,
+    freshnessPolicy: {
+      evaluatedAt: "2026-08-28T08:30:00.000Z",
+      populationMaxAgeSeconds: 86_400,
+      suppressionMaxAgeSeconds: 86_400,
+      broadcastObservationMaxAgeSeconds: 86_400,
+      positiveSignalMaxAgeSeconds: 7_776_000,
+      candidateGenerationMaxAgeSeconds: 86_400,
+    },
     unionConservationSha256: "a".repeat(64),
     partitionChecksumSha256: "f".repeat(64),
   };

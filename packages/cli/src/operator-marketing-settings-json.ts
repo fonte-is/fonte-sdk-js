@@ -7,20 +7,41 @@ export function workspaceMarketingSettings(
     "workspaceId",
     "environment",
     "postalAddress",
+    "postalAddressStatus",
     "updatedAt",
+    "version",
   ]);
   if (body.environment !== "sandbox" && body.environment !== "production") {
     invalid();
   }
-  if (body.postalAddress === null || body.updatedAt === null) {
-    if (body.postalAddress !== null || body.updatedAt !== null) invalid();
+  const parsedVersion = version(body.version);
+  if (body.postalAddress === null) {
+    if (body.postalAddressStatus !== "not_configured") invalid();
+    if (body.updatedAt === null) {
+      if (parsedVersion !== 0) invalid();
+      return {
+        kind: "workspace_marketing_settings",
+        workspaceId: workspaceId(body.workspaceId),
+        environment: body.environment,
+        postalAddress: null,
+        updatedAt: null,
+      };
+    }
+    if (parsedVersion < 1) invalid();
     return {
       kind: "workspace_marketing_settings",
       workspaceId: workspaceId(body.workspaceId),
       environment: body.environment,
       postalAddress: null,
-      updatedAt: null,
+      updatedAt: instant(body.updatedAt),
     };
+  }
+  if (
+    body.postalAddressStatus !== "configured" ||
+    parsedVersion < 1 ||
+    body.updatedAt === null
+  ) {
+    invalid();
   }
   return {
     kind: "workspace_marketing_settings",
@@ -29,6 +50,11 @@ export function workspaceMarketingSettings(
     postalAddress: postalAddress(body.postalAddress),
     updatedAt: instant(body.updatedAt),
   };
+}
+
+function version(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) invalid();
+  return Number(value);
 }
 
 function exactObject(
