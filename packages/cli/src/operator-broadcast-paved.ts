@@ -435,11 +435,6 @@ async function prepareExistingDraft(
     return resolutionResult(context, sender, "Select one exact verified sender before preparation continues.");
   }
 
-  if (draft.draft.communication_purpose_id === null) {
-    return blocked(context, "This existing draft has no communication purpose, and the current revision supplier cannot update that field.", [
-      "broadcast_purpose_revision_unsupported",
-    ]);
-  }
   const purpose = resolvePurpose(
     purposeOptions,
     draft.draft.communication_purpose_id,
@@ -447,6 +442,18 @@ async function prepareExistingDraft(
   );
   if (purpose.kind !== "selected") {
     return resolutionResult(context, purpose, "The draft's current communication purpose could not be verified unambiguously.");
+  }
+  if (
+    draft.draft.communication_purpose_id !==
+    purpose.value.communication_purpose_id
+  ) {
+    draft = await applyPurpose(
+      workspace.slug,
+      draft,
+      purpose.value,
+      dependencies,
+    );
+    context.revision = draft.revision;
   }
 
   if (input.audience_selector && !isAllContactsSelector(input.audience_selector)) {
@@ -722,6 +729,35 @@ async function applySender(
         senderProfileId: sender.sender_profile_id,
       }),
     (snapshot) => snapshot.sender_profile_id === sender.sender_profile_id,
+    dependencies,
+  );
+}
+
+async function applyPurpose(
+  workspace: string,
+  initial: BroadcastDraftLifecycleResult,
+  purpose: ProductionAudienceOptionsResult["communication_purposes"][number],
+  dependencies: BroadcastPavedDependencies,
+): Promise<BroadcastDraftLifecycleResult> {
+  const changes: BroadcastDraftRevisionChanges = {
+    communicationPurposeId: purpose.communication_purpose_id,
+  };
+  const revision = await dependencies.draftRevision();
+  return applyRevision(
+    initial,
+    workspace,
+    changes,
+    (baseRevision, operationId) =>
+      revision.reviseBroadcastDraft({
+        workspace,
+        draftId: initial.draft_id,
+        baseRevision,
+        operationId,
+        changes,
+      }),
+    (snapshot) =>
+      snapshot.communication_purpose_id ===
+      purpose.communication_purpose_id,
     dependencies,
   );
 }
@@ -1131,40 +1167,15 @@ function resolvePurpose(
       warnings: ["communication_purpose_catalog_empty"],
     };
   }
-  if (currentId !== null) {
-    const current = purposes.filter((purpose) => purpose.communication_purpose_id === currentId);
-    if (current.length !== 1) {
-      return {
-        kind: "blocked",
-        reason: "The draft's current communication purpose is absent or ambiguous in current purpose discovery.",
-        warnings: ["current_communication_purpose_not_verified"],
-      };
-    }
-    if (selector === undefined) return { kind: "selected", value: current[0]! };
+  if (selector !== undefined) {
     const requested = purposes.filter((purpose) => purpose.label === selector);
-    if (requested.length === 1 && requested[0]!.communication_purpose_id === currentId) {
-      return { kind: "selected", value: current[0]! };
+    if (requested.length === 1) {
+      return { kind: "selected", value: requested[0]! };
     }
     if (requested.length > 1) {
       return {
         kind: "blocked",
-        reason: "Multiple current communication purposes share the same ordinary label; no safe product-level choice is available.",
-        warnings: ["communication_purpose_label_not_unique"],
-      };
-    }
-    return {
-      kind: "blocked",
-      reason: "The selected communication purpose differs from the existing draft; the current revision supplier cannot change that field.",
-      warnings: ["broadcast_purpose_revision_unsupported"],
-    };
-  }
-  if (selector !== undefined) {
-    const exact = purposes.filter((purpose) => purpose.label === selector);
-    if (exact.length === 1) return { kind: "selected", value: exact[0]! };
-    if (exact.length > 1) {
-      return {
-        kind: "blocked",
-        reason: "Multiple current communication purposes share the same ordinary label; no safe product-level choice is available.",
+        reason: "Multiple current communication purposes share the selected label; no safe product-level choice is available.",
         warnings: ["communication_purpose_label_not_unique"],
       };
     }
@@ -1174,6 +1185,17 @@ function resolvePurpose(
       choices: purposeChoices(purposes),
       summary: "No exact communication purpose label matched; choose one current label.",
     };
+  }
+  if (currentId !== null) {
+    const current = purposes.filter((purpose) => purpose.communication_purpose_id === currentId);
+    if (current.length !== 1) {
+      return {
+        kind: "blocked",
+        reason: "The draft's current communication purpose is absent or ambiguous in current purpose discovery.",
+        warnings: ["current_communication_purpose_not_verified"],
+      };
+    }
+    return { kind: "selected", value: current[0]! };
   }
   if (purposes.length === 1) return { kind: "selected", value: purposes[0]! };
   if (new Set(purposes.map((purpose) => purpose.label)).size !== purposes.length) {
@@ -1341,6 +1363,7 @@ function matchesChanges(
     ["subject", "subject"],
     ["preheader", "preheader"],
     ["sender", "sender_profile_id"],
+    ["communicationPurposeId", "communication_purpose_id"],
     ["replyTo", "reply_to"],
     ["textBody", "text_body"],
     ["activeSource", "active_source"],

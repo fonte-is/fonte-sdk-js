@@ -55,6 +55,52 @@ test("same-draft HTML revision sends exact PATCH and returns preserved Core stat
   assert.deepEqual(result.draft.recipient_selection, recipientSelection());
 });
 
+test("same-draft purpose revision sends exact PATCH and verifies Core readback", async () => {
+  const purposeId = "purpose_synthetic_selected";
+  const purposeChanges = { communicationPurposeId: purposeId };
+  const requests = [];
+  const client = createBroadcastDraftRevisionClient(async (path, options) => {
+    requests.push({ path, options });
+    return receipt(2, { communicationPurposeId: purposeId });
+  });
+
+  const result = await client.reviseBroadcastDraft({
+    ...revisionInput(),
+    changes: purposeChanges,
+  });
+
+  assert.deepEqual(requests, [{
+    path: `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}?environment=production`,
+    options: {
+      method: "PATCH",
+      lostResponseEffect: "unknown",
+      body: {
+        baseRevision: 1,
+        mutationKey: operationId,
+        changes: purposeChanges,
+      },
+    },
+  }]);
+  assert.equal(result.draft_id, draftId);
+  assert.equal(result.draft.communication_purpose_id, purposeId);
+});
+
+test("purpose revision rejects a receipt that does not confirm the exact purpose", async () => {
+  const client = createBroadcastDraftRevisionClient(async () =>
+    receipt(2, { communicationPurposeId: "purpose_synthetic_other" }));
+  await assert.rejects(
+    client.reviseBroadcastDraft({
+      ...revisionInput(),
+      changes: { communicationPurposeId: "purpose_synthetic_selected" },
+    }),
+    (error) => {
+      assert.equal(error.reason, "core_operator_receipt_invalid");
+      assert.equal(error.coreEffect, "unknown");
+      return true;
+    },
+  );
+});
+
 test("same mutation identity recovers the same draft and revision", async () => {
   let requests = 0;
   const client = createBroadcastDraftRevisionClient(async (path, options) => {
@@ -212,7 +258,7 @@ function revisionResult() {
   };
 }
 
-function receipt(revision) {
+function receipt(revision, draftChanges = {}) {
   return {
     revision,
     savedAt: "2026-09-22T12:00:00.000Z",
@@ -238,6 +284,7 @@ function receipt(revision) {
       htmlBody: htmlB,
       createdAt: "2026-09-22T11:00:00.000Z",
       updatedAt: "2026-09-22T12:00:00.000Z",
+      ...draftChanges,
     },
   };
 }

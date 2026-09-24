@@ -13,6 +13,7 @@ export interface BroadcastDraftRevisionChanges {
   readonly title?: string | null;
   readonly sender?: string | null;
   readonly replyTo?: string | null;
+  readonly communicationPurposeId?: string | null;
   readonly subject?: string | null;
   readonly preheader?: string | null;
   readonly textBody?: string | null;

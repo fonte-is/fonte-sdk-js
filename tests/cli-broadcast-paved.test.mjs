@@ -65,6 +65,7 @@ test("saved selected workspace wins without prompting, while an explicit selecto
   assert.equal(fakes.calls.readDraftWorkspaces[0], secondWorkspace.slug);
   assert.equal(switched.status, "ready_to_send");
   assert.equal(fakes.calls.readDraftWorkspaces.at(-1), workspace);
+  assert.equal(fakes.calls.revisions, 0);
 });
 
 test("create and repeated preparation retain one exact draft and never Test Send", async () => {
@@ -245,6 +246,147 @@ test("CSV preparation resumes the same durable set after pending and binds only 
   assert.equal(fakes.calls.tests, 0);
   assert.equal(broadcastPavedPreparationOutputSchema.safeParse(pending).success, true);
   assert.equal(broadcastPavedPreparationOutputSchema.safeParse(ready).success, true);
+});
+
+test("existing draft selects its sole purpose, recovers lost PATCH ack, and resumes CSV idempotently", async () => {
+  const csvBytes = Buffer.from("email\nmember@example.test\n", "utf8");
+  const sourceSha256 = createHash("sha256").update(csvBytes).digest("hex");
+  let setCreated = false;
+  let setReads = 0;
+  let setCreates = 0;
+  const recipientSetSupplier = {
+    async createBroadcastRecipientSet(input) {
+      setCreates += 1;
+      setCreated = true;
+      return {
+        recipient_set: {
+          kind: "broadcast_recipient_set",
+          one_time_set_id: input.setId,
+          draft_id: input.draftId,
+          status: "pending",
+          operation_status: "pending",
+          contact_import_batch_id: null,
+          created_at: "2026-09-24T10:00:00.000Z",
+          population_effect: "broadcast_only_not_everyone",
+        },
+        source: {
+          file_name: "synthetic-audience.csv",
+          sha256: sourceSha256,
+          byte_length: csvBytes.byteLength,
+          row_count: 1,
+        },
+      };
+    },
+    async readBroadcastRecipientSet(input) {
+      if (!setCreated) {
+        throw new CoreOperatorError("broadcast_recipient_set_not_found", 404, "none");
+      }
+      setReads += 1;
+      const status = setReads >= 4 ? "completed" : "pending";
+      return {
+        kind: "broadcast_recipient_set",
+        one_time_set_id: input.setId,
+        draft_id: input.draftId,
+        status,
+        operation_status: status,
+        contact_import_batch_id: null,
+        created_at: "2026-09-24T10:00:00.000Z",
+        population_effect: "broadcast_only_not_everyone",
+      };
+    },
+  };
+  const initialDraft = {
+    ...readyDraft(),
+    communication_purpose_id: null,
+    communication_purpose_name: null,
+  };
+  const fakes = createFakes({
+    existingDraft: initialDraft,
+    recipientSetSupplier,
+    readFile: async (filePath) => ({ path: filePath, bytes: Buffer.from(csvBytes) }),
+  });
+  let losePatchAcknowledgement = true;
+  fakes.revisionBehavior = async (input) => {
+    fakes.calls.revisions += 1;
+    assert.deepEqual(input.changes, { communicationPurposeId: purposeId });
+    assert.equal(input.draftId, draftId);
+    assert.equal(input.baseRevision, 1);
+    Object.assign(fakes.draft, applyChanges(fakes.draft, input.changes));
+    fakes.draft.revision += 1;
+    if (losePatchAcknowledgement) {
+      losePatchAcknowledgement = false;
+      throw new CoreOperatorError("core_api_unavailable", null, "unknown");
+    }
+    return lifecycleResult(fakes.draft);
+  };
+  const input = {
+    draft_id: draftId,
+    audience_file: "/private/tmp/synthetic-audience.csv",
+  };
+  const processA = createBroadcastPavedOperator(fakes.dependencies);
+
+  const pending = await processA.prepare(input);
+  assert.equal(pending.status, "preparing");
+  assert.deepEqual(pending.missing, []);
+  assert.deepEqual(pending.choices, []);
+  assert.equal(fakes.draft.draft_id, draftId);
+  assert.equal(fakes.draft.communication_purpose_id, purposeId);
+  assert.equal(fakes.calls.creates, 0);
+  assert.equal(fakes.calls.createdDrafts.length, 0);
+  assert.equal(fakes.calls.revisions, 1);
+  assert.equal(setCreates, 1);
+
+  const processB = createBroadcastPavedOperator(fakes.dependencies);
+  const ready = await processB.prepare(input);
+  const repeated = await processB.prepare(input);
+
+  assert.equal(ready.status, "ready_to_send");
+  assert.equal(ready.draft_id, draftId);
+  assert.equal(ready.revision, 3);
+  assert.equal(fakes.draft.communication_purpose_id, purposeId);
+  assert.deepEqual(repeated.send_input, ready.send_input);
+  assert.equal(fakes.calls.creates, 0);
+  assert.equal(fakes.calls.createdDrafts.length, 0);
+  assert.equal(fakes.calls.revisions, 1);
+  assert.equal(setCreates, 1);
+  assert.equal(fakes.calls.targeting, 1);
+  assert.equal(fakes.calls.sends, 0);
+  assert.equal(fakes.calls.tests, 0);
+});
+
+test("exact supplied purpose revises the same draft and multiple purposes stay a product choice", async () => {
+  const alternativePurpose = {
+    communication_purpose_id: "purpose_synthetic_alternative",
+    label: "Synthetic announcements",
+  };
+  const fakes = createFakes({
+    existingDraft: { ...readyDraft(), communication_purpose_id: null },
+    purposes: [
+      { communication_purpose_id: purposeId, label: "Marketing" },
+      alternativePurpose,
+    ],
+  });
+  const operator = createBroadcastPavedOperator(fakes.dependencies);
+
+  const choices = await operator.prepare({ draft_id: draftId });
+  assert.equal(choices.status, "needs_input");
+  assert.deepEqual(choices.missing, ["communication_purpose_selector"]);
+  assert.deepEqual(choices.choices.map(({ value }) => value), [
+    "Marketing",
+    "Synthetic announcements",
+  ]);
+  assert.equal(fakes.calls.revisions, 0);
+
+  const selected = await operator.prepare({
+    draft_id: draftId,
+    communication_purpose_selector: alternativePurpose.label,
+  });
+  assert.equal(selected.status, "ready_to_send");
+  assert.equal(selected.draft_id, draftId);
+  assert.equal(fakes.draft.communication_purpose_id, alternativePurpose.communication_purpose_id);
+  assert.equal(fakes.calls.revisions, 1);
+  assert.equal(fakes.calls.creates, 0);
+  assert.equal(fakes.calls.sends, 0);
 });
 
 test("lost revision acknowledgement is recovered by exact readback without a duplicate mutation", async () => {
@@ -510,6 +652,7 @@ function createFakes({
   selectedWorkspace = null,
   recipientSetSupplier = null,
   readFile = async () => { throw new Error("no file source expected"); },
+  purposes = [{ communication_purpose_id: purposeId, label: "Marketing" }],
 } = {}) {
   const calls = {
     creates: 0,
@@ -551,10 +694,7 @@ function createFakes({
     async listProductionAudienceOptions() {
       return {
         kind: "broadcast_audience_options",
-        communication_purposes: [{
-          communication_purpose_id: purposeId,
-          label: "Marketing",
-        }],
+        communication_purposes: purposes,
         sources: [],
       };
     },
@@ -734,6 +874,12 @@ function applyChanges(draft, changes) {
     next.active_source = "html";
   }
   if (Object.hasOwn(changes, "sender")) next.sender_profile_id = changes.sender;
+  if (Object.hasOwn(changes, "communicationPurposeId")) {
+    next.communication_purpose_id = changes.communicationPurposeId;
+    next.communication_purpose_name = changes.communicationPurposeId === purposeId
+      ? "Marketing"
+      : "Synthetic announcements";
+  }
   return next;
 }
 
