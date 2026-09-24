@@ -20,11 +20,14 @@
     }
   },
   "bin": {
-    "fonte": "./dist/main.js"
+    "fonte": "./dist/main.js",
+    "fonte-mcp": "./dist/mcp-main.js"
   },
   "files": [
     "dist",
+    "assets",
     "LICENSE",
+    "MCP_CONTRACT.md",
     "README.md",
     "OPERATOR_CONTRACT.md"
   ],
@@ -41,6 +44,8 @@
     "access": "public"
   },
   "dependencies": {
-    "openid-client": "6.8.5"
+    "@modelcontextprotocol/server": "2.0.0",
+    "openid-client": "6.8.5",
+    "zod": "4.4.3"
   }
 }

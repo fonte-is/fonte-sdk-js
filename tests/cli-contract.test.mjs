@@ -27,8 +27,15 @@ test("CLI package identity stays independent from the fonte binary", async () =>
   );
   assert.equal(manifest.name, "@fonte-is/cli");
   assert.equal(manifest.version, "0.2.0");
-  assert.deepEqual(manifest.bin, { fonte: "./dist/main.js" });
-  assert.deepEqual(manifest.dependencies, { "openid-client": "6.8.5" });
+  assert.deepEqual(manifest.bin, {
+    fonte: "./dist/main.js",
+    "fonte-mcp": "./dist/mcp-main.js",
+  });
+  assert.deepEqual(manifest.dependencies, {
+    "@modelcontextprotocol/server": "2.0.0",
+    "openid-client": "6.8.5",
+    zod: "4.4.3",
+  });
   assert.deepEqual(manifest.exports, {
     "./operator-client": {
       types: "./dist/operator-client.d.ts",
@@ -123,6 +130,36 @@ test("program renders help, version, and invalid invocation exactly", async () =
     stdout: "",
     stderr: USAGE_TEXT,
   });
+});
+
+test("broadcast close and cancel help compose with the shared operator CLI", async () => {
+  let calls = 0;
+  const dependencies = {
+    cwd: root,
+    randomUUID: () => "10000000-0000-4000-8000-000000000009",
+    runner: {
+      run: async () => {
+        calls += 1;
+        return 1;
+      },
+    },
+  };
+
+  for (const operation of ["close", "cancel"]) {
+    const result = await runProgram(
+      ["broadcast", operation, "--help"],
+      dependencies,
+    );
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stderr, "");
+    assert.match(
+      result.stdout,
+      new RegExp(`Usage: fonte broadcast ${operation}`),
+    );
+    assert.match(result.stdout, /state-idempotent/);
+  }
+
+  assert.equal(calls, 0);
 });
 
 test("invalid JSON calls stay private and every current command help matches its authority", async () => {
