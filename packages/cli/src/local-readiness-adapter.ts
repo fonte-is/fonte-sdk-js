@@ -6,7 +6,9 @@ import { createCodexMcpConfigStore } from "./codex-mcp-config.js";
 import {
   inspectInstalledLocalMcpHost,
   locateInstalledLocalMcpHost,
+  locateInstalledTrustedMcpHost,
 } from "./local-mcp-host.js";
+import { ensureTrustedMcpLaunchAgent } from "./trusted-mcp-host-launch-agent.js";
 import { LocalWorkspaceContextStore } from "./local-workspace-context.js";
 
 export interface LocalFonteReadinessReaderOptions {
@@ -56,6 +58,11 @@ export function createLocalFonteSetupDependencies(
     ...createLocalFonteReadinessReader(options),
     codexConfig: createCodexMcpConfigStore(),
     locateInstalledHost: locateInstalledLocalMcpHost,
+    async ensureTrustedHost() {
+      if (process.platform !== "darwin" || process.arch !== "arm64") return;
+      const host = await locateInstalledTrustedMcpHost();
+      await ensureTrustedMcpLaunchAgent({ host });
+    },
     inspectInstalledHost: inspectInstalledLocalMcpHost,
   };
 }

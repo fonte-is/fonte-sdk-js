@@ -100,6 +100,38 @@ test("setup saves the sole workspace as local context and returns ready", async 
   assert.equal(state.effects.configWrites, 1);
 });
 
+test("setup starts the trusted host before probing the canonical MCP client", async () => {
+  const events = [];
+  const state = fixture({
+    ensureTrustedHost: async () => events.push("trusted-host"),
+    inspectInstalledHost: async () => {
+      events.push("mcp-probe");
+      return { initialized: true, tools: [...REQUIRED_PRODUCT_TOOLS] };
+    },
+  });
+
+  const result = await runFonteSetup(state.dependencies);
+
+  assert.equal(result.state, "ready");
+  assert.deepEqual(events, ["trusted-host", "mcp-probe"]);
+});
+
+test("setup fails closed when the trusted host cannot be started", async () => {
+  const state = fixture({
+    ensureTrustedHost: async () => {
+      throw new Error("private launchd detail");
+    },
+  });
+
+  const result = await runFonteSetup(state.dependencies);
+
+  assert.equal(result.state, "unavailable");
+  assert.equal(result.reason, "mcp_host_unavailable");
+  assert.doesNotMatch(JSON.stringify(result), /private launchd detail/u);
+  assert.equal(state.effects.configWrites, 0);
+  assert.equal(state.effects.sessionReads, 0);
+});
+
 test("setup never chooses the first of multiple workspaces", async () => {
   const state = fixture({
     listWorkspaces: async () => [
