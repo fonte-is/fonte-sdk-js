@@ -21,10 +21,19 @@ export interface CommandRunner {
   run(command: string, args: readonly string[], cwd: string): Promise<number>;
 }
 
+export interface CapturedCommandRunner {
+  run(
+    command: string,
+    args: readonly string[],
+    cwd: string,
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }>;
+}
+
 export interface ProgramDependencies {
   cwd: string;
   randomUUID(): string;
   runner: CommandRunner;
+  releaseRunner?: CapturedCommandRunner;
   authExec?: AuthorizedConsumerDependencies;
   operator?: OperatorDependencies;
   hosted?: HostedTestDependencies;

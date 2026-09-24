@@ -9,7 +9,7 @@ import {
   authorizeWithBrowser,
   createBrowserAuthorizationSession,
 } from "./oauth.js";
-import { systemRunner } from "./runner.js";
+import { releaseRunner, systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
 
 const cancellation = new AbortController();
@@ -39,6 +39,7 @@ const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
   runner: systemRunner,
+  releaseRunner,
   authExec: {
     configUrl: process.env.FONTE_CLI_CONFIG_URL,
     fetch: globalThis.fetch,

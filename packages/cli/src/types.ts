@@ -2,7 +2,7 @@ import type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
 
 export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand =
-  CommandName | "auth-exec" | "operator" | "help" | "version";
+  CommandName | "auth-exec" | "operator" | "release" | "help" | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
@@ -13,6 +13,7 @@ export interface ParsedArguments {
   consumerCommand?: string;
   consumerArguments?: readonly string[];
   operator?: OperatorCommand;
+  releaseSource?: string;
 }
 
 export interface InvalidInvocationReceipt {
