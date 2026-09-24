@@ -55,6 +55,61 @@ test("same-draft HTML revision sends exact PATCH and returns preserved Core stat
   assert.deepEqual(result.draft.recipient_selection, recipientSelection());
 });
 
+test("narrow copy revision preserves untouched content and draft authority", async () => {
+  const original = {
+    ...receipt(1).draft,
+    subject: "Original subject",
+    textBody: htmlA,
+    htmlBody: htmlA,
+  };
+  const savedAt = "2026-09-22T12:30:00.000Z";
+  const saved = {
+    ...original,
+    version: 2,
+    subject: "Updated subject",
+    updatedAt: savedAt,
+  };
+  const client = createBroadcastDraftRevisionClient(async (path, options) => {
+    assert.equal(
+      path,
+      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}?environment=production`,
+    );
+    assert.deepEqual(options.body, {
+      baseRevision: 1,
+      mutationKey: "update-subject-v1",
+      changes: { subject: "Updated subject" },
+    });
+    return { revision: 2, savedAt, draft: saved };
+  });
+
+  const result = await client.reviseBroadcastDraft({
+    workspace,
+    draftId,
+    baseRevision: 1,
+    operationId: "update-subject-v1",
+    changes: { subject: "Updated subject" },
+  });
+
+  assert.equal(result.draft_id, draftId);
+  assert.equal(result.revision, 2);
+  assert.equal(result.draft.subject, "Updated subject");
+  assert.equal(result.draft.sender_profile_id, original.sender);
+  assert.equal(result.draft.reply_to, original.replyTo);
+  assert.equal(result.draft.text_body, htmlA);
+  assert.equal(result.draft.active_source, "html");
+  assert.equal(result.draft.composer_body, original.composerBody);
+  assert.equal(result.draft.html_body, htmlA);
+  assert.equal(result.draft.source_campaign_id, campaignId);
+  assert.equal(result.draft.source_broadcast_id, sourceBroadcastId);
+  assert.equal(result.draft.audience_kind, "recipient_expression");
+  assert.deepEqual(result.draft.recipient_expression, original.recipientExpression);
+  assert.deepEqual(result.draft.recipient_selection, original.recipientSelection);
+  assert.equal(
+    result.draft.communication_purpose_id,
+    original.communicationPurposeId,
+  );
+});
+
 test("same mutation identity recovers the same draft and revision", async () => {
   let requests = 0;
   const client = createBroadcastDraftRevisionClient(async (path, options) => {
