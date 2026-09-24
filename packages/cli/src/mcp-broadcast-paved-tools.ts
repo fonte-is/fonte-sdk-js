@@ -46,7 +46,7 @@ export function createBroadcastSendPavedToolHandler(
   return async (input: unknown) => {
     const parsed = sendPreparedBroadcastInputSchema.safeParse(input);
     if (!parsed.success) {
-      return blockedReceipt("invalid_preparation_reference", null, "missing");
+      return blockedReceipt("invalid_durable_send_input", null, "missing");
     }
     return operator.send(parsed.data);
   };

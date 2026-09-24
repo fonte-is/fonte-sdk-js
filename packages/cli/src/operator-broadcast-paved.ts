@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import type {
   BroadcastDraftLifecycleClient,
@@ -31,7 +31,16 @@ import {
   prepareBroadcastHtmlSource,
   type BroadcastHtmlSource,
 } from "./operator-broadcast-html-source.js";
-import type { BroadcastLocalFileReader } from "./operator-broadcast-html-file.js";
+import {
+  BroadcastLocalFileError,
+  type BroadcastLocalFileReader,
+} from "./operator-broadcast-html-file.js";
+import {
+  BROADCAST_RECIPIENT_SET_MAX_BYTES,
+  BroadcastRecipientSetFileError,
+  type BroadcastRecipientSetClient,
+  type BroadcastRecipientSetResult,
+} from "./operator-broadcast-recipient-set-client.js";
 import { broadcastSendInstructionReceiptDescriptor } from "./operator-broadcast-send-instruction-run.js";
 import type {
   OperatorCommand,
@@ -54,6 +63,7 @@ export interface BroadcastPavedRequest {
   readonly subject?: string | null;
   readonly preheader?: string | null;
   readonly text_source?: string | null;
+  readonly audience_file?: string;
   readonly html_source_file?: string;
   readonly html_reference_file?: string | null;
   readonly postal_address_literal?: string | null;
@@ -70,11 +80,15 @@ export interface BroadcastPavedChoice {
 }
 
 export interface BroadcastPavedSendInput {
-  readonly preparation_reference: string;
+  readonly workspace: string;
+  readonly draft_id: string;
+  readonly expected_revision: number;
+  readonly snapshot_sha256: string;
+  readonly request_id: string;
 }
 
 export interface BroadcastPavedPreparationResult {
-  readonly status: "ready_to_send" | "needs_input" | "blocked";
+  readonly status: "ready_to_send" | "preparing" | "needs_input" | "blocked";
   readonly draft_id: string | null;
   readonly revision: number | null;
   readonly summary: string;
@@ -86,6 +100,7 @@ export interface BroadcastPavedPreparationResult {
 
 export interface BroadcastPavedDependencies {
   readonly workspaceCatalog: () => Promise<WorkspaceCatalogClient>;
+  readonly readSelectedWorkspace?: () => Promise<string | null>;
   readonly draftLifecycle: () => Promise<BroadcastDraftLifecycleClient>;
   readonly draftRevision: () => Promise<BroadcastDraftRevisionClient>;
   readonly senders: () => Promise<BroadcastSenderClient>;
@@ -93,8 +108,8 @@ export interface BroadcastPavedDependencies {
   readonly productionDrafts: () => Promise<ProductionDraftClient>;
   readonly render: () => Promise<BroadcastRenderTestClient>;
   readonly send: () => Promise<BroadcastSendInstructionClient>;
+  readonly recipientSetSupplier?: () => Promise<BroadcastRecipientSetClient>;
   readonly readFile: BroadcastLocalFileReader;
-  readonly randomUUID?: () => string;
 }
 
 export interface BroadcastPavedOperator {
@@ -102,21 +117,10 @@ export interface BroadcastPavedOperator {
   send(input: BroadcastPavedSendInput): Promise<OperatorReceipt>;
 }
 
-interface PreparedBinding {
-  readonly reference: string;
-  readonly workspace: string;
-  readonly draftId: string;
-  readonly revision: number;
-  readonly snapshotHash: string;
-  readonly requestId: string;
-  readonly snapshot: BroadcastDraftSnapshot;
-  sendAttempted: boolean;
-  sendReceipt: OperatorReceipt | null;
-}
-
 interface PreparationContext {
   draftId: string | null;
   revision: number | null;
+  oneTimeSetId?: string;
   readonly warnings: string[];
 }
 
@@ -144,17 +148,11 @@ const ALL_CONTACTS_SELECTION: BroadcastRecipientSelection = {
   to: { kind: "everyone" },
   except: [],
 };
-const PREPARATION_REFERENCE_PREFIX = "bpr1_";
-const MAX_PREPARATION_REFERENCES = 512;
+const MAX_RECIPIENT_SET_READ_ATTEMPTS = 3;
 
 export function createBroadcastPavedOperator(
   dependencies: BroadcastPavedDependencies,
 ): BroadcastPavedOperator {
-  const uuid = dependencies.randomUUID ?? randomUUID;
-  const bindings = new Map<string, PreparedBinding>();
-  const referenceBySnapshot = new Map<string, string>();
-  const sendFlights = new Map<string, Promise<OperatorReceipt>>();
-
   return {
     async prepare(input) {
       const context: PreparationContext = {
@@ -186,6 +184,9 @@ export function createBroadcastPavedOperator(
           input.workspace_selector,
           input.environment,
           await (await dependencies.workspaceCatalog()).listWorkspaces(),
+          input.workspace_selector === undefined
+            ? await dependencies.readSelectedWorkspace?.()
+            : null,
         );
         if (workspaceResolution.kind === "needs_input") {
           return needsInput(context, workspaceResolution);
@@ -193,7 +194,7 @@ export function createBroadcastPavedOperator(
         if (workspaceResolution.kind === "blocked") {
           return blocked(context, workspaceResolution.reason, workspaceResolution.warnings);
         }
-        const { workspace, environment } = workspaceResolution.value;
+        const { workspace } = workspaceResolution.value;
         if (workspace.role === "viewer") {
           return blocked(context, "The selected workspace role cannot prepare or Send Broadcasts.", [
             "workspace_role_read_only",
@@ -204,23 +205,15 @@ export function createBroadcastPavedOperator(
           return await prepareNewDraft(
             input,
             workspace,
-            environment,
             context,
             dependencies,
-            bindings,
-            referenceBySnapshot,
-            uuid,
           );
         }
         return await prepareExistingDraft(
           input,
           workspace,
-          environment,
           context,
           dependencies,
-          bindings,
-          referenceBySnapshot,
-          uuid,
         );
       } catch (error) {
         return blocked(context, "Preparation stopped before readiness was established.", [
@@ -233,31 +226,7 @@ export function createBroadcastPavedOperator(
     },
 
     async send(input) {
-      const binding = bindings.get(input.preparation_reference);
-      if (!binding) {
-        return sendFailureReceipt(
-          null,
-          "preparation_reference_unavailable",
-          "none",
-          "missing",
-        );
-      }
-      if (binding.sendReceipt) return binding.sendReceipt;
-      const active = sendFlights.get(binding.reference);
-      if (active) return active;
-      const flight = sendPrepared(binding, dependencies);
-      sendFlights.set(binding.reference, flight);
-      try {
-        const receipt = await flight;
-        if (receipt.outcome !== "blocked" || receipt.core_effect !== "unknown") {
-          if (receipt.result?.kind === "broadcast_send_operation") {
-            binding.sendReceipt = receipt;
-          }
-        }
-        return receipt;
-      } finally {
-        sendFlights.delete(binding.reference);
-      }
+      return sendPrepared(input, dependencies);
     },
   };
 }
@@ -265,12 +234,8 @@ export function createBroadcastPavedOperator(
 async function prepareNewDraft(
   input: BroadcastPavedRequest,
   workspace: WorkspaceSummary,
-  environment: "production",
   context: PreparationContext,
   dependencies: BroadcastPavedDependencies,
-  bindings: Map<string, PreparedBinding>,
-  referenceBySnapshot: Map<string, string>,
-  uuid: () => string,
 ): Promise<BroadcastPavedPreparationResult> {
   if (!hasText(input.title)) {
     return needsInput(context, {
@@ -316,12 +281,8 @@ async function prepareNewDraft(
     return prepareExistingDraft(
       { ...input, draft_id: draftId, create_new: false },
       workspace,
-      environment,
       context,
       dependencies,
-      bindings,
-      referenceBySnapshot,
-      uuid,
     );
   }
 
@@ -342,14 +303,14 @@ async function prepareNewDraft(
     return resolutionResult(context, purpose, "A current communication purpose is required before creating the draft.");
   }
 
-  if (!input.audience_selector) {
+  if (!input.audience_file && !input.audience_selector) {
     return needsInput(context, {
       missing: ["audience_selector"],
       choices: [allContactsChoice()],
       summary: "Choose an explicit supported audience before creating the draft.",
     });
   }
-  if (!isAllContactsSelector(input.audience_selector)) {
+  if (input.audience_selector && !isAllContactsSelector(input.audience_selector)) {
     return blocked(context, "This paved path can resolve only the exact all-contacts audience definition.", [
       "broadcast_audience_selector_not_supported",
     ]);
@@ -409,28 +370,20 @@ async function prepareNewDraft(
   return prepareResolvedDraft(
     input,
     workspace,
-    environment,
     context,
     dependencies,
     draft,
     sender.value,
     purpose.value,
     source,
-    bindings,
-    referenceBySnapshot,
-    uuid,
   );
 }
 
 async function prepareExistingDraft(
   input: BroadcastPavedRequest,
   workspace: WorkspaceSummary,
-  environment: "production",
   context: PreparationContext,
   dependencies: BroadcastPavedDependencies,
-  bindings: Map<string, PreparedBinding>,
-  referenceBySnapshot: Map<string, string>,
-  uuid: () => string,
 ): Promise<BroadcastPavedPreparationResult> {
   const lifecycle = await dependencies.draftLifecycle();
   let draft = await lifecycle.readBroadcastDraft({
@@ -493,7 +446,7 @@ async function prepareExistingDraft(
     ]);
   }
   const existingAudience = supportedCurrentAudience(draft.draft);
-  if (!input.audience_selector && !existingAudience) {
+  if (!input.audience_file && !input.audience_selector && !existingAudience) {
     return needsInput(context, {
       missing: ["audience_selector"],
       choices: [allContactsChoice()],
@@ -525,34 +478,36 @@ async function prepareExistingDraft(
     context.revision = draft.revision;
   }
 
+  const csvAudience = await applyCsvAudience(
+    input,
+    workspace.slug,
+    draft,
+    context,
+    dependencies,
+  );
+  if ("status" in csvAudience) return csvAudience;
+  draft = csvAudience;
+
   return finishPreparation(
     input,
     workspace,
-    environment,
     context,
     dependencies,
     draft,
     sender.value,
     purpose.value,
-    bindings,
-    referenceBySnapshot,
-    uuid,
   );
 }
 
 async function prepareResolvedDraft(
   input: BroadcastPavedRequest,
   workspace: WorkspaceSummary,
-  environment: "production",
   context: PreparationContext,
   dependencies: BroadcastPavedDependencies,
   initialDraft: BroadcastDraftLifecycleResult,
   selectedSender: BroadcastSenderProfile,
   selectedPurpose: ProductionAudienceOptionsResult["communication_purposes"][number],
   source: BroadcastHtmlSource | null,
-  bindings: Map<string, PreparedBinding>,
-  referenceBySnapshot: Map<string, string>,
-  uuid: () => string,
 ): Promise<BroadcastPavedPreparationResult> {
   let draft = await applySuppliedDraftChanges(
     input,
@@ -575,6 +530,15 @@ async function prepareResolvedDraft(
     draft = await applyAudience(workspace.slug, draft, dependencies);
     context.revision = draft.revision;
   }
+  const csvAudience = await applyCsvAudience(
+    input,
+    workspace.slug,
+    draft,
+    context,
+    dependencies,
+  );
+  if ("status" in csvAudience) return csvAudience;
+  draft = csvAudience;
   if (
     draft.draft.communication_purpose_id !==
     selectedPurpose.communication_purpose_id
@@ -587,33 +551,52 @@ async function prepareResolvedDraft(
   return finishPreparation(
     input,
     workspace,
-    environment,
     context,
     dependencies,
     draft,
     selectedSender,
     selectedPurpose,
-    bindings,
-    referenceBySnapshot,
-    uuid,
   );
 }
 
 async function finishPreparation(
-  _input: BroadcastPavedRequest,
+  input: BroadcastPavedRequest,
   workspace: WorkspaceSummary,
-  environment: "production",
   context: PreparationContext,
   dependencies: BroadcastPavedDependencies,
   draft: BroadcastDraftLifecycleResult,
   sender: BroadcastSenderProfile,
   purpose: ProductionAudienceOptionsResult["communication_purposes"][number],
-  bindings: Map<string, PreparedBinding>,
-  referenceBySnapshot: Map<string, string>,
-  uuid: () => string,
 ): Promise<BroadcastPavedPreparationResult> {
+  const current = await (await dependencies.draftLifecycle()).readBroadcastDraft({
+    workspace: workspace.slug,
+    draftId: draft.draft_id,
+  });
+  if (
+    current.draft_id !== draft.draft_id ||
+    current.revision !== draft.revision ||
+    hash(stableJson(current.draft)) !== hash(stableJson(draft.draft))
+  ) {
+    return blocked(context, "The exact draft changed before final preparation readback.", [
+      "broadcast_draft_changed_during_preparation",
+    ]);
+  }
+  draft = current;
   context.draftId = draft.draft_id;
   context.revision = draft.revision;
+  if (input.audience_file && !context.oneTimeSetId) {
+    return blocked(context, "The CSV audience did not reach a completed one-time set.", [
+      "broadcast_csv_audience_not_completed",
+    ]);
+  }
+  if (
+    context.oneTimeSetId &&
+    !isExactOneTimeAudience(draft.draft, context.oneTimeSetId)
+  ) {
+    return blocked(context, "The completed CSV audience is not the exact saved To selection.", [
+      "broadcast_csv_audience_readback_mismatch",
+    ]);
+  }
   const missing = readinessMissing(draft.draft, sender, purpose);
   if (workspace.role === "viewer") missing.push("workspace_role");
   if (missing.length > 0) {
@@ -624,47 +607,47 @@ async function finishPreparation(
     });
   }
 
-  let rendered = false;
+  let rendered: { draft_id: string; revision: number };
   try {
-    const result = await (
+    rendered = await (
       await dependencies.render()
     ).renderBroadcastDraft({
       workspace: workspace.slug,
       draftId: draft.draft_id,
       revision: draft.revision,
     });
-    rendered = result.draft_id === draft.draft_id && result.revision === draft.revision;
   } catch {
-    context.warnings.push("Canonical render was unavailable for the exact readback revision; no Test Send or Send was attempted.");
+    return blocked(context, "The exact prepared draft revision could not be rendered.", [
+      "broadcast_render_unavailable",
+    ]);
   }
-  const snapshotHash = hash(stableJson(draft.draft));
-  const snapshotKey = `${workspace.slug}:${environment}:${draft.draft_id}:${snapshotHash}`;
-  let reference = referenceBySnapshot.get(snapshotKey);
-  let binding = reference ? bindings.get(reference) : undefined;
-  if (!binding) {
-    reference = `${PREPARATION_REFERENCE_PREFIX}${validUuid(uuid())}`;
-    binding = {
-      reference,
-      workspace: workspace.slug,
-      draftId: draft.draft_id,
-      revision: draft.revision,
-      snapshotHash,
-      requestId: deterministicUuid("broadcast-paved-send-v1", reference),
-      snapshot: draft.draft,
-      sendAttempted: false,
-      sendReceipt: null,
-    };
-    rememberBinding(binding, snapshotKey, bindings, referenceBySnapshot);
+  if (rendered.draft_id !== draft.draft_id || rendered.revision !== draft.revision) {
+    return blocked(context, "The renderer did not confirm the exact prepared draft revision.", [
+      "broadcast_render_readback_mismatch",
+    ]);
   }
+  const snapshotSha256 = hash(stableJson(draft.draft));
+  const requestId = deterministicUuid("broadcast-paved-send-v2", {
+    workspace: workspace.slug,
+    draftId: draft.draft_id,
+    expectedRevision: draft.revision,
+    snapshotSha256,
+  });
   return {
     status: "ready_to_send",
     draft_id: draft.draft_id,
     revision: draft.revision,
-    summary: `Draft ${draft.draft_id} was read at revision ${draft.revision}; its current sender, audience, purpose, subject, and content satisfy the available factual readiness checks.${rendered ? " The exact revision also rendered canonically." : ""} No Send or Test Send was attempted.`,
+    summary: `Draft ${draft.draft_id} was read and rendered at revision ${draft.revision}; its current sender, audience, purpose, subject, and content satisfy the available factual readiness checks. No Send or Test Send was attempted.`,
     missing: [],
     choices: [],
     warnings: [...context.warnings],
-    send_input: { preparation_reference: binding.reference },
+    send_input: {
+      workspace: workspace.slug,
+      draft_id: draft.draft_id,
+      expected_revision: draft.revision,
+      snapshot_sha256: snapshotSha256,
+      request_id: requestId,
+    },
   };
 }
 
@@ -735,24 +718,38 @@ async function applyAudience(
   initial: BroadcastDraftLifecycleResult,
   dependencies: BroadcastPavedDependencies,
 ): Promise<BroadcastDraftLifecycleResult> {
+  return applyRecipientSelection(
+    workspace,
+    initial,
+    ALL_CONTACTS_SELECTION,
+    dependencies,
+  );
+}
+
+async function applyRecipientSelection(
+  workspace: string,
+  initial: BroadcastDraftLifecycleResult,
+  selection: BroadcastRecipientSelection,
+  dependencies: BroadcastPavedDependencies,
+): Promise<BroadcastDraftLifecycleResult> {
   const client = await dependencies.targeting();
   return applyRevision(
     initial,
     workspace,
-    { recipientSelection: ALL_CONTACTS_SELECTION },
+    { recipientSelection: selection },
     (baseRevision, operationId) =>
       client.updateBroadcastTargeting({
         workspace,
         draftId: initial.draft_id,
         baseRevision,
         operationId,
-        recipientSelection: ALL_CONTACTS_SELECTION,
+        recipientSelection: selection,
       }),
     (snapshot) => {
       try {
         return sameBroadcastRecipientSelection(
           parseBroadcastRecipientSelection(snapshot.recipient_selection),
-          ALL_CONTACTS_SELECTION,
+          selection,
         );
       } catch {
         return false;
@@ -760,6 +757,155 @@ async function applyAudience(
     },
     dependencies,
   );
+}
+
+async function applyCsvAudience(
+  input: BroadcastPavedRequest,
+  workspace: string,
+  draft: BroadcastDraftLifecycleResult,
+  context: PreparationContext,
+  dependencies: BroadcastPavedDependencies,
+): Promise<BroadcastDraftLifecycleResult | BroadcastPavedPreparationResult> {
+  if (!input.audience_file) return draft;
+  if (!dependencies.recipientSetSupplier) {
+    return blocked(context, "The internal CSV audience supplier is unavailable.", [
+      "broadcast_csv_audience_supplier_unavailable",
+    ]);
+  }
+
+  let sourceSha256: string;
+  try {
+    const source = await dependencies.readFile(
+      input.audience_file,
+      BROADCAST_RECIPIENT_SET_MAX_BYTES,
+    );
+    try {
+      sourceSha256 = createHash("sha256").update(source.bytes).digest("hex");
+    } finally {
+      source.bytes.fill(0);
+    }
+  } catch (error) {
+    if (error instanceof BroadcastLocalFileError || error instanceof BroadcastRecipientSetFileError) {
+      return blocked(context, "The CSV audience file could not be read or validated.", [
+        error.reason,
+      ]);
+    }
+    throw error;
+  }
+
+  const identity = deriveCsvRecipientIdentity(
+    workspace,
+    draft.draft_id,
+    sourceSha256,
+  );
+  const supplier = await dependencies.recipientSetSupplier();
+  const setInput = {
+    workspace,
+    draftId: draft.draft_id,
+    setId: identity.oneTimeSetId,
+  };
+  const readSet = () => supplier.readBroadcastRecipientSet(setInput);
+  let recipientSet: BroadcastRecipientSetResult;
+  try {
+    recipientSet = await readSet();
+  } catch (readError) {
+    if (!isRecipientSetNotFound(readError)) throw readError;
+    try {
+      const created = await supplier.createBroadcastRecipientSet({
+        ...setInput,
+        clientRequestKey: identity.clientRequestKey,
+        expectedDraftVersion: draft.revision,
+        csvFilePath: input.audience_file,
+      });
+      if (
+        created.source.sha256 !== sourceSha256 ||
+        created.recipient_set.one_time_set_id !== identity.oneTimeSetId ||
+        created.recipient_set.draft_id !== draft.draft_id
+      ) {
+        return blocked(context, "The CSV supplier did not confirm the exact file digest and set identity.", [
+          "broadcast_csv_audience_identity_mismatch",
+        ]);
+      }
+      recipientSet = created.recipient_set;
+    } catch (createError) {
+      if (!isUnknownEffect(createError)) throw createError;
+      try {
+        recipientSet = await readSet();
+      } catch (recoveryError) {
+        if (isRecipientSetNotFound(recoveryError)) throw createError;
+        throw recoveryError;
+      }
+    }
+  }
+  if (
+    recipientSet.one_time_set_id !== identity.oneTimeSetId ||
+    recipientSet.draft_id !== draft.draft_id
+  ) {
+    return blocked(context, "The CSV supplier returned a different durable set identity.", [
+      "broadcast_csv_audience_identity_mismatch",
+    ]);
+  }
+
+  for (
+    let attempt = 0;
+    recipientSet.status === "pending" &&
+    attempt < MAX_RECIPIENT_SET_READ_ATTEMPTS;
+    attempt += 1
+  ) {
+    recipientSet = await readSet();
+    if (
+      recipientSet.one_time_set_id !== identity.oneTimeSetId ||
+      recipientSet.draft_id !== draft.draft_id
+    ) {
+      return blocked(context, "The CSV supplier returned a different durable set identity.", [
+        "broadcast_csv_audience_identity_mismatch",
+      ]);
+    }
+  }
+  if (recipientSet.status === "unavailable") {
+    return blocked(context, "The exact one-time CSV audience is unavailable.", [
+      "broadcast_csv_audience_unavailable",
+    ]);
+  }
+  if (recipientSet.status === "pending") {
+    return preparing(
+      context,
+      `The CSV audience for draft ${draft.draft_id} is still preparing. Call fonte_prepare_broadcast again; no human action is required.`,
+    );
+  }
+
+  const selection: BroadcastRecipientSelection = {
+    to: {
+      kind: "selected",
+      references: [{ kind: "one_time", oneTimeSetId: identity.oneTimeSetId }],
+    },
+    except: [],
+  };
+  context.oneTimeSetId = identity.oneTimeSetId;
+  const updated = await applyRecipientSelection(
+    workspace,
+    draft,
+    selection,
+    dependencies,
+  );
+  context.revision = updated.revision;
+  return updated;
+}
+
+function deriveCsvRecipientIdentity(
+  workspace: string,
+  draftId: string,
+  sourceSha256: string,
+): { readonly oneTimeSetId: string; readonly clientRequestKey: string } {
+  const scope = { workspace, draftId, sourceSha256 };
+  return {
+    oneTimeSetId: deterministicUuid("broadcast-paved-csv-set-v1", scope),
+    clientRequestKey: deterministicUuid("broadcast-paved-csv-request-v1", scope),
+  };
+}
+
+function isRecipientSetNotFound(error: unknown): boolean {
+  return error instanceof CoreOperatorError && error.statusCode === 404;
 }
 
 async function applyRevision(
@@ -850,6 +996,7 @@ async function resolveWorkspace(
   selector: string | undefined,
   requestedEnvironment: "sandbox" | "production" | undefined,
   workspaces: readonly WorkspaceSummary[],
+  selectedWorkspace: string | null = null,
 ): Promise<Resolution<{ workspace: WorkspaceSummary; environment: "production" }>> {
   if (workspaces.length === 0) {
     return {
@@ -859,7 +1006,12 @@ async function resolveWorkspace(
     };
   }
   let candidates: readonly WorkspaceSummary[];
-  if (selector === undefined) {
+  if (selector === undefined && selectedWorkspace !== null) {
+    candidates = workspaces.filter(
+      (workspace) => workspace.slug === selectedWorkspace,
+    );
+    if (candidates.length === 0) candidates = workspaces;
+  } else if (selector === undefined) {
     candidates = workspaces;
   } else {
     candidates = workspaces.filter(
@@ -896,23 +1048,6 @@ async function resolveWorkspace(
       kind: "blocked",
       reason: "Production is not listed as available for the exact selected workspace.",
       warnings: ["production_environment_unavailable"],
-    };
-  }
-  if (
-    requestedEnvironment === undefined &&
-    workspace.available_environments.length !== 1
-  ) {
-    return {
-      kind: "needs_input",
-      missing: ["environment"],
-      choices: [
-        {
-          field: "environment",
-          value: "production",
-          label: "Production (the only supported Broadcast environment)",
-        },
-      ],
-      summary: "The workspace lists multiple environments; confirm the supported production environment explicitly.",
     };
   }
   return { kind: "selected", value: { workspace, environment: "production" } };
@@ -1121,6 +1256,26 @@ function isCurrentAllContacts(draft: BroadcastDraftSnapshot): boolean {
   }
 }
 
+function isExactOneTimeAudience(
+  draft: BroadcastDraftSnapshot,
+  oneTimeSetId: string,
+): boolean {
+  try {
+    return sameBroadcastRecipientSelection(
+      parseBroadcastRecipientSelection(draft.recipient_selection),
+      {
+        to: {
+          kind: "selected",
+          references: [{ kind: "one_time", oneTimeSetId }],
+        },
+        except: [],
+      },
+    );
+  } catch {
+    return false;
+  }
+}
+
 function sameCreatedIdentity(
   draft: BroadcastDraftSnapshot,
   input: {
@@ -1276,52 +1431,47 @@ function blocked(
   };
 }
 
-function rememberBinding(
-  binding: PreparedBinding,
-  snapshotKey: string,
-  bindings: Map<string, PreparedBinding>,
-  referenceBySnapshot: Map<string, string>,
-): void {
-  while (bindings.size >= MAX_PREPARATION_REFERENCES) {
-    const oldest = bindings.keys().next().value as string | undefined;
-    if (oldest === undefined) break;
-    const removed = bindings.get(oldest);
-    bindings.delete(oldest);
-    if (removed) {
-      const oldSnapshotKey = `${removed.workspace}:production:${removed.draftId}:${removed.snapshotHash}`;
-      if (referenceBySnapshot.get(oldSnapshotKey) === oldest) {
-        referenceBySnapshot.delete(oldSnapshotKey);
-      }
-    }
-  }
-  bindings.set(binding.reference, binding);
-  referenceBySnapshot.set(snapshotKey, binding.reference);
+function preparing(
+  context: PreparationContext,
+  summary: string,
+): BroadcastPavedPreparationResult {
+  return {
+    status: "preparing",
+    draft_id: context.draftId,
+    revision: context.revision,
+    summary,
+    missing: [],
+    choices: [],
+    warnings: [...context.warnings],
+    send_input: null,
+  };
 }
 
 async function sendPrepared(
-  binding: PreparedBinding,
+  input: BroadcastPavedSendInput,
   dependencies: BroadcastPavedDependencies,
 ): Promise<OperatorReceipt> {
   const command: OperatorCommand = {
     kind: "broadcast_send_now",
-    workspace: binding.workspace,
-    draftId: binding.draftId,
-    requestId: binding.requestId,
-    expectedDraftVersion: binding.revision,
+    workspace: input.workspace,
+    draftId: input.draft_id,
+    requestId: input.request_id,
+    expectedDraftVersion: input.expected_revision,
   };
   try {
     const current = await (
       await dependencies.draftLifecycle()
     ).readBroadcastDraft({
-      workspace: binding.workspace,
-      draftId: binding.draftId,
+      workspace: input.workspace,
+      draftId: input.draft_id,
     });
     if (
-      current.revision !== binding.revision ||
-      hash(stableJson(current.draft)) !== binding.snapshotHash
+      current.draft_id !== input.draft_id ||
+      current.revision !== input.expected_revision ||
+      hash(stableJson(current.draft)) !== input.snapshot_sha256
     ) {
       return sendFailureReceipt(
-        binding.workspace,
+        input.workspace,
         "prepared_draft_state_changed",
         "none",
         "current",
@@ -1329,42 +1479,13 @@ async function sendPrepared(
     }
 
     const client = await dependencies.send();
-    const before = await client.readBroadcastSendOperation({
-      workspace: binding.workspace,
-      draftId: binding.draftId,
-    });
     const sendInput = {
-      workspace: binding.workspace,
-      draftId: binding.draftId,
-      requestId: binding.requestId,
-      expectedDraftVersion: binding.revision,
+      workspace: input.workspace,
+      draftId: input.draft_id,
+      requestId: input.request_id,
+      expectedDraftVersion: input.expected_revision,
       timing: { mode: "now" as const },
     };
-    if (before.status === "accepted") {
-      if (!binding.sendAttempted) {
-        return sendFailureReceipt(
-          binding.workspace,
-          "broadcast_send_operation_already_exists",
-          "none",
-          "current",
-        );
-      }
-      try {
-        return sendSuccessReceipt(
-          command,
-          await client.acceptBroadcastSend(sendInput),
-        );
-      } catch {
-        return sendFailureReceipt(
-          binding.workspace,
-          "broadcast_send_outcome_unresolved",
-          "unknown",
-          "current",
-        );
-      }
-    }
-
-    binding.sendAttempted = true;
     try {
       return sendSuccessReceipt(
         command,
@@ -1373,7 +1494,7 @@ async function sendPrepared(
     } catch (error) {
       if (!isUnknownEffect(error)) {
         return sendFailureReceipt(
-          binding.workspace,
+          input.workspace,
           safeReason(error),
           error instanceof CoreOperatorError ? error.coreEffect : "none",
           "current",
@@ -1381,12 +1502,12 @@ async function sendPrepared(
       }
       try {
         await client.readBroadcastSendOperation({
-          workspace: binding.workspace,
-          draftId: binding.draftId,
+          workspace: input.workspace,
+          draftId: input.draft_id,
         });
       } catch {
         return sendFailureReceipt(
-          binding.workspace,
+          input.workspace,
           "broadcast_send_outcome_unresolved",
           "unknown",
           "current",
@@ -1399,15 +1520,15 @@ async function sendPrepared(
         if (isUnknownEffect(retryError)) {
           try {
             await client.readBroadcastSendOperation({
-              workspace: binding.workspace,
-              draftId: binding.draftId,
+              workspace: input.workspace,
+              draftId: input.draft_id,
             });
           } catch {
             // The first Send outcome remains unknown even when its final read is unavailable.
           }
         }
         return sendFailureReceipt(
-          binding.workspace,
+          input.workspace,
           "broadcast_send_outcome_unresolved",
           "unknown",
           "current",
@@ -1416,7 +1537,7 @@ async function sendPrepared(
     }
   } catch (error) {
     return sendFailureReceipt(
-      binding.workspace,
+      input.workspace,
       safeReason(error),
       error instanceof CoreOperatorError ? error.coreEffect : "none",
       "current",
@@ -1506,6 +1627,13 @@ function safeReason(error: unknown): string {
   if (error instanceof CoreOperatorError && /^[a-z0-9_]{1,100}$/u.test(error.reason)) {
     return error.reason;
   }
+  if (
+    (error instanceof BroadcastLocalFileError ||
+      error instanceof BroadcastRecipientSetFileError) &&
+    /^[a-z0-9_]{1,100}$/u.test(error.reason)
+  ) {
+    return error.reason;
+  }
   return "operator_request_failed";
 }
 
@@ -1520,13 +1648,6 @@ function deterministicUuid(scope: string, value: unknown): string {
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-function validUuid(value: string): string {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)) {
-    throw new TypeError("preparation_reference_id_invalid");
-  }
-  return value.toLowerCase();
 }
 
 function hash(value: string): string {
