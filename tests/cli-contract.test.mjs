@@ -132,6 +132,36 @@ test("program renders help, version, and invalid invocation exactly", async () =
   });
 });
 
+test("broadcast close and cancel help compose with the shared operator CLI", async () => {
+  let calls = 0;
+  const dependencies = {
+    cwd: root,
+    randomUUID: () => "10000000-0000-4000-8000-000000000009",
+    runner: {
+      run: async () => {
+        calls += 1;
+        return 1;
+      },
+    },
+  };
+
+  for (const operation of ["close", "cancel"]) {
+    const result = await runProgram(
+      ["broadcast", operation, "--help"],
+      dependencies,
+    );
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stderr, "");
+    assert.match(
+      result.stdout,
+      new RegExp(`Usage: fonte broadcast ${operation}`),
+    );
+    assert.match(result.stdout, /state-idempotent/);
+  }
+
+  assert.equal(calls, 0);
+});
+
 test("invalid JSON calls stay private and every current command help matches its authority", async () => {
   const dependencies = {
     cwd: root,
