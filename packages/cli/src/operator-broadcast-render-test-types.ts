@@ -39,7 +39,7 @@ export interface BroadcastDraftRenderResult {
   readonly html: string;
   readonly text: string;
   readonly render_proof: BroadcastRenderProof;
-  readonly sample_render: BroadcastSampleRender;
+  readonly sample_render?: BroadcastSampleRender;
 }
 
 export interface BroadcastTestRequestInput extends BroadcastDraftRenderInput {

@@ -23,22 +23,23 @@ export function broadcastRender(value: unknown): BroadcastDraftRenderResult {
   const digest = renderDigest(body.renderContentDigest);
   const proof = renderProof(body.renderProof);
   const render = record(body.render);
-  const sample = record(body.sampleRender);
   const postalAddress = nullableText(render.postalAddress);
-  const sampleRender: BroadcastSampleRender = {
-    recipient_email: text(sample.recipientEmail),
-    unsubscribe_url: absoluteHttpsUrl(sample.unsubscribeUrl),
-    postal_address: nullableText(sample.postalAddress),
-    finalizer_version: text(sample.finalizerVersion),
-    html: content(sample.html),
-    text: content(sample.text),
-  };
+  const hasSampleRender = Object.prototype.hasOwnProperty.call(
+    body,
+    "sampleRender",
+  );
+  const sampleRender: BroadcastSampleRender | undefined = hasSampleRender
+    ? parseSampleRender(body.sampleRender)
+    : undefined;
   if (
     proof.render_hash !== digest || proof.text_source !== "draft"
     || render.textBody !== renderedText
-    || sampleRender.finalizer_version !== proof.finalizer_version
-    || sampleRender.postal_address !== postalAddress
-    || sampleRender.html.includes("{{{") || sampleRender.text.includes("{{{")
+    || (sampleRender !== undefined && (
+      sampleRender.finalizer_version !== proof.finalizer_version
+      || sampleRender.postal_address !== postalAddress
+      || sampleRender.html.includes("{{{")
+      || sampleRender.text.includes("{{{")
+    ))
   ) throw new TypeError("render receipt identities do not reconcile");
   return {
     kind: "broadcast_draft_render",
@@ -54,6 +55,18 @@ export function broadcastRender(value: unknown): BroadcastDraftRenderResult {
     html,
     text: renderedText,
     render_proof: proof,
-    sample_render: sampleRender,
+    ...(sampleRender === undefined ? {} : { sample_render: sampleRender }),
+  };
+}
+
+function parseSampleRender(value: unknown): BroadcastSampleRender {
+  const sample = record(value);
+  return {
+    recipient_email: text(sample.recipientEmail),
+    unsubscribe_url: absoluteHttpsUrl(sample.unsubscribeUrl),
+    postal_address: nullableText(sample.postalAddress),
+    finalizer_version: text(sample.finalizerVersion),
+    html: content(sample.html),
+    text: content(sample.text),
   };
 }

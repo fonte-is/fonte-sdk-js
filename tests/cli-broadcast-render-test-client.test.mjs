@@ -79,6 +79,51 @@ test("render then test uses one Core proof and never accepts caller MIME", async
   assert.equal(requests[2].options, undefined);
 });
 
+test("legacy render receipt without sampleRender remains valid and unsynthesized", async () => {
+  const receipt = renderReceipt();
+  delete receipt.sampleRender;
+  const client = createBroadcastRenderTestClient(async () => receipt);
+
+  const render = await client.renderBroadcastDraft({ workspace, draftId, revision: 3 });
+
+  assert.equal(render.revision, 3);
+  assert.equal(render.render_content_digest, digest);
+  assert.equal("sample_render" in render, false);
+});
+
+test("present sampleRender stays strictly validated", async () => {
+  const receipt = renderReceipt();
+  receipt.sampleRender.unsubscribeUrl = "http://preview.invalid/unsubscribe";
+  const client = createBroadcastRenderTestClient(async () => receipt);
+
+  await assert.rejects(
+    client.renderBroadcastDraft({ workspace, draftId, revision: 3 }),
+    (error) => error.reason === "core_operator_receipt_invalid",
+  );
+});
+
+test("render digest, proof and revision mismatches stay rejected", async () => {
+  const invalidReceipts = [
+    { ...renderReceipt(), renderContentDigest: `sha256:${"b".repeat(64)}` },
+    {
+      ...renderReceipt(),
+      renderProof: { ...coreProof(), textSource: "sample" },
+    },
+    {
+      ...renderReceipt(),
+      renderProof: { ...coreProof(), broadcastVersion: 4 },
+    },
+  ];
+
+  for (const receipt of invalidReceipts) {
+    const client = createBroadcastRenderTestClient(async () => receipt);
+    await assert.rejects(
+      client.renderBroadcastDraft({ workspace, draftId, revision: 3 }),
+      (error) => error.reason === "core_operator_receipt_invalid",
+    );
+  }
+});
+
 test("test readback distinguishes delivered and provider-unknown outcomes", async () => {
   for (const [receipt, provider, delivery] of [
     [readback("terminal", 1), "accepted", "delivered"],
