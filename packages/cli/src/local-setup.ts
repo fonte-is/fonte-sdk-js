@@ -70,3 +70,30 @@ export async function runFonteSetup(
   };
   return readFonteReadiness(reader, readinessOptions);
 }
+
+/** Reads current local readiness without changing Codex or workspace settings. */
+export async function readFonteStatus(
+  dependencies: FonteSetupDependencies,
+): Promise<FonteReadiness> {
+  let host: LocalMcpHostCommand;
+  try {
+    host = await dependencies.locateInstalledHost();
+  } catch {
+    return unavailable("mcp_host_unavailable");
+  }
+
+  try {
+    const config = await dependencies.codexConfig.readText();
+    if (reconcileCodexMcpConfig(config, host).changed)
+      return unavailable("codex_configuration_unavailable");
+  } catch {
+    return unavailable("codex_configuration_unavailable");
+  }
+
+  return readFonteReadiness({
+    inspectHost: () => dependencies.inspectInstalledHost(host),
+    readSession: dependencies.readSession,
+    listWorkspaces: dependencies.listWorkspaces,
+    readSelectedWorkspace: dependencies.readSelectedWorkspace,
+  });
+}

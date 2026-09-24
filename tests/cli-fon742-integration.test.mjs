@@ -26,7 +26,11 @@ test("fonte setup --json reaches the shared readiness projection", async () => {
       workspaceSlug: "demo-workspace",
     },
   );
-  assert.throws(() => parseArguments(["setup"]));
+  assert.deepEqual(parseArguments(["setup"]), {
+    command: "setup",
+    apply: false,
+    json: false,
+  });
 
   let config = "";
   let selected = null;

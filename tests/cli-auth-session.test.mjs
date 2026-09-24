@@ -89,9 +89,9 @@ test("auth v2 receipts distinguish issued login, offline status, and local-only 
   assert.equal(logout.exitCode, 0);
   assert.equal(logout.receipt.local_logout, "cleared");
   assert.equal(logout.receipt.remote_revocation, "unsupported");
-  assert.match(
+  assert.equal(
     (await runAuthCommand("logout", false, false, { session })).stdout,
-    /other installations are unchanged/,
+    "Signed out of Fonte.\n",
   );
 });
 

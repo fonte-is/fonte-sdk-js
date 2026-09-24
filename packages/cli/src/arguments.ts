@@ -42,6 +42,7 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     };
   }
   if (command === "setup") return parseSetupArguments(argv.slice(1));
+  if (command === "status") return parseStatusArguments(argv.slice(1));
   if (command === "auth") return parseAuthArguments(argv.slice(1));
   if (
     command === "broadcast" ||
@@ -56,6 +57,7 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
       command: "operator",
       apply: false,
       json: operator.json,
+      ...(operator.verbose ? { verbose: true } : {}),
       operator: operator.command,
     };
   }
@@ -96,11 +98,16 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
 
 function parseSetupArguments(argv: readonly string[]): ParsedArguments {
   let json = false;
+  let verbose = false;
   let workspaceSlug: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--json" && !json) {
       json = true;
+      continue;
+    }
+    if (value === "--verbose" && !verbose) {
+      verbose = true;
       continue;
     }
     if (value === "--workspace" && workspaceSlug === undefined) {
@@ -119,11 +126,6 @@ function parseSetupArguments(argv: readonly string[]): ParsedArguments {
       field: value ?? "setup",
     });
   }
-  if (!json)
-    throw new CliUsageError("invalid_setup_flags", {
-      kind: "missing_field",
-      field: "--json",
-    });
   if (
     workspaceSlug !== undefined &&
     (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])$/.test(workspaceSlug) ||
@@ -137,8 +139,37 @@ function parseSetupArguments(argv: readonly string[]): ParsedArguments {
   return {
     command: "setup",
     apply: false,
-    json: true,
+    json,
+    ...(verbose ? { verbose: true } : {}),
     ...(workspaceSlug === undefined ? {} : { workspaceSlug }),
+  };
+}
+
+function parseStatusArguments(argv: readonly string[]): ParsedArguments {
+  let json = false;
+  let verbose = false;
+  for (const flag of argv) {
+    if (flag === "--json" && !json) {
+      json = true;
+      continue;
+    }
+    if (flag === "--verbose" && !verbose) {
+      verbose = true;
+      continue;
+    }
+    throw new CliUsageError("invalid_status_flags", {
+      kind:
+        flag === "--json" || flag === "--verbose"
+          ? "duplicate_field"
+          : "unknown_field",
+      field: flag,
+    });
+  }
+  return {
+    command: "status",
+    apply: false,
+    json,
+    ...(verbose ? { verbose: true } : {}),
   };
 }
 
@@ -151,6 +182,7 @@ function parseAuthArguments(argv: readonly string[]): ParsedArguments {
       flags.some(
         (flag) =>
           flag !== "--json" &&
+          flag !== "--verbose" &&
           !(action === "login" && flag === "--switch-account"),
       )
     ) {
@@ -165,13 +197,16 @@ function parseAuthArguments(argv: readonly string[]): ParsedArguments {
       apply: false,
       json: flags.includes("--json"),
       switchAccount: flags.includes("--switch-account"),
+      ...(flags.includes("--verbose") ? { verbose: true } : {}),
     };
   }
-  const consumerCommand = argv[2];
-  const consumerArguments = argv.slice(3);
+  const verbose = argv[1] === "--verbose";
+  const separator = verbose ? argv[2] : argv[1];
+  const consumerCommand = argv[verbose ? 3 : 2];
+  const consumerArguments = argv.slice(verbose ? 4 : 3);
   if (
     argv[0] !== "exec" ||
-    argv[1] !== "--" ||
+    separator !== "--" ||
     !consumerCommand ||
     [consumerCommand, ...consumerArguments].some((value) =>
       value.includes("\0"),
@@ -186,6 +221,7 @@ function parseAuthArguments(argv: readonly string[]): ParsedArguments {
     command: "auth-exec",
     apply: false,
     json: false,
+    ...(verbose ? { verbose: true } : {}),
     consumerCommand,
     consumerArguments,
   };

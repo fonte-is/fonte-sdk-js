@@ -4,6 +4,7 @@ import type { ParsedBroadcastPavedCommand } from "./operator-broadcast-paved-cli
 export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand =
   | CommandName
+  | "status"
   | "setup"
   | "auth-exec"
   | "auth-session"
@@ -16,6 +17,7 @@ export interface ParsedArguments {
   command: ParsedCommand;
   apply: boolean;
   json: boolean;
+  verbose?: boolean;
   helpText?: string;
   workspaceSlug?: string;
   consumerCommand?: string;

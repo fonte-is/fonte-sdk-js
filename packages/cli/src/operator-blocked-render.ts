@@ -1,9 +1,20 @@
 import { renderAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
 import type { OperatorReceipt } from "./operator-types.js";
-import { isLoginFailure, loginRecovery } from "./auth-commands.js";
+import {
+  humanLoginRecovery,
+  isHumanLoginRecovery,
+  isLoginFailure,
+  loginRecovery,
+} from "./auth-commands.js";
 import { HostedTestBlockedError } from "./hosted-errors.js";
 
-export function renderBlockedOperator(receipt: OperatorReceipt): string {
+export function renderBlockedOperator(
+  receipt: OperatorReceipt,
+  verbose = false,
+): string {
+  if (isHumanLoginRecovery(receipt.reason)) {
+    return `${humanLoginRecovery(receipt.reason, verbose).trimEnd()}\n`;
+  }
   if (receipt.reason === "resend_bridge_unavailable") {
     return [
       "Fonte Resend Bridge could not continue.",
@@ -45,7 +56,12 @@ export function renderBlockedOperator(receipt: OperatorReceipt): string {
     `Reason: ${receipt.reason}.`,
     `Core effect: ${receipt.core_effect}.`,
     ...(isLoginFailure(receipt.reason)
-      ? [loginRecovery(new HostedTestBlockedError(receipt.reason)).trim()]
+      ? [
+          loginRecovery(
+            new HostedTestBlockedError(receipt.reason),
+            verbose,
+          ).trim(),
+        ]
       : []),
     ...renderAmbiguousBroadcastRecovery(receipt),
     "",

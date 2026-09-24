@@ -33,7 +33,8 @@ import {
   createDirectBroadcastPavedOperator,
   runOperatorCommand,
 } from "./operator-run.js";
-import { runFonteSetup } from "./local-setup.js";
+import { readFonteStatus, runFonteSetup } from "./local-setup.js";
+import { renderReadinessHuman } from "./readiness-render.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
 export async function runProgram(
@@ -68,6 +69,7 @@ export async function runProgram(
       parsed.switchAccount ?? false,
       parsed.json,
       dependencies.auth,
+      parsed.verbose ?? false,
     );
   }
   if (parsed.command === "setup") {
@@ -80,7 +82,27 @@ export async function runProgram(
       });
       return {
         exitCode: readiness.state === "ready" ? 0 : 3,
-        stdout: `${JSON.stringify(readiness)}\n`,
+        stdout: parsed.json
+          ? `${JSON.stringify(readiness)}\n`
+          : renderReadinessHuman(readiness, {
+              setup: true,
+              verbose: parsed.verbose,
+            }),
+        stderr: "",
+      };
+    } catch {
+      return executionFailure();
+    }
+  }
+  if (parsed.command === "status") {
+    if (!dependencies.setup) return executionFailure();
+    try {
+      const readiness = await readFonteStatus(dependencies.setup);
+      return {
+        exitCode: readiness.state === "ready" ? 0 : 3,
+        stdout: parsed.json
+          ? `${JSON.stringify(readiness)}\n`
+          : renderReadinessHuman(readiness, { verbose: parsed.verbose }),
         stderr: "",
       };
     } catch {
@@ -107,7 +129,12 @@ export async function runProgram(
             },
           }
         : receipt;
-    return receiptResult(result, parsed.json, receiptExitCode(result));
+    return receiptResult(
+      result,
+      parsed.json,
+      receiptExitCode(result),
+      parsed.verbose,
+    );
   }
   if (parsed.command === "broadcast-paved") {
     if (!parsed.broadcastPaved) {
@@ -185,7 +212,7 @@ async function executeAuthExec(
       return {
         exitCode: 3,
         stdout: "",
-        stderr: loginRecovery(error),
+        stderr: loginRecovery(error, parsed.verbose ?? false),
       };
     return executionFailure();
   }
@@ -259,10 +286,11 @@ function receiptResult(
   receipt: AnyCliReceipt,
   json: boolean,
   exitCode: 0 | 2 | 3 = 0,
+  verbose = false,
 ): CommandResult {
   return {
     exitCode,
-    stdout: json ? renderJson(receipt) : renderHuman(receipt),
+    stdout: json ? renderJson(receipt) : renderHuman(receipt, verbose),
     stderr: "",
     receipt,
   };
