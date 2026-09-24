@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { CapturedCommandRunner, CommandResult } from "./runtime-types.js";
 
 const commitShaPattern = /^[0-9a-f]{40}$/;
@@ -34,7 +35,15 @@ export async function runReleaseCommand(
     return blocked("source_not_remote", explicitSource);
   }
 
-  return runner.run("release", ["--source", sha], cwd).then((result) => ({
+  const executor = join(cwd, ".github", "scripts", "production-release-direct.mjs");
+  const installed = await runner.run(
+    "git",
+    ["cat-file", "-e", "HEAD:.github/scripts/production-release-direct.mjs"],
+    cwd,
+  );
+  if (installed.exitCode !== 0) return blocked("direct_executor_unavailable", sha);
+
+  return runner.run(process.execPath, [executor, "--source", sha], cwd).then((result) => ({
     exitCode: result.exitCode === 0 ? 0 : result.exitCode === 2 || result.exitCode === 3 ? result.exitCode : 1,
     stdout: result.stdout,
     stderr: result.stderr,
