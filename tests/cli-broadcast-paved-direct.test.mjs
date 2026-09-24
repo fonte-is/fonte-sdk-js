@@ -281,3 +281,62 @@ test("verbose Prepare prints safe Core diagnostics without request secrets", asy
   assert.ok(timings.length >= 2);
   assert.ok(timings.every((value) => Number.isFinite(value) && value >= 0));
 });
+
+test("verbose Prepare identifies hosted configuration and auth failures", async () => {
+  const args = [
+    "broadcast",
+    "prepare",
+    "--workspace",
+    "demo-workspace",
+    "--draft-id",
+    draftId,
+    "--audience-file",
+    "/tmp/recipients.csv",
+    "--verbose",
+  ];
+  const common = {
+    cwd: "/tmp",
+    randomUUID: () => preparedInput.request_id,
+    runner: { run: async () => 0 },
+  };
+  const hostedFailure = await runProgram(args, {
+    ...common,
+    operator: {
+      fetch: async () => new Response("private hosted response", { status: 503 }),
+      authorize: async () => "unused",
+    },
+  });
+  assert.match(
+    hostedFailure.stderr,
+    /prepare\.hosted_config\s+\d+ms\s+GET \/\.well-known\/fonte-cli\.json 503 hosted_configuration_unavailable core_effect=none/u,
+  );
+  assert.match(hostedFailure.stderr, /prepare\.failed_at hosted_config/u);
+  assert.doesNotMatch(hostedFailure.stderr, /private hosted response/u);
+
+  const hostedConfig = {
+    schema: "fonte.cli.hosted_config.v1",
+    authorizationServer: "https://auth.example.test",
+    clientId: "client-12345678",
+    coreApiBaseUrl: "https://core.example.test",
+    redirectUri: "http://127.0.0.1:49671/callback",
+    scopes: ["email"],
+  };
+  const authFailure = await runProgram(args, {
+    ...common,
+    operator: {
+      fetch: async () =>
+        new Response(JSON.stringify(hostedConfig), { status: 200 }),
+      authorize: async () => {
+        throw Object.assign(new Error("refresh-token-secret-sentinel"), {
+          reason: "authorization_rejected",
+        });
+      },
+    },
+  });
+  assert.match(
+    authFailure.stderr,
+    /prepare\.auth\s+\d+ms\s+- - - authorization_rejected core_effect=none/u,
+  );
+  assert.match(authFailure.stderr, /prepare\.failed_at auth/u);
+  assert.doesNotMatch(authFailure.stderr, /refresh-token-secret-sentinel/u);
+});

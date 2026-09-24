@@ -64,6 +64,10 @@ import {
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import { createBroadcastPavedOperator } from "./operator-broadcast-paved.js";
 import { readBroadcastLocalFile } from "./operator-broadcast-html-file.js";
+import {
+  recordCoreRequestDiagnostic,
+  runBroadcastDiagnosticStage,
+} from "./operator-broadcast-diagnostics.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
@@ -187,11 +191,34 @@ export async function runOperatorCommand(
 export async function createDirectBroadcastPavedOperator(
   dependencies: OperatorDependencies,
 ) {
-  const config = await loadHostedConfig(
-    dependencies.fetch as typeof fetch,
-    dependencies.configUrl,
+  const hostedFetch: typeof fetch = async (input, init) => {
+    try {
+      const response = await dependencies.fetch(input as string | URL, init);
+      recordCoreRequestDiagnostic({
+        method: "GET",
+        path: "/.well-known/fonte-cli.json",
+        statusCode: response.status,
+        reason: response.ok ? null : "hosted_configuration_unavailable",
+        coreEffect: "none",
+      });
+      return response;
+    } catch {
+      recordCoreRequestDiagnostic({
+        method: "GET",
+        path: "/.well-known/fonte-cli.json",
+        statusCode: null,
+        reason: "hosted_configuration_unavailable",
+        coreEffect: "none",
+      });
+      throw new HostedTestBlockedError("hosted_configuration_unavailable");
+    }
+  };
+  const config = await runBroadcastDiagnosticStage("hosted_config", () =>
+    loadHostedConfig(hostedFetch, dependencies.configUrl),
   );
-  const bearer = await dependencies.authorize(config, dependencies.signal);
+  const bearer = await runBroadcastDiagnosticStage("auth", () =>
+    dependencies.authorize(config, dependencies.signal),
+  );
   const client = createCoreOperatorClient({
     coreApiBaseUrl: config.coreApiBaseUrl,
     bearer,

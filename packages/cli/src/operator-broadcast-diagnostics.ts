@@ -3,6 +3,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export type BroadcastDiagnosticPrefix = "prepare" | "send";
 
 export type BroadcastDiagnosticStage =
+  | "hosted_config"
+  | "auth"
   | "workspace_catalog"
   | "draft_read"
   | "draft_create"
@@ -203,6 +205,7 @@ export function recordCoreRequestDiagnostic(
 
 export function normalizeCoreRoute(path: string): string {
   const pathname = path.split(/[?#]/u, 1)[0] ?? "";
+  if (pathname === "/.well-known/fonte-cli.json") return pathname;
   const dynamicSegments: Readonly<Record<string, string>> = {
     workspaces: "workspace",
     "broadcast-drafts": "draft_id",
