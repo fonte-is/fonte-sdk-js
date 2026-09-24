@@ -31,6 +31,10 @@ import { readBroadcastLocalFile } from "./operator-broadcast-html-file.js";
 import { createBroadcastSenderClient } from "./operator-broadcast-sender-client.js";
 import { createBroadcastTargetingClient } from "./operator-broadcast-targeting-client.js";
 import { createBroadcastSendInstructionClient } from "./operator-broadcast-send-instruction-client.js";
+import {
+  createBroadcastRecipientSetClient,
+  type BroadcastRecipientSetClient,
+} from "./operator-broadcast-recipient-set-client.js";
 import { createWorkspaceCatalogClient } from "./operator-workspace-catalog-client.js";
 import { createSequenceAuthoringClient } from "./operator-sequence-client.js";
 import { createCampaignMetadataClient } from "./operator-campaign-client.js";
@@ -60,6 +64,9 @@ export {
 export const MCP_SERVER_NAME = "fonte";
 
 export type SequenceMcpSessionOptions = McpClientAuthOptions;
+export type BroadcastRecipientSetClientProvider = () => Promise<
+  BroadcastRecipientSetClient
+>;
 export interface FonteMcpClientProviders {
   readonly workspaceCatalog: WorkspaceCatalogClientProvider;
   readonly sequence: SequenceMcpClientProvider;
@@ -69,6 +76,7 @@ export interface FonteMcpClientProviders {
   readonly broadcastTargeting: BroadcastTargetingClientProvider;
   readonly broadcastRenderTest: BroadcastRenderTestClientProvider;
   readonly broadcastSendInstruction: BroadcastSendInstructionClientProvider;
+  readonly broadcastRecipientSets: BroadcastRecipientSetClientProvider;
   readonly broadcastHtmlPreparation: BroadcastHtmlPreparationClientProvider;
   readonly campaignMetadata: () => Promise<
     Awaited<ReturnType<typeof createCampaignMetadataClient>>
@@ -117,6 +125,11 @@ export function createDurableFonteMcpSession(
       createBroadcastTargetingClient((await authenticated()).request),
     broadcastSendInstruction: async () =>
       createBroadcastSendInstructionClient((await authenticated()).request),
+    broadcastRecipientSets: async () =>
+      createBroadcastRecipientSetClient(
+        (await authenticated()).request,
+        readBroadcastLocalFile,
+      ),
     broadcastRenderTest: render,
     broadcastHtmlPreparation: async () => htmlPreparation,
     campaignMetadata: async () =>
@@ -173,6 +186,7 @@ export function createFonteMcpServer(
   const broadcastPavedOperator: BroadcastPavedOperator =
     createBroadcastPavedOperator({
       workspaceCatalog: providers.workspaceCatalog,
+      readSelectedWorkspace: () => readinessReader.readSelectedWorkspace(),
       draftLifecycle: providers.broadcastDraftLifecycle,
       draftRevision: providers.broadcastDraftRevision,
       senders: providers.broadcastSender,
@@ -180,6 +194,7 @@ export function createFonteMcpServer(
       productionDrafts: providers.productionDrafts,
       render: providers.broadcastRenderTest,
       send: providers.broadcastSendInstruction,
+      recipientSetSupplier: providers.broadcastRecipientSets,
       readFile: readBroadcastLocalFile,
     });
   registerMcpBroadcastPavedTools(server, broadcastPavedOperator);
@@ -220,4 +235,4 @@ const sequenceInstructions =
   "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the selected local Fonte credential store; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. This server cannot enroll, send, deliver, or manage recipients.";
 
 const fonteInstructions =
-  "The local Fonte host provides fonte_status, fonte_prepare_broadcast, and fonte_send_broadcast as the normal Broadcast path. Use fonte_prepare_broadcast repeatedly as needed; it does not Send, Schedule, Test Send, prepare audiences, or call providers. Send is a separate explicit action and requires the exact send_input returned by a ready_to_send preparation. If preparation asks for missing information or choices, resolve only that prompt before preparing again. The host also exposes workspace discovery, existing Sequence and Broadcast operations, including verified-account test request/readback, and Campaign/Segment metadata. Sender discovery matches verified profiles and does not guess among ambiguous choices. Initialize and tools/list never log in. For sign-in readiness, follow the one next_action from fonte_status. For secure-storage recovery, run fonte auth login outside MCP when asked. MCP never prompts, changes credential storage, or switches workspaces. This host does not share credentials with hosted MCP or the legacy private transport.";
+  "The local Fonte host provides fonte_status, fonte_prepare_broadcast, and fonte_send_broadcast as the normal Broadcast path. Use fonte_prepare_broadcast repeatedly as needed. It may prepare a CSV audience from an explicitly supplied audience_file; if preparation returns preparing, call fonte_prepare_broadcast again with the same input. This requires no human input. Preparation never Sends, Schedules, Test Sends, or calls an email provider. Send is a separate explicit action and requires the exact send_input returned by a ready_to_send preparation. If preparation asks for missing information or choices, resolve only that prompt before preparing again. The host also exposes workspace discovery, existing Sequence and Broadcast operations, including verified-account test request/readback, and Campaign/Segment metadata. Sender discovery matches verified profiles and does not guess among ambiguous choices. Initialize and tools/list never log in. For sign-in readiness, follow the one next_action from fonte_status. For secure-storage recovery, run fonte auth login outside MCP when asked. MCP never prompts, changes credential storage, or switches workspaces. This host does not share credentials with hosted MCP or the legacy private transport.";
