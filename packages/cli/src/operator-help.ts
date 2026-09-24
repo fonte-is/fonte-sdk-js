@@ -508,15 +508,26 @@ function metadataHelpEntries(source: string): readonly HelpEntry[] {
 
 function render(entry: HelpEntry): string {
   const prefix = `Usage: fonte ${entry.command.join(" ")}`;
+  const verbose = [
+    "broadcast",
+    "bridge",
+    "campaign",
+    "provider-evidence",
+    "segment",
+    "sequence",
+  ].includes(entry.command[0]!);
   return [
     ...entry.usage.flatMap((variant, variantIndex) => [
       `${variantIndex === 0 ? prefix : "   or:"}${
         variant[0] ? ` ${variant[0]}` : ""
-      }${entry.json ? " [--json]" : ""}`,
+      }${entry.json ? " [--json]" : ""}${verbose ? " [--verbose]" : ""}`,
       ...variant.slice(1).map((line) => `  ${line}`),
     ]),
     "",
     entry.detail,
+    ...(verbose
+      ? ["Add --verbose for human-readable sign-in diagnostics."]
+      : []),
     "Access tokens stay in memory; Core authorizes every operation.",
     "",
   ].join("\n");

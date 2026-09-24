@@ -198,6 +198,7 @@ export type OperatorCommand =
 export interface ParsedOperatorArguments {
   readonly command: OperatorCommand;
   readonly json: boolean;
+  readonly verbose?: boolean;
 }
 
 export interface SandboxTestResult {

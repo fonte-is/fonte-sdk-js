@@ -470,7 +470,8 @@ test("authorization and child failures use bounded token-free results", async ()
   assert.deepEqual(authorization, {
     exitCode: 3,
     stdout: "",
-    stderr: "Fonte sign-in is unavailable. Run fonte auth login.\n",
+    stderr:
+      "Fonte couldn't complete sign-in.\n\nRun:\n  fonte auth login to try again\n",
   });
 
   const child = await runProgram(["auth", "exec", "--", "missing"], {

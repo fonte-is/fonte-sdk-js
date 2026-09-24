@@ -105,7 +105,10 @@ test("help, version, and usage bytes are literal public contracts", async () => 
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(VERSION_TEXT, `@fonte-is/cli ${manifest.version}\n`);
-  assert.match(USAGE_TEXT, /fonte auth exec -- <command> \[args\.\.\.\]/);
+  assert.match(
+    USAGE_TEXT,
+    /fonte auth exec \[--verbose\] -- <command> \[args\.\.\.\]/,
+  );
   assert.match(USAGE_TEXT, /fonte provider-evidence resend <command>/);
 });
 
@@ -221,7 +224,7 @@ test("invalid JSON calls stay private and every current command help matches its
     ],
     [
       ["provider-evidence", "resend", "advance", "--help"],
-      "never retries automatically",
+      "never retry the mutation",
     ],
     [
       ["provider-evidence", "resend", "seal", "--help"],

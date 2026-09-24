@@ -15,12 +15,15 @@ export function renderOperatorJson(receipt: OperatorReceipt): string {
   return `${JSON.stringify(receipt)}\n`;
 }
 
-export function renderOperatorHuman(receipt: OperatorReceipt): string {
+export function renderOperatorHuman(
+  receipt: OperatorReceipt,
+  verbose = false,
+): string {
   if (receipt.outcome === "unsupported_authority") {
     return "Fonte operation unavailable: unsupported_authority.\nCore effect: none.\n";
   }
   if (receipt.outcome === "blocked" && receipt.result === null) {
-    return renderBlockedOperator(receipt);
+    return renderBlockedOperator(receipt, verbose);
   }
   const send = renderBroadcastSendInstructionHuman(receipt);
   if (send !== null) return send;

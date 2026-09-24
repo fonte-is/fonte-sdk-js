@@ -29,6 +29,17 @@ const bridgeDeclarations = new Set([
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const verboseFlags = argv.filter((value) => value === "--verbose").length;
+  if (verboseFlags > 1) invalid();
+  const parsed = parseOperatorCommand(
+    verboseFlags === 0 ? argv : argv.filter((value) => value !== "--verbose"),
+  );
+  return { ...parsed, ...(verboseFlags === 1 ? { verbose: true } : {}) };
+}
+
+function parseOperatorCommand(
+  argv: readonly string[],
+): ParsedOperatorArguments {
   const campaign = parseCampaignOperatorArguments(argv);
   if (campaign) return campaign;
   const segment = parseSegmentOperatorArguments(argv);

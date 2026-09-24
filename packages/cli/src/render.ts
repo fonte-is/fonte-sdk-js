@@ -10,9 +10,9 @@ export function renderJson(receipt: AnyCliReceipt): string {
   return `${JSON.stringify(receipt)}\n`;
 }
 
-export function renderHuman(receipt: AnyCliReceipt): string {
+export function renderHuman(receipt: AnyCliReceipt, verbose = false): string {
   if (receipt.schema_version === "fonte.cli.operator_receipt.v1") {
-    return renderOperatorHuman(receipt);
+    return renderOperatorHuman(receipt, verbose);
   }
   if (receipt.schema_version === "fonte.cli.test_receipt.v2")
     return renderTest(receipt);
