@@ -11,6 +11,7 @@ export interface InvocationErrorDetail {
 const admittedFields = new Set([
   "--yes",
   "--json",
+  "--source",
   "--workspace",
   "--environment",
   "--idempotency-key",

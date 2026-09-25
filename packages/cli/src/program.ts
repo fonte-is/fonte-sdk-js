@@ -25,6 +25,7 @@ import { renderHuman, renderJson } from "./render.js";
 import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
 import { runOperatorCommand } from "./operator-run.js";
+import { runReleaseCommand } from "./release-command.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
 export async function runProgram(
@@ -51,6 +52,18 @@ export async function runProgram(
   }
   if (parsed.command === "auth-exec") {
     return executeAuthExec(parsed, dependencies);
+  }
+  if (parsed.command === "release") {
+    if (!dependencies.releaseRunner) return executionFailure();
+    try {
+      return await runReleaseCommand(
+        parsed.releaseSource!,
+        dependencies.cwd,
+        dependencies.releaseRunner,
+      );
+    } catch {
+      return executionFailure();
+    }
   }
   if (parsed.command === "operator") {
     if (!dependencies.operator) return executionFailure();
