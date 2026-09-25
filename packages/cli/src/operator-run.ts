@@ -116,7 +116,8 @@ export async function runOperatorCommand(
       dependencies.configUrl,
     );
     const bearer = await dependencies.authorize(config, dependencies.signal);
-    if (command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status") {
+    if (command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
+      || command.kind === "broadcast_canonical_control") {
       const request = createCoreRequester({ coreApiBaseUrl: config.coreApiBaseUrl, bearer,
         fetch: dependencies.fetch as typeof fetch, signal: dependencies.signal });
       const canonical = createCanonicalBroadcastClient(request);
@@ -125,6 +126,13 @@ export async function runOperatorCommand(
           draftLifecycle: async () => createBroadcastDraftLifecycleClient(request),
           canonical: async () => canonical,
         });
+      }
+      if (command.kind === "broadcast_canonical_control") {
+        const operation = await canonical.control(command);
+        return currentReceipt(command, { kind: "executable_broadcast_operation", status: "accepted", operation },
+          operation.phase === "complete" || operation.phase === "ended" ? "terminal"
+            : operation.phase === "paused" ? "blocked" : "queued",
+          `broadcast_send_${operation.phase}`, "controlled");
       }
       const operation = await canonical.read({ workspace: command.workspace, draftId: command.draftId });
       return {
@@ -491,6 +499,7 @@ function currentAuthority(
   return {
     status: "current",
     contract_id: command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
+      || command.kind === "broadcast_canonical_control"
       ? "fonte.core.broadcast_send"
       : command.kind.startsWith("campaign_")
       ? "fonte.core.campaign_configuration.v1"

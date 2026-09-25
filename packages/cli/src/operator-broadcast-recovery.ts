@@ -32,6 +32,7 @@ interface BroadcastRecoveryCommand {
   readonly iterationId?: string;
   readonly connectionId?: string;
   readonly operationId?: string;
+  readonly draftId?: string;
   readonly generationId?: string;
   readonly selector?: {
     readonly selectorId: string;
@@ -98,6 +99,15 @@ export function renderAmbiguousBroadcastRecovery(
 function ambiguousNextAction(
   command: BroadcastRecoveryCommand,
 ): OperatorNextAction | null {
+  if (
+    command.kind === "broadcast_canonical_control" &&
+    command.workspace &&
+    command.draftId
+  ) {
+    return runCommand(
+      `fonte broadcast send status --workspace ${argument(command.workspace)} --environment production --draft-id ${argument(command.draftId)} --json`,
+    );
+  }
   if (
     (command.kind === "broadcast_canary" ||
       command.kind === "broadcast_control") &&

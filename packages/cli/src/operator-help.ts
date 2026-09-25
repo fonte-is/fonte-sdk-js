@@ -353,12 +353,16 @@ const entries: readonly HelpEntry[] = [
   ...(["pause", "resume", "cancel", "close"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [
+      ...(operation === "close" ? [] : [[
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--operation-id <uuid> --request-id <uuid> --expected-generation <n>",
+      ]]),
       [
         "--workspace <slug> --environment production --broadcast-id <uuid>",
         "--expected-control-version <n>",
       ],
     ],
-    detail: `${operation[0]!.toUpperCase()}${operation.slice(1)} binds Core's observed control version for a state-idempotent operation; stale opposing commands fail without retry.`,
+    detail: `${operation[0]!.toUpperCase()}${operation.slice(1)} controls the exact canonical Send operation; broadcast-id syntax is retained for historical broadcasts only.`,
     json: true,
   })),
   {

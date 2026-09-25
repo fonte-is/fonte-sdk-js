@@ -65,6 +65,9 @@ export type OperatorCommand =
       readonly sendInput: BroadcastPavedSendInput }
   | { readonly kind: "broadcast_canonical_status"; readonly workspace: string;
       readonly draftId: string }
+  | { readonly kind: "broadcast_canonical_control"; readonly workspace: string;
+      readonly draftId: string; readonly operationId: string; readonly requestId: string;
+      readonly expectedGeneration: number; readonly action: "pause" | "resume" | "cancel" }
   | WorkspaceMarketingSettingsOperatorCommand
   | SequenceOperatorCommand
   | BroadcastSendInstructionOperatorCommand

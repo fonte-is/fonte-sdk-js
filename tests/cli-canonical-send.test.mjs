@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createCanonicalBroadcastClient } from "../packages/cli/dist/operator-broadcast-canonical-send.js";
+import { withAmbiguousBroadcastRecovery } from "../packages/cli/dist/operator-broadcast-recovery.js";
 import { CoreOperatorError } from "../packages/cli/dist/operator-core-request.js";
 import { parseOperatorArguments } from "../packages/cli/dist/operator-arguments.js";
+import { runOperatorCommand } from "../packages/cli/dist/operator-run.js";
 
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000740";
@@ -32,7 +34,7 @@ const admission = { schema: "broadcast_send_operation", operationId: planId,
   draftVersion: 5, broadcastId, sendPlanId: planId, recipientCount: 2048,
   executionAuthorized: true, replayed: false };
 const status = { ...admission, replayed: true, phase: "sending", accepted: 0,
-  skipped: 0, failed: 0, unknown: 0, pending: 2048 };
+  skipped: 0, failed: 0, unknown: 0, pending: 2048, controlGeneration: 0 };
 
 test("Prepare is ready only for the exact rendered message artifact from the Send plan", async () => {
   let renderedHtml = "<p>Synthetic body</p>";
@@ -163,3 +165,88 @@ test("direct CLI accepts reviewed input and rejects unreviewed Send shape", () =
   assert.throws(() => parseOperatorArguments(["broadcast", "send", "--send-input",
     JSON.stringify({ ...input, review: undefined }), "--json"]));
 });
+
+test("normal CLI pause controls the exact canonical operation through Send intent", async () => {
+  const commandId = "00000000-0000-4000-8000-000000000744";
+  const parsed = parseOperatorArguments(["broadcast", "pause", "--workspace", workspace,
+    "--environment", "production", "--draft-id", draftId, "--operation-id", planId,
+    "--request-id", commandId, "--expected-generation", "0", "--json"]);
+  assert.deepEqual(parsed.command, { kind: "broadcast_canonical_control", workspace, draftId,
+    operationId: planId, requestId: commandId, expectedGeneration: 0, action: "pause" });
+  let posts = 0;
+  const request = async (path, options) => {
+    assert.equal(path, `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}/send-intent${options?.body ? "/control" : ""}?environment=production`);
+    if (!options?.body) return { status: "accepted", operation: status };
+    posts += 1;
+    assert.deepEqual(options.body, { commandId, expectedGeneration: 0, action: "pause" });
+    assert.equal(options.lostResponseEffect, "unknown");
+    return { status: "accepted", operation: { ...status, phase: "paused", controlGeneration: 1 } };
+  };
+  const result = await createCanonicalBroadcastClient(request).control(parsed.command);
+  assert.equal(result.phase, "paused");
+  assert.equal(result.controlGeneration, 1);
+  assert.equal(posts, 1);
+});
+
+test("canonical pause refuses a different operation and never retries an ambiguous control", async () => {
+  const input = { workspace, draftId, operationId: planId,
+    requestId: "00000000-0000-4000-8000-000000000745", expectedGeneration: 0,
+    action: "pause" };
+  let posts = 0;
+  const wrong = createCanonicalBroadcastClient(async () => ({ status: "accepted",
+    operation: { ...status, operationId: "00000000-0000-4000-8000-000000000746",
+      sendPlanId: "00000000-0000-4000-8000-000000000746" } }));
+  await assert.rejects(wrong.control(input), /broadcast_send_operation_mismatch/u);
+  const ambiguous = createCanonicalBroadcastClient(async (_path, options) => {
+    if (!options?.body) return { status: "accepted", operation: status };
+    posts += 1;
+    throw new CoreOperatorError("core_api_unavailable", null, "unknown");
+  });
+  await assert.rejects(ambiguous.control(input), error =>
+    error instanceof CoreOperatorError && error.coreEffect === "unknown");
+  assert.equal(posts, 1);
+  const receipt = withAmbiguousBroadcastRecovery({ kind: "broadcast_canonical_control",
+    workspace, draftId }, { core_effect: "unknown" });
+  assert.equal(receipt.next_action.command,
+    `fonte broadcast send status --workspace ${workspace} --environment production --draft-id ${draftId} --json`);
+  assert.equal(receipt.next_action.retry_mutation, false);
+});
+
+test("normal broadcast pause command reaches canonical Core control, not legacy authorization rows", async () => {
+  const commandId = "00000000-0000-4000-8000-000000000747";
+  const parsed = parseOperatorArguments(["broadcast", "pause", "--workspace", workspace,
+    "--environment", "production", "--draft-id", draftId, "--operation-id", planId,
+    "--request-id", commandId, "--expected-generation", "0", "--json"]);
+  const requests = [];
+  const receipt = await runOperatorCommand(parsed.command, {
+    configUrl: "https://fonte.is/.well-known/fonte-cli.json",
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.hostname === "fonte.is") return json({
+        schema: "fonte.cli.hosted_config.v1", authorizationServer: "https://auth.example.test",
+        clientId: "synthetic-cli", coreApiBaseUrl: "https://core.example.test",
+        redirectUri: "http://127.0.0.1:49671/callback", scopes: ["email"],
+      });
+      requests.push({ path: url.pathname, method: init.method });
+      assert.equal(url.pathname, `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}`
+        + `/send-intent${init.method === "POST" ? "/control" : ""}`);
+      return json(init.method === "POST"
+        ? { status: "accepted", operation: { ...status, phase: "paused", controlGeneration: 1 } }
+        : { status: "accepted", operation: status });
+    },
+    authorize: async () => "synthetic-token",
+    sleep: async () => {},
+    readProviderEvidenceCandidateFile: async () => { throw new Error("unused"); },
+    readProviderPlacementApplicationFile: async () => { throw new Error("unused"); },
+  }, () => commandId);
+  assert.equal(receipt.command, "broadcast_canonical_control");
+  assert.equal(receipt.core_effect, "controlled", JSON.stringify(receipt));
+  assert.equal(receipt.result.operation.phase, "paused");
+  assert.deepEqual(requests.map(request => request.method), ["GET", "POST"]);
+  assert.equal(requests.some(request => request.path.includes("marketing-broadcasts")), false);
+});
+
+function json(value) {
+  return new Response(JSON.stringify(value), { status: 200,
+    headers: { "content-type": "application/json" } });
+}

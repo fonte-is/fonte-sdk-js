@@ -50,6 +50,7 @@ export interface CanonicalSendStatus {
   readonly failed: number;
   readonly unknown: number;
   readonly pending: number;
+  readonly controlGeneration: number;
   readonly executionAuthorized: true;
   readonly replayed: boolean;
 }
@@ -76,6 +77,9 @@ export interface CanonicalBroadcastClient {
   send(input: { readonly workspace: string; readonly draftId: string;
     readonly requestId: string; readonly review: CanonicalSendReview }): Promise<CanonicalSendStatus>;
   read(input: { readonly workspace: string; readonly draftId: string }): Promise<CanonicalSendStatus | null>;
+  control(input: { readonly workspace: string; readonly draftId: string;
+    readonly operationId: string; readonly requestId: string;
+    readonly expectedGeneration: number; readonly action: "pause" | "resume" | "cancel" }): Promise<CanonicalSendStatus>;
 }
 
 export function createCanonicalBroadcastClient(request: CoreRequester): CanonicalBroadcastClient {
@@ -87,6 +91,23 @@ export function createCanonicalBroadcastClient(request: CoreRequester): Canonica
   };
   return {
     read,
+    async control(input) {
+      const before = await read(input);
+      if (!before || before.operationId !== input.operationId) invalid("broadcast_send_operation_mismatch");
+      if (before.controlGeneration !== input.expectedGeneration) invalid("broadcast_send_control_conflict");
+      const response = object(await request(`${draftPath(input)}/send-intent/control?environment=production`, {
+        body: { commandId: input.requestId, expectedGeneration: input.expectedGeneration,
+          action: input.action },
+        idempotencyKey: input.requestId, lostResponseEffect: "unknown",
+      }));
+      if (response.status !== "accepted") invalid("broadcast_send_control_receipt_invalid");
+      const after = status(response.operation, input);
+      if (after.operationId !== input.operationId
+        || after.controlGeneration !== input.expectedGeneration + 1) {
+        invalid("broadcast_send_control_receipt_mismatch");
+      }
+      return after;
+    },
     async prepare(input) {
       const path = `${draftPath(input)}/audience-preparation?environment=production`;
       const submitPrepare = async () => {
@@ -259,7 +280,8 @@ function status(value: unknown, input: { readonly draftId: string }): CanonicalS
     || row.environment !== "production" || row.executionAuthorized !== true
     || typeof row.operationId !== "string" || row.operationId !== row.sendPlanId
     || !["scheduled", "sending", "paused", "complete", "ended"].includes(String(row.phase))
-    || !Number.isSafeInteger(row.recipientCount) || Number(row.recipientCount) < 1) {
+    || !Number.isSafeInteger(row.recipientCount) || Number(row.recipientCount) < 1
+    || !Number.isSafeInteger(row.controlGeneration) || Number(row.controlGeneration) < 0) {
     invalid("broadcast_send_receipt_invalid");
   }
   return row as unknown as CanonicalSendStatus;
