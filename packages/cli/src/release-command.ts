@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CapturedCommandRunner, CommandResult } from "./runtime-types.js";
@@ -12,39 +12,162 @@ export async function runReleaseCommand(
   _cwd: string,
   runner: CapturedCommandRunner,
 ): Promise<CommandResult> {
-  if (!commitShaPattern.test(explicitSource)) return blocked("source_sha_invalid", explicitSource);
-  const root = mkdtempSync(join(tmpdir(), "fonte-release-tooling-"));
+  if (!commitShaPattern.test(explicitSource))
+    return blocked("source_sha_invalid", explicitSource);
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "fonte-release-tooling-")),
+  );
+  const tooling = join(root, "tooling");
+  const source = join(root, "source");
   try {
-    const run = (command: string, args: string[]) => runner.run(command, args, root);
-    if ((await run("git", ["init", "--quiet"])).exitCode !== 0
-      || (await run("git", ["remote", "add", "origin", remote])).exitCode !== 0
-      || (await run("git", ["fetch", "--quiet", "--no-tags", "--depth=2", "origin", "main"])).exitCode !== 0) {
+    mkdirSync(tooling);
+    const run = (command: string, args: string[], cwd = tooling) =>
+      runner.run(command, args, cwd);
+    if (
+      (await run("git", ["init", "--quiet"])).exitCode !== 0 ||
+      (await run("git", ["remote", "add", "origin", remote])).exitCode !== 0 ||
+      (
+        await run("git", [
+          "fetch",
+          "--quiet",
+          "--no-tags",
+          "--depth=2",
+          "origin",
+          "main",
+        ])
+      ).exitCode !== 0
+    ) {
       return blocked("direct_executor_unavailable", explicitSource);
     }
-    const main = await run("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]);
+    const main = await run("git", [
+      "rev-parse",
+      "--verify",
+      "FETCH_HEAD^{commit}",
+    ]);
     const revision = main.stdout.trim();
-    if (main.exitCode !== 0 || !commitShaPattern.test(revision)
-      || (await run("git", ["checkout", "--quiet", "--detach", revision])).exitCode !== 0) {
+    if (
+      main.exitCode !== 0 ||
+      !commitShaPattern.test(revision) ||
+      (await run("git", ["checkout", "--quiet", "--detach", revision]))
+        .exitCode !== 0
+    ) {
+      return blocked("direct_executor_unavailable", explicitSource);
+    }
+    const toolingHead = await run("git", [
+      "rev-parse",
+      "--verify",
+      "HEAD^{commit}",
+    ]);
+    if (toolingHead.exitCode !== 0 || toolingHead.stdout.trim() !== revision) {
       return blocked("direct_executor_unavailable", explicitSource);
     }
     const installed = await run("git", ["cat-file", "-e", `HEAD:${executor}`]);
-    if (installed.exitCode !== 0) return blocked("direct_executor_unavailable", explicitSource);
-    const fetched = await run("git", ["fetch", "--quiet", "--no-tags", "--depth=2", "origin", explicitSource]);
-    if (fetched.exitCode !== 0) return blocked("source_not_remote", explicitSource);
-    const resolved = await run("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]);
+    if (installed.exitCode !== 0)
+      return blocked("direct_executor_unavailable", explicitSource);
+    const fetched = await run("git", [
+      "fetch",
+      "--quiet",
+      "--no-tags",
+      "--depth=2",
+      "origin",
+      explicitSource,
+    ]);
+    if (fetched.exitCode !== 0)
+      return blocked("source_not_remote", explicitSource);
+    const resolved = await run("git", [
+      "rev-parse",
+      "--verify",
+      "FETCH_HEAD^{commit}",
+    ]);
     if (resolved.exitCode !== 0 || resolved.stdout.trim() !== explicitSource) {
       return blocked("source_not_remote", explicitSource);
     }
-    const status = await run("git", ["status", "--porcelain=v1", "--untracked-files=all"]);
-    if (status.exitCode !== 0 || status.stdout.trim()) return blocked("direct_executor_unavailable", explicitSource);
-    const result = await run(process.execPath, [join(root, executor), "--source", explicitSource]);
-    return { exitCode: result.exitCode === 0 ? 0 : result.exitCode === 2 || result.exitCode === 3
-      ? result.exitCode : 1, stdout: result.stdout, stderr: result.stderr };
+    if (
+      (
+        await run("git", [
+          "worktree",
+          "add",
+          "--detach",
+          source,
+          explicitSource,
+        ])
+      ).exitCode !== 0
+    ) {
+      return blocked("source_checkout_unavailable", explicitSource);
+    }
+    if (
+      (
+        await run(
+          "git",
+          [
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--depth=2",
+            "origin",
+            explicitSource,
+          ],
+          source,
+        )
+      ).exitCode !== 0
+    ) {
+      return blocked("source_not_remote", explicitSource);
+    }
+    const sourceHead = await run(
+      "git",
+      ["rev-parse", "--verify", "HEAD^{commit}"],
+      source,
+    );
+    const sourceFetch = await run(
+      "git",
+      ["rev-parse", "--verify", "FETCH_HEAD^{commit}"],
+      source,
+    );
+    const status = await run(
+      "git",
+      ["status", "--porcelain=v1", "--untracked-files=all"],
+      source,
+    );
+    if (
+      sourceHead.exitCode !== 0 ||
+      sourceHead.stdout.trim() !== explicitSource ||
+      sourceFetch.exitCode !== 0 ||
+      sourceFetch.stdout.trim() !== explicitSource ||
+      status.exitCode !== 0 ||
+      status.stdout.trim()
+    ) {
+      return blocked("source_checkout_unavailable", explicitSource);
+    }
+    const result = await run(
+      process.execPath,
+      [
+        join(tooling, executor),
+        "--source",
+        explicitSource,
+        "--source-root",
+        source,
+      ],
+      source,
+    );
+    return {
+      exitCode:
+        result.exitCode === 0
+          ? 0
+          : result.exitCode === 2 || result.exitCode === 3
+            ? result.exitCode
+            : 1,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
 function blocked(reason: string, source: string): CommandResult {
-  return { exitCode: 3, stdout: `${JSON.stringify({ status: "BLOCKED", source, reason })}\n`, stderr: "" };
+  return {
+    exitCode: 3,
+    stdout: `${JSON.stringify({ status: "BLOCKED", source, reason })}\n`,
+    stderr: "",
+  };
 }
