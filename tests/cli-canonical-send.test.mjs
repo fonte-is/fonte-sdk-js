@@ -40,7 +40,7 @@ test("Prepare is ready only for the exact rendered message artifact from the Sen
     if (path.includes("/audience-preparation?")) return { status: "accepted", operation: {
       state: "ready", phase: "ready", populationCompatibility: { status: "compatible" },
       resultRoot: { rootId: review.preparation.audienceSnapshotId },
-      resultManifest: { id: "synthetic-manifest" }, resultPopulation: { id: "synthetic-population" },
+      resultManifest: { id: "synthetic-manifest" }, resultPopulation: null,
     } };
     if (path.includes("/billing/payment-method?")) return { disclosure: {
       priceGeneration: "synthetic", currency: "USD", unitPriceMicros: "500",

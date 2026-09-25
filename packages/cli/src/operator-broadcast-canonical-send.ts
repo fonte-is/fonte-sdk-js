@@ -97,7 +97,7 @@ export function createCanonicalBroadcastClient(request: CoreRequester): Canonica
       }
       if (operation?.state !== "ready" || operation.phase !== "ready"
         || object(operation.populationCompatibility).status !== "compatible"
-        || !operation.resultRoot || !operation.resultManifest || !operation.resultPopulation) {
+        || !operation.resultRoot || !operation.resultManifest) {
         if (operation && ["queued", "running", "cancel_requested"].includes(String(operation.state))) {
           return { status: "preparing" };
         }
