@@ -1,5 +1,7 @@
 .artifacts/
 .vendor/
+.worktrees/
+fonte-worktrees/
 node_modules/
 packages/*/dist/
 package-lock.json
