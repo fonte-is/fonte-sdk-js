@@ -1,6 +1,6 @@
 {
   "name": "@fonte-is/cli",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "Manage Fonte production broadcast operator journeys and local installations",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
@@ -37,6 +37,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
+    "postinstall": "node assets/install-release-tooling.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
   },

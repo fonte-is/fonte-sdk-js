@@ -2,7 +2,7 @@ import type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
 
 export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand =
-  CommandName | "auth-exec" | "operator" | "help" | "version";
+  CommandName | "auth-exec" | "operator" | "release" | "help" | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
@@ -13,6 +13,7 @@ export interface ParsedArguments {
   consumerCommand?: string;
   consumerArguments?: readonly string[];
   operator?: OperatorCommand;
+  releaseSource?: string;
 }
 
 export interface InvalidInvocationReceipt {
@@ -99,7 +100,7 @@ export type ManagedOperation =
 export interface LocalManifest {
   schema_version: "fonte.local_installation.v1";
   installation_id: string;
-  cli_version: "0.1.0" | "0.1.1" | "0.1.2" | "0.1.3" | "0.1.4" | "0.2.0";
+  cli_version: "0.1.0" | "0.1.1" | "0.1.2" | "0.1.3" | "0.1.4" | "0.2.0" | "0.3.1";
   adapter_id: "next_app_router";
   adapter_version: "v1";
   sdk_package: "@fonte-is/nextjs";
