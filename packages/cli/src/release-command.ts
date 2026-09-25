@@ -1,22 +1,11 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { CapturedCommandRunner, CommandResult } from "./runtime-types.js";
 
 const commitShaPattern = /^[0-9a-f]{40}$/;
-const packageRoot = fileURLToPath(new URL("..", import.meta.url));
-const toolingIdentity = JSON.parse(readFileSync(join(packageRoot, "assets", "release-tooling.json"),
-  "utf8")) as { schemaVersion: string; remote: string; revision: string; executor: string };
-if (toolingIdentity.schemaVersion !== "fonte_cli_release_tooling_v1"
-  || toolingIdentity.remote !== "https://github.com/fonte-is/fonte-core.git"
-  || !commitShaPattern.test(toolingIdentity.revision)
-  || toolingIdentity.executor !== ".github/scripts/production-release-direct.mjs") {
-  throw new Error("release_tooling_identity_invalid");
-}
-const toolingRoot = join(packageRoot, "release-tooling", toolingIdentity.revision);
-const installedExecutor = join(toolingRoot, toolingIdentity.executor);
-
-export function installedReleaseExecutorPath(): string { return installedExecutor; }
+const remote = "https://github.com/fonte-is/fonte-core.git";
+const executor = ".github/scripts/production-release-direct.mjs";
 
 export async function runReleaseCommand(
   explicitSource: string,
@@ -24,52 +13,38 @@ export async function runReleaseCommand(
   runner: CapturedCommandRunner,
 ): Promise<CommandResult> {
   if (!commitShaPattern.test(explicitSource)) return blocked("source_sha_invalid", explicitSource);
-
-  // The installation owns this pinned Core checkout. Operator cwd is never an
-  // executor location; the requested remote SHA is fetched into this checkout.
-  const revision = await runner.run("git", ["rev-parse", "--verify", "HEAD^{commit}"], toolingRoot);
-  if (revision.exitCode !== 0 || revision.stdout.trim() !== toolingIdentity.revision) {
-    return blocked("direct_executor_unavailable", explicitSource);
+  const root = mkdtempSync(join(tmpdir(), "fonte-release-tooling-"));
+  try {
+    const run = (command: string, args: string[]) => runner.run(command, args, root);
+    if ((await run("git", ["init", "--quiet"])).exitCode !== 0
+      || (await run("git", ["remote", "add", "origin", remote])).exitCode !== 0
+      || (await run("git", ["fetch", "--quiet", "--no-tags", "--depth=2", "origin", "main"])).exitCode !== 0) {
+      return blocked("direct_executor_unavailable", explicitSource);
+    }
+    const main = await run("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]);
+    const revision = main.stdout.trim();
+    if (main.exitCode !== 0 || !commitShaPattern.test(revision)
+      || (await run("git", ["checkout", "--quiet", "--detach", revision])).exitCode !== 0) {
+      return blocked("direct_executor_unavailable", explicitSource);
+    }
+    const installed = await run("git", ["cat-file", "-e", `HEAD:${executor}`]);
+    if (installed.exitCode !== 0) return blocked("direct_executor_unavailable", explicitSource);
+    const fetched = await run("git", ["fetch", "--quiet", "--no-tags", "--depth=2", "origin", explicitSource]);
+    if (fetched.exitCode !== 0) return blocked("source_not_remote", explicitSource);
+    const resolved = await run("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]);
+    if (resolved.exitCode !== 0 || resolved.stdout.trim() !== explicitSource) {
+      return blocked("source_not_remote", explicitSource);
+    }
+    const status = await run("git", ["status", "--porcelain=v1", "--untracked-files=all"]);
+    if (status.exitCode !== 0 || status.stdout.trim()) return blocked("direct_executor_unavailable", explicitSource);
+    const result = await run(process.execPath, [join(root, executor), "--source", explicitSource]);
+    return { exitCode: result.exitCode === 0 ? 0 : result.exitCode === 2 || result.exitCode === 3
+      ? result.exitCode : 1, stdout: result.stdout, stderr: result.stderr };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
-  const remote = await runner.run("git", ["remote", "get-url", "origin"], toolingRoot);
-  if (remote.exitCode !== 0 || remote.stdout.trim() !== toolingIdentity.remote) {
-    return blocked("direct_executor_unavailable", explicitSource);
-  }
-  const status = await runner.run("git", ["status", "--porcelain=v1", "--untracked-files=all"], toolingRoot);
-  if (status.exitCode !== 0 || status.stdout.trim()) {
-    return blocked("direct_executor_unavailable", explicitSource);
-  }
-  const installed = await runner.run("git", ["cat-file", "-e", `HEAD:${toolingIdentity.executor}`], toolingRoot);
-  if (installed.exitCode !== 0) return blocked("direct_executor_unavailable", explicitSource);
-
-  const fetched = await runner.run(
-    "git",
-    ["fetch", "--quiet", "--no-tags", "--depth=2", "origin", explicitSource],
-    toolingRoot,
-  );
-  if (fetched.exitCode !== 0) return blocked("source_not_remote", explicitSource);
-
-  const resolved = await runner.run(
-    "git",
-    ["rev-parse", "--verify", "FETCH_HEAD^{commit}"],
-    toolingRoot,
-  );
-  const sha = resolved.stdout.trim();
-  if (resolved.exitCode !== 0 || sha !== explicitSource) {
-    return blocked("source_not_remote", explicitSource);
-  }
-
-  return runner.run(process.execPath, [installedExecutor, "--source", sha], toolingRoot).then((result) => ({
-    exitCode: result.exitCode === 0 ? 0 : result.exitCode === 2 || result.exitCode === 3 ? result.exitCode : 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  }));
 }
 
 function blocked(reason: string, source: string): CommandResult {
-  return {
-    exitCode: 3,
-    stdout: `${JSON.stringify({ status: "BLOCKED", source, reason })}\n`,
-    stderr: "",
-  };
+  return { exitCode: 3, stdout: `${JSON.stringify({ status: "BLOCKED", source, reason })}\n`, stderr: "" };
 }
