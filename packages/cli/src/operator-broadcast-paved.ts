@@ -628,9 +628,19 @@ async function finishPreparation(
     expectedRevision: draft.revision,
     snapshotSha256,
   });
+  const expectedPolicyGeneration = context.oneTimeSetId
+    ? "csv_marketing_local_baseline.v1" : "contacts_marketing_subscription.v1";
+  const prepareRequestId = deterministicUuid("broadcast-audience-prepare", {
+    workspace: workspace.slug,
+    draftId: draft.draft_id,
+    expectedRevision: draft.revision,
+    oneTimeSetId: context.oneTimeSetId ?? null,
+    purposePolicyGeneration: expectedPolicyGeneration,
+  });
   const canonical = await (await dependencies.canonical()).prepare({
     workspace: workspace.slug, draftId: draft.draft_id, revision: draft.revision,
-    activeSource: draft.draft.active_source, requestId,
+    activeSource: draft.draft.active_source, requestId, prepareRequestId,
+    expectedPolicyGeneration,
   });
   if (canonical.status === "preparing") return {
     status: "preparing", draft_id: draft.draft_id, revision: draft.revision,

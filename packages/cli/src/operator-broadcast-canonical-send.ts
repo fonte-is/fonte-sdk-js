@@ -5,7 +5,7 @@ export interface CanonicalSendReview {
     readonly commandId: string;
     readonly expectedDraftVersion: number;
     readonly audienceSnapshotId: string;
-    readonly purposePolicyGeneration: "contacts_marketing_subscription.v1";
+    readonly purposePolicyGeneration: "contacts_marketing_subscription.v1" | "csv_marketing_local_baseline.v1";
     readonly activeSource: "composer" | "html";
     readonly clickTrackingEnabled: true;
     readonly engagementTrackingEnabled: true;
@@ -69,7 +69,8 @@ interface CanonicalAdmissionReceipt {
 export interface CanonicalBroadcastClient {
   prepare(input: { readonly workspace: string; readonly draftId: string;
     readonly revision: number; readonly activeSource: "composer" | "html";
-    readonly requestId: string }): Promise<{ readonly status: "preparing" }
+    readonly requestId: string; readonly prepareRequestId: string;
+    readonly expectedPolicyGeneration: "contacts_marketing_subscription.v1" | "csv_marketing_local_baseline.v1" }): Promise<{ readonly status: "preparing" }
       | { readonly status: "ready"; readonly review: CanonicalSendReview;
         readonly renderedArtifactId: string; readonly renderedArtifactDigest: string }>;
   send(input: { readonly workspace: string; readonly draftId: string;
@@ -88,6 +89,12 @@ export function createCanonicalBroadcastClient(request: CoreRequester): Canonica
     read,
     async prepare(input) {
       const path = `${draftPath(input)}/audience-preparation?environment=production`;
+      const submitPrepare = async () => {
+        await request(path, { body: { schema: "audience_preparation_command.v1",
+          requestId: input.prepareRequestId, expectedDraftVersion: input.revision },
+          idempotencyKey: input.prepareRequestId, lostResponseEffect: "unknown" });
+        return { status: "preparing" } as const;
+      };
       const result = object(await request(path));
       const operation = result.status === "accepted" ? object(result.operation) : null;
       if (operation?.state === "failed" || operation?.state === "cancelled") {
@@ -101,14 +108,25 @@ export function createCanonicalBroadcastClient(request: CoreRequester): Canonica
         if (operation && ["queued", "running", "cancel_requested"].includes(String(operation.state))) {
           return { status: "preparing" };
         }
-        await request(path, { body: { schema: "audience_preparation_command.v1",
-          requestId: input.requestId, expectedDraftVersion: input.revision },
-          idempotencyKey: input.requestId, lostResponseEffect: "unknown" });
-        return { status: "preparing" };
+        return submitPrepare();
       }
       const root = object(operation.resultRoot);
       if (typeof root.rootId !== "string" || !root.rootId.startsWith("contact_prepared_audience:v2:")) {
         invalid("broadcast_audience_not_execution_ready");
+      }
+      const ranged = object(await request(`${draftPath(input)}/audience-preparation?environment=production&afterOrdinal=0&limit=1`));
+      const manifest = object(object(ranged.manifest).manifest);
+      const manifestRef = object(operation.resultManifest);
+      if (ranged.status !== "ready" || manifest.manifestId !== manifestRef.manifestId
+        || manifest.manifestDigest !== manifestRef.manifestDigest) {
+        invalid("broadcast_audience_manifest_mismatch");
+      }
+      if (manifest.purposePolicyGeneration !== input.expectedPolicyGeneration) {
+        return submitPrepare();
+      }
+      if (!Number.isSafeInteger(manifest.authorizedRecipientSendCount)
+        || Number(manifest.authorizedRecipientSendCount) < 1) {
+        invalid("broadcast_audience_no_authorized_recipients");
       }
       const authority = object(await request(`${workspacePath(input.workspace)}/billing/payment-method?environment=production&view=commercial_authority`));
       const disclosure = object(authority.disclosure);
@@ -117,7 +135,7 @@ export function createCanonicalBroadcastClient(request: CoreRequester): Canonica
       const preparation: CanonicalSendReview["preparation"] = {
         commandId: input.requestId, expectedDraftVersion: input.revision,
         audienceSnapshotId: root.rootId,
-        purposePolicyGeneration: "contacts_marketing_subscription.v1",
+        purposePolicyGeneration: manifest.purposePolicyGeneration as CanonicalSendReview["preparation"]["purposePolicyGeneration"],
         activeSource: input.activeSource, clickTrackingEnabled: true,
         engagementTrackingEnabled: true,
         deliveryRequirements: { geography: [], dataResidency: [], ipCommitment: "either",

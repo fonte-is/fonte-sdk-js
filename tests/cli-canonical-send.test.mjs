@@ -8,6 +8,7 @@ import { parseOperatorArguments } from "../packages/cli/dist/operator-arguments.
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000740";
 const requestId = "00000000-0000-4000-8000-000000000741";
+const prepareRequestId = "00000000-0000-4000-8000-000000000749";
 const planId = "00000000-0000-4000-8000-000000000742";
 const broadcastId = "00000000-0000-4000-8000-000000000743";
 const grantId = "00000000-0000-4000-8000-000000000744";
@@ -35,12 +36,19 @@ const status = { ...admission, replayed: true, phase: "sending", accepted: 0,
 
 test("Prepare is ready only for the exact rendered message artifact from the Send plan", async () => {
   let renderedHtml = "<p>Synthetic body</p>";
+  let authorizedCount = 2048;
   let sendPosts = 0;
   const request = async (path, options) => {
+    if (path.includes("/audience-preparation?") && path.includes("afterOrdinal=")) return {
+      status: "ready", manifest: { manifest: { manifestId: "synthetic-manifest",
+        manifestDigest: "sha256:synthetic-manifest", purposePolicyGeneration: "csv_marketing_local_baseline.v1",
+        authorizedRecipientSendCount: authorizedCount } },
+    };
     if (path.includes("/audience-preparation?")) return { status: "accepted", operation: {
       state: "ready", phase: "ready", populationCompatibility: { status: "compatible" },
       resultRoot: { rootId: review.preparation.audienceSnapshotId },
-      resultManifest: { id: "synthetic-manifest" }, resultPopulation: null,
+      resultManifest: { manifestId: "synthetic-manifest", manifestDigest: "sha256:synthetic-manifest" },
+      resultPopulation: null,
     } };
     if (path.includes("/billing/payment-method?")) return { disclosure: {
       priceGeneration: "synthetic", currency: "USD", unitPriceMicros: "500",
@@ -61,12 +69,52 @@ test("Prepare is ready only for the exact rendered message artifact from the Sen
   };
   const client = createCanonicalBroadcastClient(request);
   const ready = await client.prepare({ workspace, draftId, revision: 5,
-    activeSource: "composer", requestId });
+    activeSource: "composer", requestId, prepareRequestId,
+    expectedPolicyGeneration: "csv_marketing_local_baseline.v1" });
   assert.equal(ready.status, "ready");
   assert.equal(ready.renderedArtifactId, "synthetic-artifact");
+  assert.equal(ready.review.preparation.purposePolicyGeneration, "csv_marketing_local_baseline.v1");
   renderedHtml = "";
   await assert.rejects(client.prepare({ workspace, draftId, revision: 5,
-    activeSource: "composer", requestId }), /broadcast_send_review_mismatch/u);
+    activeSource: "composer", requestId, prepareRequestId,
+    expectedPolicyGeneration: "csv_marketing_local_baseline.v1" }), /broadcast_send_review_mismatch/u);
+  authorizedCount = 0;
+  await assert.rejects(client.prepare({ workspace, draftId, revision: 5,
+    activeSource: "composer", requestId, prepareRequestId,
+    expectedPolicyGeneration: "csv_marketing_local_baseline.v1" }), /broadcast_audience_no_authorized_recipients/u);
+  assert.equal(sendPosts, 0);
+});
+
+test("old-policy READY artifact remains immutable while a distinct Prepare identity is accepted", async () => {
+  let preparePosts = 0;
+  let sendPosts = 0;
+  const request = async (path, options) => {
+    if (path.includes("/audience-preparation?") && options?.body) {
+      preparePosts += 1;
+      assert.equal(options.body.requestId, prepareRequestId);
+      assert.equal(options.body.expectedDraftVersion, 5);
+      assert.notEqual(options.body.requestId, requestId);
+      return { status: "accepted", replayed: preparePosts > 1 };
+    }
+    if (path.includes("/audience-preparation?") && path.includes("afterOrdinal=")) return {
+      status: "ready", manifest: { manifest: { manifestId: "old-manifest",
+        manifestDigest: "sha256:old", purposePolicyGeneration: "contacts_marketing_subscription.v1",
+        authorizedRecipientSendCount: 0 } },
+    };
+    if (path.includes("/audience-preparation?")) return { status: "accepted", operation: {
+      state: "ready", phase: "ready", populationCompatibility: { status: "compatible" },
+      resultRoot: { rootId: "contact_prepared_audience:v2:old" },
+      resultManifest: { manifestId: "old-manifest", manifestDigest: "sha256:old" },
+    } };
+    if (path.includes("/send-intent?")) sendPosts += 1;
+    throw new Error(`unexpected path ${path}`);
+  };
+  const client = createCanonicalBroadcastClient(request);
+  const input = { workspace, draftId, revision: 5, activeSource: "composer", requestId,
+    prepareRequestId, expectedPolicyGeneration: "csv_marketing_local_baseline.v1" };
+  assert.equal((await client.prepare(input)).status, "preparing");
+  assert.equal((await client.prepare(input)).status, "preparing");
+  assert.equal(preparePosts, 2);
   assert.equal(sendPosts, 0);
 });
 
