@@ -621,25 +621,6 @@ async function finishPreparation(
     });
   }
 
-  let rendered: { draft_id: string; revision: number };
-  try {
-    rendered = await (
-      await dependencies.render()
-    ).renderBroadcastDraft({
-      workspace: workspace.slug,
-      draftId: draft.draft_id,
-      revision: draft.revision,
-    });
-  } catch {
-    return blocked(context, "The exact prepared draft revision could not be rendered.", [
-      "broadcast_render_unavailable",
-    ]);
-  }
-  if (rendered.draft_id !== draft.draft_id || rendered.revision !== draft.revision) {
-    return blocked(context, "The renderer did not confirm the exact prepared draft revision.", [
-      "broadcast_render_readback_mismatch",
-    ]);
-  }
   const snapshotSha256 = hash(stableJson(draft.draft));
   const requestId = deterministicUuid("broadcast-paved-send-v2", {
     workspace: workspace.slug,
@@ -656,6 +637,17 @@ async function finishPreparation(
     summary: "The durable audience Prepare operation is finishing its recipient manifest.",
     missing: [], choices: [], warnings: [...context.warnings], send_input: null,
   };
+  const rendered = {
+    draft_id: draft.draft_id, revision: draft.revision,
+    artifact_id: canonical.renderedArtifactId,
+    artifact_digest: canonical.renderedArtifactDigest,
+  };
+  if (rendered.draft_id !== draft.draft_id || rendered.revision !== draft.revision
+    || !rendered.artifact_id || !rendered.artifact_digest) {
+    return blocked(context, "The Send plan did not confirm the exact rendered message artifact.", [
+      "broadcast_render_unavailable",
+    ]);
+  }
   return {
     status: "ready_to_send",
     draft_id: draft.draft_id,

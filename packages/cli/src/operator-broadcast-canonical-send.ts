@@ -70,7 +70,8 @@ export interface CanonicalBroadcastClient {
   prepare(input: { readonly workspace: string; readonly draftId: string;
     readonly revision: number; readonly activeSource: "composer" | "html";
     readonly requestId: string }): Promise<{ readonly status: "preparing" }
-      | { readonly status: "ready"; readonly review: CanonicalSendReview }>;
+      | { readonly status: "ready"; readonly review: CanonicalSendReview;
+        readonly renderedArtifactId: string; readonly renderedArtifactDigest: string }>;
   send(input: { readonly workspace: string; readonly draftId: string;
     readonly requestId: string; readonly review: CanonicalSendReview }): Promise<CanonicalSendStatus>;
   read(input: { readonly workspace: string; readonly draftId: string }): Promise<CanonicalSendStatus | null>;
@@ -133,13 +134,21 @@ export function createCanonicalBroadcastClient(request: CoreRequester): Canonica
       const plan = object(quote.plan), commercial = object(quote.commercial);
       const review = object(commercial.review), candidate = object(review.candidate);
       const counts = object(plan.counts);
+      const artifact = object(plan.messageArtifact);
+      const preparedArtifact = object(object(quote.message).messageArtifact);
+      const rendered = object(preparedArtifact.renderContent);
       if (quote.status !== "prepared" || commercial.status !== "review_required"
         || plan.commandId !== input.requestId || plan.draftVersion !== input.revision
         || plan.draftId !== input.draftId || plan.sendPlanId !== plan.broadcastAuthorizationId
+        || artifact.id !== preparedArtifact.messageArtifactId
+        || artifact.digest !== preparedArtifact.artifactDigest
+        || typeof rendered.subject !== "string" || !rendered.subject
+        || typeof rendered.html !== "string" || !rendered.html
         || !Number.isSafeInteger(counts.authorized) || Number(counts.authorized) < 1) {
         invalid("broadcast_send_review_mismatch");
       }
-      return { status: "ready", review: {
+      return { status: "ready", renderedArtifactId: required(artifact.id),
+        renderedArtifactDigest: required(artifact.digest), review: {
         preparation, timing, sendPlanId: required(plan.sendPlanId),
         broadcastId: required(plan.broadcastId), recipientCount: Number(counts.authorized),
         commercialGrantId: required(review.commercialGrantId),

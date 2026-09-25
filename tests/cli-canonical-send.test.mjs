@@ -33,6 +33,43 @@ const admission = { schema: "broadcast_send_operation", operationId: planId,
 const status = { ...admission, replayed: true, phase: "sending", accepted: 0,
   skipped: 0, failed: 0, unknown: 0, pending: 2048 };
 
+test("Prepare is ready only for the exact rendered message artifact from the Send plan", async () => {
+  let renderedHtml = "<p>Synthetic body</p>";
+  let sendPosts = 0;
+  const request = async (path, options) => {
+    if (path.includes("/audience-preparation?")) return { status: "accepted", operation: {
+      state: "ready", phase: "ready", populationCompatibility: { status: "compatible" },
+      resultRoot: { rootId: review.preparation.audienceSnapshotId },
+      resultManifest: { id: "synthetic-manifest" }, resultPopulation: { id: "synthetic-population" },
+    } };
+    if (path.includes("/billing/payment-method?")) return { disclosure: {
+      priceGeneration: "synthetic", currency: "USD", unitPriceMicros: "500",
+    } };
+    if (path.includes("/send-plan?") && options?.body) return {
+      status: "prepared", plan: { commandId: requestId, draftVersion: 5, draftId,
+        sendPlanId: planId, broadcastAuthorizationId: planId, broadcastId,
+        counts: { authorized: 2048 },
+        messageArtifact: { id: "synthetic-artifact", digest: "sha256:synthetic" } },
+      message: { messageArtifact: { messageArtifactId: "synthetic-artifact",
+        artifactDigest: "sha256:synthetic", renderContent: { subject: "Synthetic subject", html: renderedHtml } } },
+      commercial: { status: "review_required", review: { commercialGrantId: grantId,
+        reviewDigest: review.acceptedReviewDigest,
+        candidate: { authorizationCandidateDigest: review.acceptedCandidateDigest } } },
+    };
+    if (path.includes("/send-intent?")) sendPosts += 1;
+    throw new Error(`unexpected path ${path}`);
+  };
+  const client = createCanonicalBroadcastClient(request);
+  const ready = await client.prepare({ workspace, draftId, revision: 5,
+    activeSource: "composer", requestId });
+  assert.equal(ready.status, "ready");
+  assert.equal(ready.renderedArtifactId, "synthetic-artifact");
+  renderedHtml = "";
+  await assert.rejects(client.prepare({ workspace, draftId, revision: 5,
+    activeSource: "composer", requestId }), /broadcast_send_review_mismatch/u);
+  assert.equal(sendPosts, 0);
+});
+
 for (const lostResponse of [false, true]) {
   test(`canonical Send posts once and reads exact operation (lost response: ${lostResponse})`, async () => {
     let posted = 0;

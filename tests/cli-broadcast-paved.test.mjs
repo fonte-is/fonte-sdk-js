@@ -242,7 +242,7 @@ test("CSV preparation resumes the same durable set after pending and binds only 
   });
   assert.equal(fakes.draft.audience_kind, "recipient_expression");
   assert.equal(fakes.calls.targeting, 1);
-  assert.deepEqual(fakes.calls.renderedRevisions, [2]);
+  assert.deepEqual(fakes.calls.renderedRevisions, []);
   assert.equal(fakes.calls.sends, 0);
   assert.equal(fakes.calls.tests, 0);
   assert.equal(broadcastPavedPreparationOutputSchema.safeParse(pending).success, true);
@@ -461,7 +461,8 @@ function runFreshOperatorProcess(mode, payload) {
         }),
       }),
       canonical: async () => ({
-        prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision) }),
+        prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision),
+          renderedArtifactId: "message_artifact:synthetic", renderedArtifactDigest: "sha256:synthetic" }),
         read: async () => null,
         send: async (request) => {
           acceptedRequests.push(request);
@@ -628,7 +629,8 @@ function createFakes({
       readBroadcastTest: async () => { calls.tests += 1; throw new Error("forbidden test read"); },
     }),
     canonical: async () => ({
-      prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision) }),
+      prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision),
+        renderedArtifactId: "message_artifact:synthetic", renderedArtifactDigest: "sha256:synthetic" }),
       read: async () => { calls.sendReads += 1; return null; },
       send: async (input) => {
         calls.sends += 1;
