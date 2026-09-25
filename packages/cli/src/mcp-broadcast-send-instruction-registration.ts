@@ -48,7 +48,7 @@ export function registerMcpBroadcastSendInstructionTools(
     {
       title: "Send Broadcast now",
       description:
-        "After one explicit customer Send-now direction, accepts the exact saved draft as one durable v3 operation. No review, recipient preparation, count, quote, payment, or provider work is performed by this tool.",
+        "Retired unreviewed Send entrypoint. Use fonte_prepare_broadcast and fonte_send_broadcast with the exact reviewed send_input.",
       inputSchema: sendBroadcastNowInputSchema,
       outputSchema: broadcastSendInstructionOutputSchema,
       annotations: effect,
@@ -62,7 +62,7 @@ export function registerMcpBroadcastSendInstructionTools(
     {
       title: "Schedule Broadcast",
       description:
-        "After one explicit customer Schedule direction, accepts the exact saved draft and future time as one durable v3 operation.",
+        "Retired unreviewed Schedule entrypoint. Use the reviewed canonical Send path.",
       inputSchema: scheduleBroadcastInputSchema,
       outputSchema: broadcastSendInstructionOutputSchema,
       annotations: effect,

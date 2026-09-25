@@ -1,4 +1,5 @@
 import type { CoreOperatorClient } from "./operator-client.js";
+import { CoreOperatorError } from "./operator-core-request.js";
 import type {
   BroadcastSendInstructionOperatorCommand,
   BroadcastSendOperationResult,
@@ -24,13 +25,10 @@ export async function executeBroadcastSendInstructionCommand(
   sleep: (milliseconds: number) => Promise<void>,
 ): Promise<BroadcastSendOperationResult> {
   if (command.kind === "broadcast_send_now") {
-    return client.acceptBroadcastSend({ ...command, timing: { mode: "now" } });
+    throw new CoreOperatorError("canonical_send_review_required", null, "none");
   }
   if (command.kind === "broadcast_schedule") {
-    return client.acceptBroadcastSend({
-      ...command,
-      timing: { mode: "scheduled", notBefore: command.notBefore },
-    });
+    throw new CoreOperatorError("canonical_send_review_required", null, "none");
   }
   if (command.kind === "broadcast_schedule_replace") {
     return client.replaceBroadcastSendSchedule(command);

@@ -292,7 +292,7 @@ test("Send fails closed when the prepared revision drifts", async () => {
 
   assert.equal(receipt.outcome, "blocked");
   assert.equal(receipt.reason, "prepared_draft_state_changed");
-  assert.equal(fakes.calls.sendReads, 0);
+  assert.equal(fakes.calls.sendReads, 1);
   assert.equal(fakes.calls.sends, 0);
   const sendValidation = broadcastPavedSendOutputSchema.safeParse(receipt);
   assert.equal(sendValidation.success, true,
@@ -310,7 +310,7 @@ test("prepare in process A, exit it, and Send unchanged facts in fresh process B
     workspace,
     draft: preparedByA.draft,
     sendInput: unchangedSendInput,
-    sendResult: acceptedResult(false),
+    sendResult: canonicalStatus(unchangedSendInput.review, false),
   });
 
   assert.equal(sentByB.receipt.outcome, "queued");
@@ -318,13 +318,12 @@ test("prepare in process A, exit it, and Send unchanged facts in fresh process B
     workspace,
     draftId,
     requestId: unchangedSendInput.request_id,
-    expectedDraftVersion: preparedByA.result.revision,
-    timing: { mode: "now" },
+    review: unchangedSendInput.review,
   }]);
   assert.equal(broadcastPavedSendOutputSchema.safeParse(sentByB.receipt).success, true);
 });
 
-test("Send uses one durable v3 request identity through lost-response recovery", async () => {
+test("Send submits once and does not retry an ambiguous response", async () => {
   const fakes = createFakes({ existingDraft: readyDraft() });
   const operator = createBroadcastPavedOperator(fakes.dependencies);
   const prepared = await operator.prepare({
@@ -336,24 +335,14 @@ test("Send uses one durable v3 request identity through lost-response recovery",
   fakes.loseFirstSendAcknowledgement = true;
 
   const receipt = await operator.send(prepared.send_input);
-  const repeated = await operator.send(prepared.send_input);
 
-  assert.equal(receipt.outcome, "queued");
-  assert.equal(receipt.result.operation.operation_id,
-    "00000000-0000-4000-8000-000000000743");
-  assert.notEqual(receipt.result.operation.operation_id,
-    fakes.acceptedRequests[0].requestId);
-  assert.equal(fakes.acceptedRequests.length, 3);
-  assert.equal(fakes.acceptedRequests[0].requestId,
-    fakes.acceptedRequests[1].requestId);
-  assert.equal(fakes.acceptedRequests[1].requestId,
-    fakes.acceptedRequests[2].requestId);
-  assert.equal(fakes.acceptedRequests[0].expectedDraftVersion, 1);
-  assert.deepEqual(fakes.acceptedRequests[0].timing, { mode: "now" });
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "core_api_unavailable");
+  assert.equal(receipt.core_effect, "unknown");
+  assert.equal(fakes.acceptedRequests.length, 1);
+  assert.equal(fakes.acceptedRequests[0].requestId, prepared.send_input.request_id);
   assert.equal(fakes.calls.sendReads, 1);
   assert.equal(fakes.calls.durableSends, 1);
-  assert.notEqual(repeated, receipt);
-  assert.equal(repeated.outcome, "queued");
   const sendValidation = broadcastPavedSendOutputSchema.safeParse(receipt);
   assert.equal(sendValidation.success, true,
     JSON.stringify(sendValidation.success ? [] : sendValidation.error.issues));
@@ -415,6 +404,7 @@ function runFreshOperatorProcess(mode, payload) {
     import { createBroadcastPavedOperator } from ${JSON.stringify(operatorModule)};
 
     const input = JSON.parse(readFileSync(0, "utf8"));
+    const canonicalReview = ${canonicalReview.toString()};
     const acceptedRequests = [];
     const draft = input.draft;
     const lifecycle = {
@@ -468,13 +458,10 @@ function runFreshOperatorProcess(mode, payload) {
           revision,
         }),
       }),
-      send: async () => ({
-        readBroadcastSendOperation: async () => ({
-          kind: "broadcast_send_operation",
-          status: "absent",
-          operation: null,
-        }),
-        acceptBroadcastSend: async (request) => {
+      canonical: async () => ({
+        prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision) }),
+        read: async () => null,
+        send: async (request) => {
           acceptedRequests.push(request);
           return input.sendResult;
         },
@@ -635,23 +622,18 @@ function createFakes({
       requestBroadcastTest: async () => { calls.tests += 1; throw new Error("forbidden test send"); },
       readBroadcastTest: async () => { calls.tests += 1; throw new Error("forbidden test read"); },
     }),
-    send: async () => ({
-      readBroadcastSendOperation: async () => {
-        calls.sendReads += 1;
-        return durableSends.size > 0
-          ? acceptedResult(true)
-          : { kind: "broadcast_send_operation", status: "absent", operation: null };
-      },
-      acceptBroadcastSend: async (input) => {
+    canonical: async () => ({
+      prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision) }),
+      read: async () => { calls.sendReads += 1; return null; },
+      send: async (input) => {
         calls.sends += 1;
         acceptedRequests.push(input);
-        if (durableSends.has(input.requestId)) return acceptedResult(true);
         calls.durableSends += 1;
-        durableSends.set(input.requestId, acceptedResult(false));
-        if (fakes.loseFirstSendAcknowledgement && calls.sends === 1) {
+        durableSends.set(input.requestId, canonicalStatus(input.review, false));
+        if (fakes.loseFirstSendAcknowledgement) {
           throw new CoreOperatorError("core_api_unavailable", null, "unknown");
         }
-        return acceptedResult(calls.sends > 1);
+        return canonicalStatus(input.review, false);
       },
     }),
     readFile,
@@ -737,44 +719,34 @@ function applyChanges(draft, changes) {
   return next;
 }
 
-function acceptedResult(replayed) {
+function canonicalReview(requestId, revision) {
   return {
-    kind: "broadcast_send_operation",
-    status: "accepted",
-    operation: {
-      schema: "broadcast_send_operation.v2",
-      operation_id: "00000000-0000-4000-8000-000000000743",
-      workspace_id: "workspace-internal-synthetic",
-      environment: "production",
-      draft_id: draftId,
-      instruction_generation: 1,
-      approval_generation: 1,
-      accepted_at: "2026-09-23T10:00:00.000Z",
-      timing: { mode: "now" },
-      not_before: "2026-09-23T10:00:00.000Z",
-      phase: "queued",
-      reason: null,
-      retryable: true,
-      next_attempt_at: "2026-09-23T10:00:01.000Z",
-      total: null,
-      timestamps: {
-        preparation_started_at: null,
-        snapshot_at: null,
-        authorization_committed_at: null,
-        first_submission_at: null,
-        terminal_at: null,
-      },
-      delivery: {
-        status: "unavailable",
-        reason: "provider_submission_not_started",
-        observed_at: null,
-      },
-      required_action: null,
-      allowed_actions: ["cancel"],
-      execution_authorized: false,
-      replayed,
-    },
+    preparation: { commandId: requestId, expectedDraftVersion: revision,
+      audienceSnapshotId: "contact_prepared_audience:v2:synthetic",
+      purposePolicyGeneration: "contacts_marketing_subscription.v1",
+      activeSource: "composer", clickTrackingEnabled: true, engagementTrackingEnabled: true,
+      deliveryRequirements: { geography: [], dataResidency: [], ipCommitment: "either",
+        maximumDeliveryDelaySeconds: 3600, excludedProviderIdentities: [],
+        encryption: "tls_required", loggingPolicy: "delivery_events_v1",
+        promisedProviderRouteVersion: null, commercialPriceAssumptions: {
+          priceVersion: "synthetic", currency: "USD", maximumUnitPriceMicros: "500" } } },
+    timing: { notBefore: "2026-09-25T10:00:00.000Z", expiresAt: "2026-09-25T11:00:00.000Z" },
+    sendPlanId: "00000000-0000-4000-8000-000000000743",
+    broadcastId: "00000000-0000-4000-8000-000000000744", recipientCount: 1,
+    commercialGrantId: "00000000-0000-4000-8000-000000000745",
+    acceptedCandidateDigest: `sha256:${"a".repeat(64)}`,
+    acceptedReviewDigest: `sha256:${"b".repeat(64)}`,
   };
+}
+
+function canonicalStatus(review, replayed) {
+  return { schema: "broadcast_send_operation", operationId: review.sendPlanId,
+    workspaceId: "workspace-internal-synthetic", environment: "production",
+    draftId, draftVersion: review.preparation.expectedDraftVersion,
+    broadcastId: review.broadcastId, sendPlanId: review.sendPlanId,
+    recipientCount: review.recipientCount, phase: "sending",
+    accepted: 0, skipped: 0, failed: 0, unknown: 0, pending: review.recipientCount,
+    executionAuthorized: true, replayed };
 }
 
 function deterministicUuid(scope, value) {

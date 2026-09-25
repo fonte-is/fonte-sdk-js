@@ -1,9 +1,36 @@
 import path from "node:path";
 import { z } from "zod";
 
-import { broadcastSendInstructionOutputSchema } from "./mcp-broadcast-send-instruction-types.js";
-
 const uuid = z.string().uuid();
+const digest = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
+const instant = z.string().datetime({ offset: true });
+const price = z.object({ priceVersion: z.string().min(1), currency: z.string().min(1),
+  maximumUnitPriceMicros: z.string().regex(/^[0-9]+$/u) }).strict();
+const reviewSchema = z.object({
+  preparation: z.object({
+    commandId: uuid, expectedDraftVersion: z.number().int().positive().safe(),
+    audienceSnapshotId: z.string().min(1),
+    purposePolicyGeneration: z.literal("contacts_marketing_subscription.v1"),
+    activeSource: z.enum(["composer", "html"]),
+    clickTrackingEnabled: z.literal(true), engagementTrackingEnabled: z.literal(true),
+    deliveryRequirements: z.object({
+      geography: z.tuple([]), dataResidency: z.tuple([]), ipCommitment: z.literal("either"),
+      maximumDeliveryDelaySeconds: z.literal(3600), excludedProviderIdentities: z.tuple([]),
+      encryption: z.literal("tls_required"), loggingPolicy: z.literal("delivery_events_v1"),
+      promisedProviderRouteVersion: z.null(), commercialPriceAssumptions: price,
+    }).strict(),
+  }).strict(),
+  timing: z.object({ notBefore: instant, expiresAt: instant }).strict(),
+  sendPlanId: uuid, broadcastId: uuid,
+  recipientCount: z.number().int().positive().safe(), commercialGrantId: uuid,
+  acceptedCandidateDigest: digest, acceptedReviewDigest: digest,
+}).strict();
+export const sendPreparedBroadcastInputSchema = z.object({
+  workspace: z.string().min(1).max(300), draft_id: uuid,
+  expected_revision: z.number().int().positive().safe(),
+  snapshot_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+  request_id: uuid, review: reviewSchema,
+}).strict();
 const nullableHeader = (maximum: number, allowEmpty: boolean) =>
   z.union([
     z.null(),
@@ -114,16 +141,7 @@ export const broadcastPavedPreparationOutputSchema = z
     missing: z.array(z.string().min(1).max(100)).max(30),
     choices: z.array(choiceSchema).max(500),
     warnings: z.array(z.string().min(1).max(300)).max(100),
-    send_input: z
-      .object({
-        workspace: selector,
-        draft_id: uuid,
-        expected_revision: z.number().int().positive().safe(),
-        snapshot_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
-        request_id: uuid,
-      })
-      .strict()
-      .nullable(),
+    send_input: sendPreparedBroadcastInputSchema.nullable(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -168,17 +186,19 @@ export const broadcastPavedPreparationOutputSchema = z
     }
   });
 
-export const sendPreparedBroadcastInputSchema = z
-  .object({
-    workspace: selector,
-    draft_id: uuid,
-    expected_revision: z.number().int().positive().safe(),
-    snapshot_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
-    request_id: uuid,
-  })
-  .strict();
-
-const sendOperationResultSchema = broadcastSendInstructionOutputSchema.shape.operation;
+const canonicalStatusSchema = z.object({
+  schema: z.literal("broadcast_send_operation"), operationId: uuid,
+  workspaceId: z.string().min(1), environment: z.literal("production"), draftId: uuid,
+  draftVersion: z.number().int().positive().safe(), broadcastId: uuid,
+  sendPlanId: uuid, recipientCount: z.number().int().positive().safe(),
+  phase: z.enum(["scheduled", "sending", "paused", "complete", "ended"]),
+  accepted: z.number().int().nonnegative().safe(), skipped: z.number().int().nonnegative().safe(),
+  failed: z.number().int().nonnegative().safe(), unknown: z.number().int().nonnegative().safe(),
+  pending: z.number().int().nonnegative().safe(), executionAuthorized: z.literal(true),
+  replayed: z.boolean(),
+}).passthrough();
+const sendOperationResultSchema = z.object({ kind: z.literal("executable_broadcast_operation"),
+  status: z.literal("accepted"), operation: canonicalStatusSchema }).strict().nullable();
 
 export const broadcastPavedSendOutputSchema = z
   .object({
@@ -197,7 +217,7 @@ export const broadcastPavedSendOutputSchema = z
       .object({
         status: z.enum(["current", "missing"]),
         contract_id: z.enum([
-          "fonte.core.broadcast_send_instruction.v3",
+          "fonte.core.broadcast_send",
           "unavailable",
         ]),
       })

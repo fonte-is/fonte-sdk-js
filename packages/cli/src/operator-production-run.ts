@@ -78,7 +78,7 @@ export async function executeProductionCommand(
     return command.watch ? pollTest(read, sleep) : read();
   }
   if (command.kind === "broadcast_authorize") {
-    return client.authorizeProductionBroadcast(command);
+    throw new CoreOperatorError("canonical_send_review_required", null, "none");
   }
   if (command.kind === "broadcast_progress") {
     const read = () => client.readProductionProgress(command);

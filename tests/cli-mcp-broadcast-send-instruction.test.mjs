@@ -47,7 +47,7 @@ test("MCP registers one-effect Send/Schedule, GET observation, and bounded contr
   assert.match(read[1].description, /Preparing/);
 });
 
-test("MCP Send now maps one explicit direction to one v3 acceptance", async () => {
+test("MCP old Send refuses without contacting Core", async () => {
   const calls = [];
   const handler = createBroadcastSendNowToolHandler(async () => ({
     ...client(),
@@ -62,17 +62,11 @@ test("MCP Send now maps one explicit direction to one v3 acceptance", async () =
     request_id: requestId,
     expected_draft_version: 4,
   });
-  assert.equal(output.outcome, "completed");
-  assert.equal(output.operation.operation.phase, "queued");
-  assert.deepEqual(calls, [
-    {
-      workspace,
-      draftId,
-      requestId,
-      expectedDraftVersion: 4,
-      timing: { mode: "now" },
-    },
-  ]);
+  assert.equal(output.outcome, "conflict");
+  assert.equal(output.reason, "canonical_send_review_required");
+  assert.equal(output.core_effect, "none");
+  assert.equal(output.operation, null);
+  assert.deepEqual(calls, []);
 });
 
 test("MCP observation cannot become a mutation and preserves unavailable evidence", async () => {
@@ -95,7 +89,7 @@ test("MCP observation cannot become a mutation and preserves unavailable evidenc
   );
 });
 
-test("MCP failures preserve denial, conflict, and ambiguous-effect truth", async () => {
+test("MCP historical status failures preserve denial and unavailable truth", async () => {
   for (const [error, expected] of [
     [
       new CoreOperatorError("human_auth_workspace_access_denied", 403, "none"),
@@ -110,17 +104,15 @@ test("MCP failures preserve denial, conflict, and ambiguous-effect truth", async
       "ambiguous",
     ],
   ]) {
-    const handler = createBroadcastSendNowToolHandler(async () => ({
+    const handler = createBroadcastSendReadToolHandler(async () => ({
       ...client(),
-      acceptBroadcastSend: async () => {
+      readBroadcastSendOperation: async () => {
         throw error;
       },
     }));
     const output = await handler({
       workspace,
       draft_id: draftId,
-      request_id: requestId,
-      expected_draft_version: 4,
     });
     assert.equal(output.outcome, expected);
     assert.equal(output.core_effect, error.coreEffect);

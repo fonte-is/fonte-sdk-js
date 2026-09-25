@@ -8,11 +8,14 @@ import {
   workspace,
 } from "./operator-production-options.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
+import { parseProductionOptions } from "./operator-production-options.js";
+import { sendPreparedBroadcastInputSchema } from "./mcp-broadcast-paved-types.js";
 
 export function parseBroadcastSendInstructionArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments | null {
   if (argv[0] !== "broadcast" || argv[1] !== "send") return null;
+  if (argv[2]?.startsWith("--")) return canonicalSend(argv.slice(2));
   if (argv[2] === "now") return acceptNow(argv.slice(3));
   if (argv[2] === "schedule") return schedule(argv.slice(3));
   if (argv[2] === "status") return status(argv.slice(3));
@@ -52,13 +55,23 @@ function schedule(argv: readonly string[]): ParsedOperatorArguments {
 }
 
 function status(argv: readonly string[]): ParsedOperatorArguments {
-  const options = productionRead(argv, ["--draft-id"], [], ["--watch"]);
+  const options = productionRead(argv, ["--draft-id"]);
   return operatorArguments(options, {
-    kind: "broadcast_send_status",
+    kind: "broadcast_canonical_status",
     workspace: workspace(options),
     draftId: draftId(options),
-    watch: options.flags.has("--watch"),
   });
+}
+
+function canonicalSend(argv: readonly string[]): ParsedOperatorArguments {
+  const options = parseProductionOptions(argv, ["--send-input"]);
+  let candidate: unknown;
+  try { candidate = JSON.parse(required(options, "--send-input")); }
+  catch { invalidProductionArguments("invalid_field", "--send-input"); }
+  const parsed = sendPreparedBroadcastInputSchema.safeParse(candidate);
+  if (!parsed.success) invalidProductionArguments("invalid_field", "--send-input");
+  return operatorArguments(options, { kind: "broadcast_canonical_send",
+    workspace: parsed.data.workspace, sendInput: parsed.data });
 }
 
 function replaceSchedule(argv: readonly string[]): ParsedOperatorArguments {

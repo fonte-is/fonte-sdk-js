@@ -31,6 +31,7 @@ import { readBroadcastLocalFile } from "./operator-broadcast-html-file.js";
 import { createBroadcastSenderClient } from "./operator-broadcast-sender-client.js";
 import { createBroadcastTargetingClient } from "./operator-broadcast-targeting-client.js";
 import { createBroadcastSendInstructionClient } from "./operator-broadcast-send-instruction-client.js";
+import { createCanonicalBroadcastClient } from "./operator-broadcast-canonical-send.js";
 import {
   createBroadcastRecipientSetClient,
   type BroadcastRecipientSetClient,
@@ -76,6 +77,7 @@ export interface FonteMcpClientProviders {
   readonly broadcastTargeting: BroadcastTargetingClientProvider;
   readonly broadcastRenderTest: BroadcastRenderTestClientProvider;
   readonly broadcastSendInstruction: BroadcastSendInstructionClientProvider;
+  readonly canonicalBroadcast: () => Promise<ReturnType<typeof createCanonicalBroadcastClient>>;
   readonly broadcastRecipientSets: BroadcastRecipientSetClientProvider;
   readonly broadcastHtmlPreparation: BroadcastHtmlPreparationClientProvider;
   readonly campaignMetadata: () => Promise<
@@ -125,6 +127,8 @@ export function createDurableFonteMcpSession(
       createBroadcastTargetingClient((await authenticated()).request),
     broadcastSendInstruction: async () =>
       createBroadcastSendInstructionClient((await authenticated()).request),
+    canonicalBroadcast: async () =>
+      createCanonicalBroadcastClient((await authenticated()).request),
     broadcastRecipientSets: async () =>
       createBroadcastRecipientSetClient(
         (await authenticated()).request,
@@ -194,6 +198,7 @@ export function createFonteMcpServer(
       productionDrafts: providers.productionDrafts,
       render: providers.broadcastRenderTest,
       send: providers.broadcastSendInstruction,
+      canonical: providers.canonicalBroadcast,
       recipientSetSupplier: providers.broadcastRecipientSets,
       readFile: readBroadcastLocalFile,
     });

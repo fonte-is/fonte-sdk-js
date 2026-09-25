@@ -15,7 +15,8 @@ import type {
 import type {
   BroadcastSendInstructionClient,
 } from "./operator-broadcast-send-instruction-client.js";
-import type { BroadcastSendOperationResult } from "./operator-broadcast-send-instruction-types.js";
+import type { CanonicalBroadcastClient, CanonicalSendReview, CanonicalSendStatus } from
+  "./operator-broadcast-canonical-send.js";
 import type {
   BroadcastSenderClient,
   BroadcastSenderProfile,
@@ -41,9 +42,7 @@ import {
   type BroadcastRecipientSetClient,
   type BroadcastRecipientSetResult,
 } from "./operator-broadcast-recipient-set-client.js";
-import { broadcastSendInstructionReceiptDescriptor } from "./operator-broadcast-send-instruction-run.js";
 import type {
-  OperatorCommand,
   OperatorReceipt,
 } from "./operator-types.js";
 import { preflightRecipientExpression } from "./operator-preflight-audience-json.js";
@@ -88,6 +87,7 @@ export interface BroadcastPavedSendInput {
   readonly expected_revision: number;
   readonly snapshot_sha256: string;
   readonly request_id: string;
+  readonly review: CanonicalSendReview;
 }
 
 export interface BroadcastPavedPreparationResult {
@@ -111,6 +111,7 @@ export interface BroadcastPavedDependencies {
   readonly productionDrafts: () => Promise<ProductionDraftClient>;
   readonly render: () => Promise<BroadcastRenderTestClient>;
   readonly send: () => Promise<BroadcastSendInstructionClient>;
+  readonly canonical: () => Promise<CanonicalBroadcastClient>;
   readonly recipientSetSupplier?: () => Promise<BroadcastRecipientSetClient>;
   readonly readFile: BroadcastLocalFileReader;
 }
@@ -646,6 +647,15 @@ async function finishPreparation(
     expectedRevision: draft.revision,
     snapshotSha256,
   });
+  const canonical = await (await dependencies.canonical()).prepare({
+    workspace: workspace.slug, draftId: draft.draft_id, revision: draft.revision,
+    activeSource: draft.draft.active_source, requestId,
+  });
+  if (canonical.status === "preparing") return {
+    status: "preparing", draft_id: draft.draft_id, revision: draft.revision,
+    summary: "The durable audience Prepare operation is finishing its recipient manifest.",
+    missing: [], choices: [], warnings: [...context.warnings], send_input: null,
+  };
   return {
     status: "ready_to_send",
     draft_id: draft.draft_id,
@@ -660,6 +670,7 @@ async function finishPreparation(
       expected_revision: draft.revision,
       snapshot_sha256: snapshotSha256,
       request_id: requestId,
+      review: canonical.review,
     },
   };
 }
@@ -1473,18 +1484,25 @@ function preparing(
   };
 }
 
-async function sendPrepared(
+export async function sendPrepared(
   input: BroadcastPavedSendInput,
-  dependencies: BroadcastPavedDependencies,
+  dependencies: Pick<BroadcastPavedDependencies, "draftLifecycle" | "canonical">,
 ): Promise<OperatorReceipt> {
-  const command: OperatorCommand = {
-    kind: "broadcast_send_now",
-    workspace: input.workspace,
-    draftId: input.draft_id,
-    requestId: input.request_id,
-    expectedDraftVersion: input.expected_revision,
-  };
   try {
+    if (!input.review || input.review.preparation.commandId !== input.request_id
+      || input.review.preparation.expectedDraftVersion !== input.expected_revision) {
+      return sendFailureReceipt(input.workspace, "invalid_durable_send_input", "none", "current");
+    }
+    const canonical = await dependencies.canonical();
+    const existing = await canonical.read({ workspace: input.workspace, draftId: input.draft_id });
+    if (existing) {
+      return existing.sendPlanId === input.review.sendPlanId
+        && existing.broadcastId === input.review.broadcastId
+        && existing.draftVersion === input.expected_revision
+        && existing.recipientCount === input.review.recipientCount
+        ? sendSuccessReceipt(input.workspace, { ...existing, replayed: true })
+        : sendFailureReceipt(input.workspace, "broadcast_send_intent_exists", "none", "current");
+    }
     const current = await (
       await dependencies.draftLifecycle()
     ).readBroadcastDraft({
@@ -1504,63 +1522,11 @@ async function sendPrepared(
       );
     }
 
-    const client = await dependencies.send();
-    const sendInput = {
-      workspace: input.workspace,
-      draftId: input.draft_id,
-      requestId: input.request_id,
-      expectedDraftVersion: input.expected_revision,
-      timing: { mode: "now" as const },
-    };
-    try {
-      return sendSuccessReceipt(
-        command,
-        await client.acceptBroadcastSend(sendInput),
-      );
-    } catch (error) {
-      if (!isUnknownEffect(error)) {
-        return sendFailureReceipt(
-          input.workspace,
-          safeReason(error),
-          error instanceof CoreOperatorError ? error.coreEffect : "none",
-          "current",
-        );
-      }
-      try {
-        await client.readBroadcastSendOperation({
-          workspace: input.workspace,
-          draftId: input.draft_id,
-        });
-      } catch {
-        return sendFailureReceipt(
-          input.workspace,
-          "broadcast_send_outcome_unresolved",
-          "unknown",
-          "current",
-        );
-      }
-      try {
-        const retried = await client.acceptBroadcastSend(sendInput);
-        return sendSuccessReceipt(command, retried);
-      } catch (retryError) {
-        if (isUnknownEffect(retryError)) {
-          try {
-            await client.readBroadcastSendOperation({
-              workspace: input.workspace,
-              draftId: input.draft_id,
-            });
-          } catch {
-            // The first Send outcome remains unknown even when its final read is unavailable.
-          }
-        }
-        return sendFailureReceipt(
-          input.workspace,
-          "broadcast_send_outcome_unresolved",
-          "unknown",
-          "current",
-        );
-      }
-    }
+    const accepted = await canonical.send({
+      workspace: input.workspace, draftId: input.draft_id,
+      requestId: input.request_id, review: input.review,
+    });
+    return sendSuccessReceipt(input.workspace, accepted);
   } catch (error) {
     return sendFailureReceipt(
       input.workspace,
@@ -1572,49 +1538,22 @@ async function sendPrepared(
 }
 
 function sendSuccessReceipt(
-  command: OperatorCommand,
-  result: BroadcastSendOperationResult,
+  workspace: string,
+  operation: CanonicalSendStatus,
 ): OperatorReceipt {
-  if (command.kind !== "broadcast_send_now") {
-    return sendFailureReceipt(
-      null,
-      "broadcast_send_receipt_identity_mismatch",
-      "unknown",
-      "current",
-    );
-  }
-  if (
-    result.status !== "accepted" ||
-    result.operation.draft_id !== command.draftId
-  ) {
-    return sendFailureReceipt(
-      command.workspace,
-      "broadcast_send_receipt_identity_mismatch",
-      "unknown",
-      "current",
-    );
-  }
-  const descriptor = broadcastSendInstructionReceiptDescriptor(command, result);
-  if (!descriptor) {
-    return sendFailureReceipt(
-      command.workspace,
-      "broadcast_send_receipt_unmappable",
-      "unknown",
-      "current",
-    );
-  }
+  const terminal = operation.phase === "complete" || operation.phase === "ended";
   return {
     schema_version: "fonte.cli.operator_receipt.v1",
-    command: command.kind,
-    outcome: descriptor.outcome,
-    reason: descriptor.reason,
-    workspace: command.workspace,
+    command: "broadcast_send_now",
+    outcome: terminal ? "terminal" : operation.phase === "paused" ? "blocked" : "queued",
+    reason: `broadcast_send_${operation.phase}`,
+    workspace,
     authority: {
       status: "current",
-      contract_id: "fonte.core.broadcast_send_instruction.v3",
+      contract_id: "fonte.core.broadcast_send",
     },
-    core_effect: descriptor.coreEffect,
-    result,
+    core_effect: operation.replayed ? "none" : "queued",
+    result: { kind: "executable_broadcast_operation", status: "accepted", operation },
   };
 }
 
@@ -1633,7 +1572,7 @@ function sendFailureReceipt(
     authority: authorityStatus === "current"
       ? {
         status: "current",
-        contract_id: "fonte.core.broadcast_send_instruction.v3",
+        contract_id: "fonte.core.broadcast_send",
       }
       : { status: "missing", contract_id: "unavailable" },
     core_effect: coreEffect,

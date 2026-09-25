@@ -93,25 +93,8 @@ export function createProductionBroadcastClient(
         invalid("none");
       return result;
     },
-    async authorizeProductionBroadcast(input) {
-      const result = parse(
-        (value) => queuedBroadcast(value, "broadcast_authorization"),
-        await request(approvalPath(input), {
-          idempotencyKey: input.idempotencyKey,
-          lostResponseEffect: "unknown",
-          body: {
-            operation: "authorize_persisted_production",
-            expectedVersion: input.revision,
-            postalAddress: input.postalAddress,
-            idempotencyKey: input.idempotencyKey,
-            ...(input.audienceReuseOverride
-              ? { audienceReuseOverride: input.audienceReuseOverride }
-              : {}),
-          },
-        }),
-        "unknown",
-      );
-      return matchingDraft(result, input.draftId, "unknown");
+    async authorizeProductionBroadcast() {
+      throw new CoreOperatorError("canonical_send_review_required", null, "none");
     },
     async readProductionProgress(input) {
       return matchingBroadcast(

@@ -36,7 +36,7 @@ export function registerMcpBroadcastPavedTools(
     {
       title: "Prepare Broadcast",
       description:
-        "Creates or updates one exact Broadcast draft, resolves only unambiguous current workspace/sender/purpose choices, and returns current factual readiness. It never Sends, Schedules, Test Sends, counts recipients, prepares an audience, or calls a provider. Pass the returned send_input unchanged to fonte_send_broadcast only when status is ready_to_send.",
+        "Creates or updates one exact Broadcast draft, starts or reads the durable audience Prepare operation, and returns a commercial review when the recipient manifest is ready. It never Sends or calls an email provider. Pass the returned send_input unchanged to fonte_send_broadcast only when status is ready_to_send.",
       inputSchema: prepareBroadcastPavedInputSchema,
       outputSchema: broadcastPavedPreparationOutputSchema,
       annotations: prepareAnnotation,
@@ -48,7 +48,7 @@ export function registerMcpBroadcastPavedTools(
     {
       title: "Send prepared Broadcast",
       description:
-        "Accepts only the exact preparation_reference returned inside a ready_to_send send_input. It rereads the exact draft revision and fails closed on any drift, then accepts one ordinary v3 Send-now operation and returns the existing OperatorReceipt semantics. It does not reprepare, change sender/target/content, Schedule, Test Send, or repeat under a new request identity.",
+        "Accepts only the exact reviewed send_input returned by ready_to_send Prepare. It rereads the draft, confirms the commercial review, posts canonical Send once, and reads back the same executable operation if the response is ambiguous. It never generates a new request identity or repeats the Send POST.",
       inputSchema: sendPreparedBroadcastInputSchema,
       outputSchema: broadcastPavedSendOutputSchema,
       annotations: sendAnnotation,

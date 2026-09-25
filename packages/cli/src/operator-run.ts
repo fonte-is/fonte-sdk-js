@@ -62,6 +62,10 @@ import {
   segmentReceiptDescriptor,
 } from "./operator-segment-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
+import { createCoreRequester } from "./operator-core-request.js";
+import { createCanonicalBroadcastClient } from "./operator-broadcast-canonical-send.js";
+import { createBroadcastDraftLifecycleClient } from "./operator-broadcast-draft-lifecycle-client.js";
+import { sendPrepared } from "./operator-broadcast-paved.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
@@ -112,6 +116,28 @@ export async function runOperatorCommand(
       dependencies.configUrl,
     );
     const bearer = await dependencies.authorize(config, dependencies.signal);
+    if (command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status") {
+      const request = createCoreRequester({ coreApiBaseUrl: config.coreApiBaseUrl, bearer,
+        fetch: dependencies.fetch as typeof fetch, signal: dependencies.signal });
+      const canonical = createCanonicalBroadcastClient(request);
+      if (command.kind === "broadcast_canonical_send") {
+        return sendPrepared(command.sendInput, {
+          draftLifecycle: async () => createBroadcastDraftLifecycleClient(request),
+          canonical: async () => canonical,
+        });
+      }
+      const operation = await canonical.read({ workspace: command.workspace, draftId: command.draftId });
+      return {
+        schema_version: "fonte.cli.operator_receipt.v1", command: command.kind,
+        outcome: operation === null ? "completed" : operation.phase === "complete" || operation.phase === "ended"
+          ? "terminal" : operation.phase === "paused" ? "blocked" : "queued",
+        reason: operation === null ? "broadcast_send_operation_absent" : `broadcast_send_${operation.phase}`,
+        workspace: command.workspace,
+        authority: { status: "current", contract_id: "fonte.core.broadcast_send" },
+        core_effect: "none", result: operation === null ? null
+          : { kind: "executable_broadcast_operation", status: "accepted", operation },
+      };
+    }
     const client = createCoreOperatorClient({
       coreApiBaseUrl: config.coreApiBaseUrl,
       bearer,
@@ -464,7 +490,9 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind.startsWith("campaign_")
+    contract_id: command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
+      ? "fonte.core.broadcast_send"
+      : command.kind.startsWith("campaign_")
       ? "fonte.core.campaign_configuration.v1"
       : command.kind.startsWith("segment_")
         ? "fonte.core.native_segment.v1"

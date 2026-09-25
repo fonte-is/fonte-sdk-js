@@ -23,9 +23,8 @@ npx @fonte-is/cli broadcast audience options --workspace my-workspace --environm
 npx @fonte-is/cli broadcast draft create --workspace my-workspace --environment production --idempotency-key <uuid> --title "Product update" --subject "August update" --body "<p>Hello</p>" --sender-profile-id <id> --communication-purpose-id <uuid> --all-contacts
 npx @fonte-is/cli broadcast audience preview --workspace my-workspace --environment production --draft-id <uuid>
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
-npx @fonte-is/cli broadcast send now --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --request-id <uuid>
-npx @fonte-is/cli broadcast send schedule --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --not-before 2026-10-01T09:00:00.000Z --request-id <uuid>
-npx @fonte-is/cli broadcast send status --workspace my-workspace --environment production --draft-id <uuid> --watch
+npx @fonte-is/cli broadcast send --send-input '<exact reviewed send_input JSON>' --json
+npx @fonte-is/cli broadcast send status --workspace my-workspace --environment production --draft-id <uuid> --json
 npx @fonte-is/cli broadcast status --workspace my-workspace --environment production --broadcast-id <uuid> --watch
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
 npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
@@ -211,35 +210,16 @@ Core's existing authority and immutable recipient freeze. Lost mutation
 responses remain unknown until explicit readback. Unexposed declarations return
 `unsupported_authority` before OAuth or network access.
 
-## Broadcast v3 Send
+## Broadcast Send
 
-`broadcast send now` and `broadcast send schedule` are the machine-client
-entry points for an explicit customer Send or Schedule direction. Each sends
-one digest-free instruction containing only Core's v3 schema, stable request
-ID, fixed execution rail, expected saved-draft version, and timing. A success
-is a durable `Queued` or `Scheduled` operation; the CLI does not prepare an
-audience, calculate a recipient count or quote, reserve funds, call a payment
-provider, or dispatch email before returning.
-
-`broadcast send status` reads that operation with GET only. `--watch` repeats
-only the bounded read and never advances work. Missing population, delivery,
-or other evidence remains explicitly unavailable. Ordinary output presents
-the customer lifecycle as Queued, Scheduled, Preparing, Sending, Complete,
-Cancelled, or Action required; internal authorization, packaging, and pending
-activation stages remain Preparing.
-
-An unclaimed schedule can be changed with `broadcast send replace-schedule`
-or stopped with `broadcast send cancel`, both using the exact instruction
-generation returned by Core. If status reports the structured
-`increase_account_spend_limit` action, `broadcast send increase-limit` first
-re-reads and verifies that same operation and both generations, applies only
-Core's supplied recurring-account minimum through the existing sanctioned
-billing route, and submits the approval amendment. It requires a separate
-explicit customer direction and performs no client-side cost calculation.
-
-The older `broadcast preflight`, `broadcast authorize`, `broadcast status`,
-and broadcast-scoped control commands remain available only for existing
-v1/v2 operations. They are not prerequisites for Broadcast v3 acceptance.
+The local Fonte host returns a reviewed `send_input` only after durable
+audience Prepare is ready. `broadcast send --send-input` accepts that exact
+input, confirms its commercial review, and submits canonical Send once. Core
+creates the executable Broadcast in the Send transaction. If the POST response
+is ambiguous, the CLI reads the stored operation using the same plan and
+request identity; it never posts Send again. `broadcast send status` is GET only.
+The old `broadcast authorize`, `broadcast send now`, and `broadcast send
+schedule` commands refuse new sends with `canonical_send_review_required`.
 
 The candidate evidence journey is JSON-only and the rotation journey is
 aggregate-only. Rotation follows one closed sequence: `start`, `read`, then

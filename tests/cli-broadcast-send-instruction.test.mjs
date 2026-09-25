@@ -160,7 +160,7 @@ test("client sends the exact v3 command and all status reads remain GET-only", a
   );
 });
 
-test("installed CLI framing reports HTTP 202 as Queued, never Sending", async () => {
+test("installed CLI blocks unreviewed legacy Send before any Core POST", async () => {
   const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
   const calls = [];
   const result = await runProgram(
@@ -205,18 +205,9 @@ test("installed CLI framing reports HTTP 202 as Queued, never Sending", async ()
     },
   );
   const receipt = JSON.parse(result.stdout);
-  assert.equal(result.exitCode, 0);
-  assert.equal(receipt.outcome, "queued");
-  assert.equal(receipt.reason, "broadcast_send_queued");
-  assert.equal(receipt.result.operation.phase, "queued");
-  assert.equal(receipt.result.operation.total, null);
-  assert.equal(
-    receipt.authority.contract_id,
-    "fonte.core.broadcast_send_instruction.v3",
-  );
-  assert.equal(calls[1].init.method, "POST");
-  assert.equal(
-    calls[1].init.headers.authorization,
-    "Bearer synthetic.header.signature",
-  );
+  assert.equal(result.exitCode, 3);
+  assert.equal(receipt.outcome, "blocked");
+  assert.equal(receipt.reason, "canonical_send_review_required");
+  assert.equal(receipt.core_effect, "none");
+  assert.equal(calls.length, 1);
 });

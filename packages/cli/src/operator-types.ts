@@ -3,6 +3,8 @@ import type {
   BroadcastSendInstructionOperatorCommand,
   BroadcastSendOperationResult,
 } from "./operator-broadcast-send-instruction-types.js";
+import type { CanonicalSendStatus } from "./operator-broadcast-canonical-send.js";
+import type { BroadcastPavedSendInput } from "./operator-broadcast-paved.js";
 import type { OperatorNextAction } from "./operator-broadcast-recovery.js";
 import type {
   ContactImportStatusResult,
@@ -59,6 +61,10 @@ import type {
 } from "./operator-segment-types.js";
 
 export type OperatorCommand =
+  | { readonly kind: "broadcast_canonical_send"; readonly workspace: string;
+      readonly sendInput: BroadcastPavedSendInput }
+  | { readonly kind: "broadcast_canonical_status"; readonly workspace: string;
+      readonly draftId: string }
   | WorkspaceMarketingSettingsOperatorCommand
   | SequenceOperatorCommand
   | BroadcastSendInstructionOperatorCommand
@@ -291,6 +297,8 @@ export type OperatorResult =
   | WorkspaceMarketingSettingsResult
   | SequenceOperatorResult
   | BroadcastSendOperationResult
+  | { readonly kind: "executable_broadcast_operation"; readonly status: "accepted";
+      readonly operation: CanonicalSendStatus }
   | SandboxTestResult
   | BroadcastCanaryResult
   | ProductionAudienceAppendResult
@@ -334,6 +342,7 @@ export interface OperatorReceipt {
       | "fonte.core.broadcast_preflight.v1"
       | "fonte.core.production_broadcast.v1"
       | "fonte.core.broadcast_send_instruction.v3"
+      | "fonte.core.broadcast_send"
       | "fonte.core.production_broadcast_audience_append.v1"
       | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"

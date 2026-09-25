@@ -45,46 +45,26 @@ interface ToolSuccess {
 export type BroadcastSendInstructionToolResult = ToolFailure | ToolSuccess;
 
 export function createBroadcastSendNowToolHandler(
-  provider: BroadcastSendInstructionClientProvider,
+  _provider: BroadcastSendInstructionClientProvider,
 ) {
   return async (
     input: unknown,
   ): Promise<BroadcastSendInstructionToolResult> => {
-    const value = sendBroadcastNowInputSchema.parse(input);
-    return invoke(
-      true,
-      async (client) =>
-        client.acceptBroadcastSend({
-          workspace: value.workspace,
-          draftId: value.draft_id,
-          requestId: value.request_id,
-          expectedDraftVersion: value.expected_draft_version,
-          timing: { mode: "now" },
-        }),
-      provider,
-    );
+    sendBroadcastNowInputSchema.parse(input);
+    return { outcome: "conflict", reason: "canonical_send_review_required",
+      status_code: 410, core_effect: "none", operation: null };
   };
 }
 
 export function createBroadcastScheduleToolHandler(
-  provider: BroadcastSendInstructionClientProvider,
+  _provider: BroadcastSendInstructionClientProvider,
 ) {
   return async (
     input: unknown,
   ): Promise<BroadcastSendInstructionToolResult> => {
-    const value = scheduleBroadcastInputSchema.parse(input);
-    return invoke(
-      true,
-      async (client) =>
-        client.acceptBroadcastSend({
-          workspace: value.workspace,
-          draftId: value.draft_id,
-          requestId: value.request_id,
-          expectedDraftVersion: value.expected_draft_version,
-          timing: { mode: "scheduled", notBefore: value.not_before },
-        }),
-      provider,
-    );
+    scheduleBroadcastInputSchema.parse(input);
+    return { outcome: "conflict", reason: "canonical_send_review_required",
+      status_code: 410, core_effect: "none", operation: null };
   };
 }
 

@@ -77,7 +77,7 @@ export function blockedReceipt(
     authority: authorityStatus === "current"
       ? {
         status: "current" as const,
-        contract_id: "fonte.core.broadcast_send_instruction.v3" as const,
+        contract_id: "fonte.core.broadcast_send" as const,
       }
       : { status: "missing" as const, contract_id: "unavailable" as const },
     core_effect: "none" as const,
