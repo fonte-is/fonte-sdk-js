@@ -37,6 +37,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
+    "postinstall": "node assets/install-release-tooling.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
   },

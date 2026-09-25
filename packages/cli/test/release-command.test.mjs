@@ -1,44 +1,59 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runReleaseCommand } from "../dist/release-command.js";
+import { installedReleaseExecutorPath, runReleaseCommand } from "../dist/release-command.js";
 
 const source = "a".repeat(40);
+const toolingRevision = "5c9af4f808936126cd86478df90a125300f83703";
 
-test("release invokes the checked-in Core direct executor without PATH release lookup", async () => {
+function releaseRunner({ installed = true } = {}) {
   const calls = [];
-  const runner = {
+  return {
+    calls,
     async run(command, args, cwd) {
       calls.push({ command, args: [...args], cwd });
-      if (command === "git" && args[0] === "status") return { exitCode: 0, stdout: "", stderr: "" };
-      if (command === "git" && args[0] === "fetch") return { exitCode: 0, stdout: "", stderr: "" };
-      if (command === "git" && args[0] === "rev-parse") return { exitCode: 0, stdout: `${source}\n`, stderr: "" };
-      if (command === "git" && args[0] === "cat-file") return { exitCode: 0, stdout: "", stderr: "" };
-      if (command === process.execPath) return { exitCode: 0, stdout: "release_status=VERIFIED\n", stderr: "" };
+      if (command === "git" && args[0] === "rev-parse") {
+        return { exitCode: 0, stdout: `${args[2] === "HEAD^{commit}" ? toolingRevision : source}\n`, stderr: "" };
+      }
+      if (command === "git" && args[0] === "remote") {
+        return { exitCode: 0, stdout: "https://github.com/fonte-is/fonte-core.git\n", stderr: "" };
+      }
+      if (command === "git" && args[0] === "status") {
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+      if (command === "git" && args[0] === "cat-file") {
+        return { exitCode: installed ? 0 : 1, stdout: "", stderr: installed ? "" : "missing" };
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+      if (command === process.execPath) {
+        return { exitCode: 0, stdout: "release_status=VERIFIED\n", stderr: "" };
+      }
       return { exitCode: 127, stdout: "", stderr: "unexpected executable" };
     },
   };
+}
 
-  const result = await runReleaseCommand(source, "/checkout/fonte-core", runner);
-  assert.equal(result.exitCode, 0);
-  const execution = calls.at(-1);
-  assert.equal(execution.command, process.execPath);
-  assert.deepEqual(execution.args, [
-    "/checkout/fonte-core/.github/scripts/production-release-direct.mjs",
-    "--source",
-    source,
-  ]);
-  assert.equal(calls.some(({ command }) => command === "release"), false);
+test("release uses one installed executor from Core, umbrella, and with the old worktree absent", async () => {
+  const executor = installedReleaseExecutorPath();
+  assert.ok(executor.endsWith(`release-tooling/${toolingRevision}/.github/scripts/production-release-direct.mjs`));
+  const locations = ["/checkout/fonte-core", "/checkout/fonte-repos", "/private/tmp/old-fon776-worktree-absent"];
+  for (const location of locations) {
+    const runner = releaseRunner();
+    const result = await runReleaseCommand(source, location, runner);
+    assert.equal(result.exitCode, 0, location);
+    assert.equal(runner.calls.at(-1).command, process.execPath);
+    assert.deepEqual(runner.calls.at(-1).args, [executor, "--source", source]);
+    assert.equal(new Set(runner.calls.map(call => call.cwd)).size, 1);
+    assert.equal(runner.calls.some(({ command }) => command === "release" || command === "gh"), false);
+    assert.equal(runner.calls.some(({ cwd }) => cwd === location), false);
+  }
 });
 
-test("release refuses to execute when the direct Core executor is absent", async () => {
-  const runner = {
-    async run(command, args) {
-      if (command === "git" && args[0] === "rev-parse") return { exitCode: 0, stdout: `${source}\n`, stderr: "" };
-      if (command === "git" && args[0] === "cat-file") return { exitCode: 1, stdout: "", stderr: "missing" };
-      return { exitCode: 0, stdout: "", stderr: "" };
-    },
-  };
+test("release blocks when the pinned installed executor is absent", async () => {
+  const runner = releaseRunner({ installed: false });
   const result = await runReleaseCommand(source, "/checkout/fonte-core", runner);
   assert.equal(result.exitCode, 3);
   assert.match(result.stdout, /direct_executor_unavailable/u);
+  assert.equal(runner.calls.some(({ command }) => command === process.execPath), false);
 });
