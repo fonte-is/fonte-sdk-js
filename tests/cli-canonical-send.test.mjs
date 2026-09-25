@@ -11,7 +11,7 @@ const requestId = "00000000-0000-4000-8000-000000000741";
 const prepareRequestId = "00000000-0000-4000-8000-000000000749";
 const planId = "00000000-0000-4000-8000-000000000742";
 const broadcastId = "00000000-0000-4000-8000-000000000743";
-const grantId = "00000000-0000-4000-8000-000000000744";
+const grantId = `commercial:grant:v1:sha256:${"a".repeat(64)}`;
 const review = {
   preparation: { commandId: requestId, expectedDraftVersion: 5,
     audienceSnapshotId: "contact_prepared_audience:v2:synthetic",

@@ -461,7 +461,8 @@ function runFreshOperatorProcess(mode, payload) {
         }),
       }),
       canonical: async () => ({
-        prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision),
+        prepare: async ({ requestId, revision, expectedPolicyGeneration }) => ({ status: "ready",
+          review: canonicalReview(requestId, revision, expectedPolicyGeneration),
           renderedArtifactId: "message_artifact:synthetic", renderedArtifactDigest: "sha256:synthetic" }),
         read: async () => null,
         send: async (request) => {
@@ -629,7 +630,8 @@ function createFakes({
       readBroadcastTest: async () => { calls.tests += 1; throw new Error("forbidden test read"); },
     }),
     canonical: async () => ({
-      prepare: async ({ requestId, revision }) => ({ status: "ready", review: canonicalReview(requestId, revision),
+      prepare: async ({ requestId, revision, expectedPolicyGeneration }) => ({ status: "ready",
+        review: canonicalReview(requestId, revision, expectedPolicyGeneration),
         renderedArtifactId: "message_artifact:synthetic", renderedArtifactDigest: "sha256:synthetic" }),
       read: async () => { calls.sendReads += 1; return null; },
       send: async (input) => {
@@ -726,11 +728,11 @@ function applyChanges(draft, changes) {
   return next;
 }
 
-function canonicalReview(requestId, revision) {
+function canonicalReview(requestId, revision, policyGeneration = "contacts_marketing_subscription.v1") {
   return {
     preparation: { commandId: requestId, expectedDraftVersion: revision,
       audienceSnapshotId: "contact_prepared_audience:v2:synthetic",
-      purposePolicyGeneration: "contacts_marketing_subscription.v1",
+      purposePolicyGeneration: policyGeneration,
       activeSource: "composer", clickTrackingEnabled: true, engagementTrackingEnabled: true,
       deliveryRequirements: { geography: [], dataResidency: [], ipCommitment: "either",
         maximumDeliveryDelaySeconds: 3600, excludedProviderIdentities: [],
@@ -740,7 +742,7 @@ function canonicalReview(requestId, revision) {
     timing: { notBefore: "2026-09-25T10:00:00.000Z", expiresAt: "2026-09-25T11:00:00.000Z" },
     sendPlanId: "00000000-0000-4000-8000-000000000743",
     broadcastId: "00000000-0000-4000-8000-000000000744", recipientCount: 1,
-    commercialGrantId: "00000000-0000-4000-8000-000000000745",
+    commercialGrantId: `commercial:grant:v1:sha256:${"a".repeat(64)}`,
     acceptedCandidateDigest: `sha256:${"a".repeat(64)}`,
     acceptedReviewDigest: `sha256:${"b".repeat(64)}`,
   };

@@ -10,7 +10,7 @@ const reviewSchema = z.object({
   preparation: z.object({
     commandId: uuid, expectedDraftVersion: z.number().int().positive().safe(),
     audienceSnapshotId: z.string().min(1),
-    purposePolicyGeneration: z.literal("contacts_marketing_subscription.v1"),
+    purposePolicyGeneration: z.enum(["contacts_marketing_subscription.v1", "csv_marketing_local_baseline.v1"]),
     activeSource: z.enum(["composer", "html"]),
     clickTrackingEnabled: z.literal(true), engagementTrackingEnabled: z.literal(true),
     deliveryRequirements: z.object({
@@ -22,7 +22,8 @@ const reviewSchema = z.object({
   }).strict(),
   timing: z.object({ notBefore: instant, expiresAt: instant }).strict(),
   sendPlanId: uuid, broadcastId: uuid,
-  recipientCount: z.number().int().positive().safe(), commercialGrantId: uuid,
+  recipientCount: z.number().int().positive().safe(),
+  commercialGrantId: z.string().regex(/^commercial:grant:v1:sha256:[0-9a-f]{64}$/u),
   acceptedCandidateDigest: digest, acceptedReviewDigest: digest,
 }).strict();
 export const sendPreparedBroadcastInputSchema = z.object({
