@@ -205,7 +205,9 @@ test("CSV preparation resumes the same durable set after pending and binds only 
     () => preflightRecipientExpression(draftWhilePending.recipient_expression),
     /core_operator_receipt_invalid/u,
   );
-  assert.equal(draftWhilePending.recipient_selection, null);
+  assert.deepEqual(draftWhilePending.recipient_selection, {
+    to: { kind: "selected", references: [] }, except: [],
+  });
   assert.equal(fakes.calls.createdDrafts.length, 1);
   assert.notEqual(fakes.calls.createdDrafts[0].audience_kind, "all_contacts");
   assert.deepEqual(fakes.calls.createdAudiences, [{
@@ -555,6 +557,9 @@ function createFakes({
         audience_kind: input.audience.kind,
         recipient_expression: input.audience.kind === "recipient_expression"
           ? structuredClone(input.audience.expression)
+          : null,
+        recipient_selection: input.audience.kind === "recipient_expression"
+          ? { to: { kind: "selected", references: [] }, except: [] }
           : null,
         communication_purpose_id: input.communicationPurposeId,
         subject: input.subject,

@@ -1340,7 +1340,11 @@ function sameCreatedAudience(
   }
   return draft.audience_kind === "recipient_expression" &&
     stableJson(draft.recipient_expression) === stableJson(audience.expression) &&
-    draft.recipient_selection === null;
+    (draft.recipient_selection === null ||
+      sameBroadcastRecipientSelection(
+        parseBroadcastRecipientSelection(draft.recipient_selection),
+        { to: { kind: "selected", references: [] }, except: [] },
+      ));
 }
 
 function matchesChanges(
