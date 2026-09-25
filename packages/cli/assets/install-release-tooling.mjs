@@ -22,8 +22,9 @@ if (process.env.FONTE_INSTALL_RELEASE_TOOLING === "1") {
       run("git", ["remote", "add", "origin", identity.remote], temporary);
       run("git", ["fetch", "--quiet", "--no-tags", "--depth=2", "origin", identity.revision], temporary);
       run("git", ["checkout", "--quiet", "--detach", identity.revision], temporary);
-      run("npm", ["ci", "--no-audit", "--no-fund"], temporary);
-      run("npm", ["run", "build"], temporary);
+      // npm marks lifecycle children of a global install as global too.
+      run("npm", ["--global=false", "ci", "--no-audit", "--no-fund"], temporary);
+      run("npm", ["--global=false", "run", "build"], temporary);
       assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: temporary, encoding: "utf8" }).trim(),
         identity.revision);
       assert.equal(execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"],
