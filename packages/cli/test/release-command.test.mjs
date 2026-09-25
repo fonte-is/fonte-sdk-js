@@ -3,7 +3,7 @@ import test from "node:test";
 import { installedReleaseExecutorPath, runReleaseCommand } from "../dist/release-command.js";
 
 const source = "a".repeat(40);
-const toolingRevision = "a4ee0987b9abc8c8b81f019a75c5566d2acb9a68";
+const toolingRevision = "a944a2935e14e87c1c6bb5c953230e3d34eb422c";
 
 function releaseRunner({ installed = true } = {}) {
   const calls = [];

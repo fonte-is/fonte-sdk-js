@@ -1,6 +1,6 @@
 {
   "schemaVersion": "fonte_cli_release_tooling_v1",
   "remote": "https://github.com/fonte-is/fonte-core.git",
-  "revision": "a4ee0987b9abc8c8b81f019a75c5566d2acb9a68",
+  "revision": "a944a2935e14e87c1c6bb5c953230e3d34eb422c",
   "executor": ".github/scripts/production-release-direct.mjs"
 }
