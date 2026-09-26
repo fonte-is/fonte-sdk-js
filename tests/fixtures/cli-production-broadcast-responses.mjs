@@ -156,6 +156,7 @@ export function preflight() {
         observedAt: "2026-08-20T17:59:59.000Z",
         max24HourSend: 100,
         effectiveSentLast24Hours: 10,
+        protectedTransactionalReserve: 0,
         dailyRemaining: 90,
         maxSendRate: 10,
         operatingSendsPerSecond: 5,

@@ -1,8 +1,9 @@
 import type { ParsedArguments } from "./types.js";
 import { CliUsageError } from "./errors.js";
-import { RELEASE_HELP_TEXT } from "./constants.js";
 import { operatorHelp } from "./operator-help.js";
 import { parseOperatorArguments } from "./operator-arguments.js";
+import { AUTH_HELP_TEXT } from "./auth-commands.js";
+import { RELEASE_HELP_TEXT } from "./constants.js";
 
 /** Implement exactly the invocation grammar in CONTRACT.md. */
 export function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -12,18 +13,35 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   if (argv.length === 1 && argv[0] === "--version") {
     return { command: "version", apply: false, json: false };
   }
+  if (
+    argv[0] === "auth" &&
+    ((argv.length === 2 && argv[1] === "--help") ||
+      (argv.length === 3 &&
+        ["login", "status", "logout"].includes(argv[1]!) &&
+        argv[2] === "--help"))
+  ) {
+    return {
+      command: "help",
+      apply: false,
+      json: false,
+      helpText: AUTH_HELP_TEXT,
+    };
+  }
   const helpText = operatorHelp(argv);
   if (helpText !== null) {
     return { command: "help", apply: false, json: false, helpText };
   }
   const command = argv[0];
-  if (command === "auth") return parseAuthExecArguments(argv.slice(1));
+  if (command === "setup") return parseSetupArguments(argv.slice(1));
+  if (command === "auth") return parseAuthArguments(argv.slice(1));
   if (command === "release") return parseReleaseArguments(argv.slice(1));
   if (
     command === "broadcast" ||
     command === "bridge" ||
     command === "provider-evidence" ||
-    command === "sequence"
+    command === "sequence" ||
+    command === "campaign" ||
+    command === "segment"
   ) {
     const operator = parseOperatorArguments(argv);
     return {
@@ -87,7 +105,79 @@ function parseReleaseArguments(argv: readonly string[]): ParsedArguments {
   return { command: "release", apply: false, json: false, releaseSource: argv[1] };
 }
 
-function parseAuthExecArguments(argv: readonly string[]): ParsedArguments {
+function parseSetupArguments(argv: readonly string[]): ParsedArguments {
+  let json = false;
+  let workspaceSlug: string | undefined;
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--json" && !json) {
+      json = true;
+      continue;
+    }
+    if (value === "--workspace" && workspaceSlug === undefined) {
+      const next = argv[index + 1];
+      if (!next || next.startsWith("--"))
+        throw new CliUsageError("invalid_setup_flags", {
+          kind: "missing_field",
+          field: "--workspace",
+        });
+      workspaceSlug = next;
+      index += 1;
+      continue;
+    }
+    throw new CliUsageError("invalid_setup_flags", {
+      kind: value === "--workspace" ? "missing_field" : "unknown_field",
+      field: value ?? "setup",
+    });
+  }
+  if (!json)
+    throw new CliUsageError("invalid_setup_flags", {
+      kind: "missing_field",
+      field: "--json",
+    });
+  if (
+    workspaceSlug !== undefined &&
+    (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])$/.test(workspaceSlug) ||
+      workspaceSlug.includes("--"))
+  ) {
+    throw new CliUsageError("invalid_workspace", {
+      kind: "invalid_field",
+      field: "--workspace",
+    });
+  }
+  return {
+    command: "setup",
+    apply: false,
+    json: true,
+    ...(workspaceSlug === undefined ? {} : { workspaceSlug }),
+  };
+}
+
+function parseAuthArguments(argv: readonly string[]): ParsedArguments {
+  const action = argv[0];
+  if (action === "login" || action === "status" || action === "logout") {
+    const flags = argv.slice(1);
+    if (
+      new Set(flags).size !== flags.length ||
+      flags.some(
+        (flag) =>
+          flag !== "--json" &&
+          !(action === "login" && flag === "--switch-account"),
+      )
+    ) {
+      throw new CliUsageError("invalid_auth_flags", {
+        kind: "invalid_field",
+        field: "auth",
+      });
+    }
+    return {
+      command: "auth-session",
+      authAction: action,
+      apply: false,
+      json: flags.includes("--json"),
+      switchAccount: flags.includes("--switch-account"),
+    };
+  }
   const consumerCommand = argv[2];
   const consumerArguments = argv.slice(3);
   if (

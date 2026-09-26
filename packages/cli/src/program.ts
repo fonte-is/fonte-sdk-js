@@ -9,6 +9,11 @@ import {
   VERSION_TEXT,
 } from "./constants.js";
 import { runAuthorizedConsumer } from "./auth-exec.js";
+import {
+  isLoginFailure,
+  loginRecovery,
+  runAuthCommand,
+} from "./auth-commands.js";
 import { verifyInstallation } from "./doctor.js";
 import { CliBlockedError, CliExecutionError, CliUsageError } from "./errors.js";
 import { readOptional } from "./filesystem.js";
@@ -25,6 +30,7 @@ import { renderHuman, renderJson } from "./render.js";
 import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
 import { runOperatorCommand } from "./operator-run.js";
+import { runFonteSetup } from "./local-setup.js";
 import { runReleaseCommand } from "./release-command.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
@@ -53,6 +59,32 @@ export async function runProgram(
   if (parsed.command === "auth-exec") {
     return executeAuthExec(parsed, dependencies);
   }
+  if (parsed.command === "auth-session") {
+    if (!dependencies.auth) return authorizationFailure();
+    return runAuthCommand(
+      parsed.authAction!,
+      parsed.switchAccount ?? false,
+      parsed.json,
+      dependencies.auth,
+    );
+  }
+  if (parsed.command === "setup") {
+    if (!dependencies.setup) return executionFailure();
+    try {
+      const readiness = await runFonteSetup(dependencies.setup, {
+        ...(parsed.workspaceSlug === undefined
+          ? {}
+          : { workspace: parsed.workspaceSlug }),
+      });
+      return {
+        exitCode: readiness.state === "ready" ? 0 : 3,
+        stdout: `${JSON.stringify(readiness)}\n`,
+        stderr: "",
+      };
+    } catch {
+      return executionFailure();
+    }
+  }
   if (parsed.command === "release") {
     if (!dependencies.releaseRunner) return executionFailure();
     try {
@@ -72,7 +104,20 @@ export async function runProgram(
       dependencies.operator,
       dependencies.randomUUID,
     );
-    return receiptResult(receipt, parsed.json, receiptExitCode(receipt));
+    const result =
+      receipt.core_effect === "none" &&
+      isLoginFailure(receipt.reason) &&
+      !receipt.next_action
+        ? {
+            ...receipt,
+            next_action: {
+              kind: "run_command" as const,
+              command: "fonte auth login",
+              retry_mutation: false as const,
+            },
+          }
+        : receipt;
+    return receiptResult(result, parsed.json, receiptExitCode(result));
   }
   const request = { ...parsed, command: parsed.command };
   try {
@@ -118,7 +163,12 @@ async function executeAuthExec(
     );
     return { exitCode: 0, stdout: "", stderr: "" };
   } catch (error) {
-    if (error instanceof HostedTestBlockedError) return authorizationFailure();
+    if (error instanceof HostedTestBlockedError)
+      return {
+        exitCode: 3,
+        stdout: "",
+        stderr: loginRecovery(error),
+      };
     return executionFailure();
   }
 }
@@ -138,7 +188,7 @@ function receiptExitCode(receipt: AnyCliReceipt): 0 | 3 {
       ? 3
       : 0;
   }
-  if (receipt.schema_version !== "fonte.cli.test_receipt.v1") return 0;
+  if (receipt.schema_version !== "fonte.cli.test_receipt.v2") return 0;
   return receipt.outcome === "terminal" &&
     receipt.provider_submission === "accepted"
     ? 0

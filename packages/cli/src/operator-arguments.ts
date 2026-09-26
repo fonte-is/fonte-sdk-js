@@ -1,5 +1,6 @@
 import { CliUsageError } from "./errors.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
+import { parseBroadcastSendInstructionArguments } from "./operator-broadcast-send-instruction-arguments.js";
 import { parseWorkspaceMarketingSettingsArguments } from "./operator-marketing-settings-arguments.js";
 import { parseProviderAudienceArguments } from "./operator-provider-audience-arguments.js";
 import { parseProviderConnectionArguments } from "./operator-provider-connection-arguments.js";
@@ -7,24 +8,15 @@ import { parseProviderEvidenceArguments } from "./operator-provider-evidence-arg
 import { parseProviderRotationArguments } from "./operator-provider-rotation-arguments.js";
 import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import { parseSequenceOperatorArguments } from "./operator-sequence-arguments.js";
+import { parseCampaignOperatorArguments } from "./operator-campaign-arguments.js";
+import { parseSegmentOperatorArguments } from "./operator-segment-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
-const missingBroadcast = new Set([
-  "draft",
-  "audience",
-  "preflight",
-  "authorize",
-  "prepare",
-  "send",
-  "reconcile",
-  "status",
-  "watch",
-  "pause",
-  "resume",
-  "cancel",
-  "close",
-  "duplicate",
-]);
+const missingBroadcast = new Set(
+  "draft audience preflight authorize prepare send reconcile status watch pause resume cancel close duplicate".split(
+    " ",
+  ),
+);
 const bridgeDeclarations = new Set([
   "observe",
   "status",
@@ -37,6 +29,10 @@ const bridgeDeclarations = new Set([
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const campaign = parseCampaignOperatorArguments(argv);
+  if (campaign) return campaign;
+  const segment = parseSegmentOperatorArguments(argv);
+  if (segment) return segment;
   const sequence = parseSequenceOperatorArguments(argv);
   if (sequence) return sequence;
   const marketingSettings = parseWorkspaceMarketingSettingsArguments(argv);
@@ -45,6 +41,8 @@ export function parseOperatorArguments(
   if (providerEvidence) return providerEvidence;
   const providerRotation = parseProviderRotationArguments(argv);
   if (providerRotation) return providerRotation;
+  const broadcastSend = parseBroadcastSendInstructionArguments(argv);
+  if (broadcastSend) return broadcastSend;
   const production = parseProductionOperatorArguments(argv);
   if (production) return production;
   const providerConnection = parseProviderConnectionArguments(argv);

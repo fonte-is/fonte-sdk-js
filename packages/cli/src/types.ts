@@ -2,7 +2,14 @@ import type { OperatorCommand, OperatorReceipt } from "./operator-types.js";
 
 export type CommandName = "init" | "doctor" | "remove" | "test";
 export type ParsedCommand =
-  CommandName | "auth-exec" | "operator" | "release" | "help" | "version";
+  | CommandName
+  | "setup"
+  | "auth-exec"
+  | "auth-session"
+  | "operator"
+  | "release"
+  | "help"
+  | "version";
 
 export interface ParsedArguments {
   command: ParsedCommand;
@@ -11,9 +18,11 @@ export interface ParsedArguments {
   helpText?: string;
   workspaceSlug?: string;
   consumerCommand?: string;
-  consumerArguments?: readonly string[];
-  operator?: OperatorCommand;
   releaseSource?: string;
+  consumerArguments?: readonly string[];
+  authAction?: "login" | "status" | "logout";
+  switchAccount?: boolean;
+  operator?: OperatorCommand;
 }
 
 export interface InvalidInvocationReceipt {
@@ -100,7 +109,8 @@ export type ManagedOperation =
 export interface LocalManifest {
   schema_version: "fonte.local_installation.v1";
   installation_id: string;
-  cli_version: "0.1.0" | "0.1.1" | "0.1.2" | "0.1.3" | "0.1.4" | "0.2.0" | "0.3.1";
+  cli_version:
+    "0.1.0" | "0.1.1" | "0.1.2" | "0.1.3" | "0.1.4" | "0.2.0" | "0.3.0" | "0.3.1" | "0.3.2";
   adapter_id: "next_app_router";
   adapter_version: "v1";
   sdk_package: "@fonte-is/nextjs";
@@ -147,7 +157,7 @@ export interface CliReceipt {
 }
 
 export interface HostedTestReceipt {
-  schema_version: "fonte.cli.test_receipt.v1";
+  schema_version: "fonte.cli.test_receipt.v2";
   command: "test";
   outcome: "terminal" | "blocked";
   reason: string;
@@ -163,8 +173,71 @@ export interface HostedTestReceipt {
   provider_error_code: string | null;
   accepted_email_usage_quantity: number | null;
   inbox_delivery_confirmed: false;
-  token_persisted: false;
+  token_persisted: boolean | null;
+}
+
+export type AuthReason =
+  | "ok"
+  | "authorization_cancelled"
+  | "authorization_failed"
+  | "authorization_interaction_required"
+  | "browser_open_failed"
+  | "hosted_configuration_invalid"
+  | "hosted_configuration_unavailable"
+  | "login_busy"
+  | "login_changed"
+  | "login_invalid"
+  | "login_required"
+  | "login_revoked"
+  | "login_refresh_unavailable"
+  | "login_refresh_uncertain"
+  | "secure_storage_interaction_required"
+  | "secure_storage_unavailable";
+
+export type AuthNextAction =
+  | { readonly kind: "login"; readonly command: "fonte auth login" }
+  | { readonly kind: "retry"; readonly target: "original_command" }
+  | { readonly kind: "unlock_credential_store" }
+  | {
+      readonly kind: "select_user_private_store";
+      readonly command: "fonte auth login";
+    }
+  | { readonly kind: "use_supported_credential_environment" }
+  | null;
+
+export interface AuthStorageInfo {
+  readonly backend: "native_secure_store" | "user_private_file" | null;
+  readonly status: "available" | "unavailable" | "misconfigured";
+}
+
+export interface AuthReceipt {
+  readonly schema_version: "fonte.cli.auth.v2";
+  readonly command: "auth login" | "auth status" | "auth logout";
+  readonly outcome: "completed" | "blocked";
+  readonly state:
+    | "signed_in_local"
+    | "signed_out"
+    | "login_pending"
+    | "refresh_uncertain"
+    | "revoked"
+    | "unavailable";
+  readonly reason: AuthReason;
+  readonly session: {
+    readonly subject: string;
+    readonly issuer: string;
+    readonly client_id: string;
+    readonly core_api_base_url: string;
+  } | null;
+  readonly server_check: "token_issued" | "not_checked";
+  readonly local_logout: "cleared" | "already_signed_out" | "failed" | null;
+  readonly remote_revocation: "revoked" | "unsupported" | "unavailable" | null;
+  readonly next_action: AuthNextAction;
+  readonly storage?: AuthStorageInfo;
 }
 
 export type AnyCliReceipt =
-  CliReceipt | HostedTestReceipt | OperatorReceipt | InvalidInvocationReceipt;
+  | CliReceipt
+  | HostedTestReceipt
+  | OperatorReceipt
+  | InvalidInvocationReceipt
+  | AuthReceipt;

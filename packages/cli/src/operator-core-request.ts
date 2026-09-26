@@ -4,21 +4,26 @@ export interface CoreRequestOptions {
   readonly coreApiBaseUrl: string;
   readonly bearer: string;
   readonly fetch: typeof fetch;
+  readonly maxResponseBytes?: number;
   readonly signal?: AbortSignal;
 }
 
 export interface CorePostOptions {
-  /** POST remains the default; revisioned Core commands may require PUT. */
-  readonly method?: "POST" | "PUT";
+  /** POST remains the default; revisioned Core commands may require PUT/PATCH. */
+  readonly method?: "POST" | "PUT" | "PATCH";
   readonly idempotencyKey?: string;
   readonly body: Record<string, unknown>;
   readonly lostResponseEffect: "none" | "unknown";
   readonly timeoutMs?: number;
 }
 
+export interface CoreReadOptions {
+  readonly timeoutMs?: number;
+}
+
 export type CoreRequester = (
   path: string,
-  post?: CorePostOptions,
+  options?: CorePostOptions | CoreReadOptions,
 ) => Promise<unknown>;
 
 export class CoreOperatorError extends Error {
@@ -40,35 +45,34 @@ export function createCoreRequester(
   if (!bearer || /\s/.test(bearer)) {
     throw new CoreOperatorError("authorization_token_missing", null, "none");
   }
-  return async (path, post) => {
+  const maxResponseBytes = responseLimitBytes(options.maxResponseBytes);
+  return async (path, callOptions) => {
     if (options.signal?.aborted) {
       throw new CoreOperatorError("operation_cancelled", null, "none");
     }
-    const timeoutMs = requestTimeoutMs(post?.timeoutMs);
+    const post = callOptions && "body" in callOptions ? callOptions : undefined;
+    const timeoutMs = requestTimeoutMs(callOptions?.timeoutMs);
+    const request = preparedRequest(baseUrl, bearer, path, post);
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, deadline])
+      : deadline;
     let response: Response;
     try {
-      response = await options.fetch(`${baseUrl}${path}`, {
-        method: post ? (post.method ?? "POST") : "GET",
-        headers: {
-          accept: "application/json",
-          authorization: `Bearer ${bearer}`,
-          ...(post
-            ? {
-                "content-type": "application/json",
-                ...(post.idempotencyKey
-                  ? { "idempotency-key": post.idempotencyKey }
-                  : {}),
-              }
-            : {}),
-        },
-        ...(post ? { body: JSON.stringify(post.body) } : {}),
-        signal: options.signal
-          ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
-          : AbortSignal.timeout(timeoutMs),
+      response = await options.fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        ...(request.body === undefined ? {} : { body: request.body }),
+        redirect: "error",
+        signal,
       });
     } catch {
       if (options.signal?.aborted) {
-        throw new CoreOperatorError("operation_cancelled", null, "none");
+        throw new CoreOperatorError(
+          "operation_cancelled",
+          null,
+          post?.lostResponseEffect ?? "none",
+        );
       }
       throw new CoreOperatorError(
         "core_api_unavailable",
@@ -76,17 +80,202 @@ export function createCoreRequester(
         post?.lostResponseEffect ?? "none",
       );
     }
-    const body: unknown = await response.json().catch(() => null);
+    let rawBody: Uint8Array;
+    try {
+      rawBody = await readResponseBody(response, maxResponseBytes, signal);
+    } catch (error) {
+      if (error instanceof ResponseLimitExceeded) {
+        throw new CoreOperatorError(
+          "core_response_too_large",
+          response.ok ? null : response.status,
+          response.ok
+            ? (post?.lostResponseEffect ?? "none")
+            : failureEffect(post, response.status, "core_response_too_large"),
+        );
+      }
+      if (options.signal?.aborted) {
+        throw new CoreOperatorError(
+          "operation_cancelled",
+          null,
+          post?.lostResponseEffect ?? "none",
+        );
+      }
+      throw new CoreOperatorError(
+        "core_api_unavailable",
+        null,
+        post?.lostResponseEffect ?? "none",
+      );
+    }
+    const parsed = parseResponseBody(rawBody);
     if (!response.ok) {
-      const reason = coreError(body, response.status);
+      const reason = coreError(
+        parsed.ok ? parsed.value : null,
+        response.status,
+      );
       throw new CoreOperatorError(
         reason,
         response.status,
         failureEffect(post, response.status, reason),
       );
     }
-    return body;
+    if (!parsed.ok || parsed.value === null) {
+      throw new CoreOperatorError(
+        "core_operator_receipt_invalid",
+        null,
+        post?.lostResponseEffect ?? "none",
+      );
+    }
+    return parsed.value;
   };
+}
+
+interface PreparedRequest {
+  readonly url: string;
+  readonly method: "GET" | "POST" | "PUT" | "PATCH";
+  readonly headers: Record<string, string>;
+  readonly body: string | undefined;
+}
+
+function preparedRequest(
+  baseUrl: string,
+  bearer: string,
+  path: string,
+  post: CorePostOptions | undefined,
+): PreparedRequest {
+  const url = validatedRequestUrl(baseUrl, path);
+  const method = requestMethod(post?.method, post !== undefined);
+  const headers = {
+    accept: "application/json",
+    authorization: `Bearer ${bearer}`,
+    ...(post
+      ? {
+          "content-type": "application/json",
+          ...(post.idempotencyKey
+            ? { "idempotency-key": post.idempotencyKey }
+            : {}),
+        }
+      : {}),
+  };
+  try {
+    new Headers(headers);
+  } catch {
+    throw new CoreOperatorError("core_request_invalid", null, "none");
+  }
+  let body: string | undefined;
+  try {
+    body = post ? JSON.stringify(post.body) : undefined;
+  } catch {
+    throw new CoreOperatorError("core_request_invalid", null, "none");
+  }
+  if (post && body === undefined) {
+    throw new CoreOperatorError("core_request_invalid", null, "none");
+  }
+  return { url, method, headers, body };
+}
+
+function requestMethod(
+  method: CorePostOptions["method"],
+  hasBody: boolean,
+): PreparedRequest["method"] {
+  if (!hasBody) return "GET";
+  if (method === undefined) return "POST";
+  if (method === "POST" || method === "PUT" || method === "PATCH") {
+    return method;
+  }
+  throw new CoreOperatorError("core_request_invalid", null, "none");
+}
+
+function responseLimitBytes(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value) || value < 1 || value > 1_048_576) {
+    throw new CoreOperatorError("core_response_limit_invalid", null, "none");
+  }
+  return value;
+}
+
+class ResponseLimitExceeded extends Error {}
+
+async function readResponseBody(
+  response: Response,
+  maxBytes: number | undefined,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  const declaredLength = contentLength(response.headers.get("content-length"));
+  if (
+    maxBytes !== undefined &&
+    declaredLength !== null &&
+    declaredLength > maxBytes
+  ) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ResponseLimitExceeded();
+  }
+  if (response.body === null) return new Uint8Array();
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const result = await readChunk(reader, signal);
+      if (result.done) break;
+      const nextLength = length + result.value.byteLength;
+      if (maxBytes !== undefined && nextLength > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new ResponseLimitExceeded();
+      }
+      chunks.push(result.value);
+      length = nextLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) {
+    void reader.cancel(signal.reason).catch(() => undefined);
+    return Promise.reject(signal.reason);
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      void reader.cancel(signal.reason).catch(() => undefined);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    reader
+      .read()
+      .then(resolve, reject)
+      .finally(() => {
+        signal.removeEventListener("abort", onAbort);
+      });
+  });
+}
+
+function contentLength(value: string | null): number | null {
+  if (value === null || !/^(0|[1-9][0-9]*)$/.test(value)) return null;
+  const length = Number(value);
+  return Number.isSafeInteger(length) ? length : null;
+}
+
+function parseResponseBody(
+  body: Uint8Array,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(body)) };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function requestTimeoutMs(value: number | undefined): number {
@@ -144,4 +333,16 @@ function validatedBaseUrl(value: string): string {
     throw new CoreOperatorError("core_api_base_url_invalid", null, "none");
   }
   return url.toString().replace(/\/$/, "");
+}
+
+function validatedRequestUrl(baseUrl: string, path: string): string {
+  if (!path.startsWith("/") || path.startsWith("//") || /[\r\n]/.test(path)) {
+    throw new CoreOperatorError("core_request_invalid", null, "none");
+  }
+  const base = new URL(baseUrl);
+  const url = new URL(`${baseUrl}${path}`);
+  if (url.origin !== base.origin || url.hash) {
+    throw new CoreOperatorError("core_request_invalid", null, "none");
+  }
+  return url.toString();
 }

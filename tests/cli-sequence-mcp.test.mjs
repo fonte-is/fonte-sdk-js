@@ -125,7 +125,7 @@ test("ambiguous MCP Sequence activation is reported once and never retried", asy
   assert.equal(requests, 1);
 });
 
-test("the ephemeral MCP session uses one browser authorization and Core requester", async () => {
+test("the compatibility MCP session reacquires current custody at every tool boundary", async () => {
   let configRequests = 0;
   let authorizations = 0;
   const coreRequests = [];
@@ -160,8 +160,8 @@ test("the ephemeral MCP session uses one browser authorization and Core requeste
   await handlers.read({ ...scope, sequence_id: sequenceId });
   await handlers.activate(activationInput());
 
-  assert.equal(configRequests, 1);
-  assert.equal(authorizations, 1);
+  assert.equal(configRequests, 3);
+  assert.equal(authorizations, 3);
   assert.deepEqual(coreRequests, [
     {
       method: "GET",

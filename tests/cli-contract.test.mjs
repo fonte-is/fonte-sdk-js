@@ -26,7 +26,7 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fonte-is/cli");
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.3.0");
   assert.deepEqual(manifest.bin, {
     fonte: "./dist/main.js",
     "fonte-mcp": "./dist/mcp-main.js",
@@ -204,7 +204,7 @@ test("invalid JSON calls stay private and every current command help matches its
     [["init", "--help"], "[--yes] [--json]"],
     [["doctor", "--help"], "Usage: fonte doctor [--json]"],
     [["test", "--help"], "hosted sandbox proof"],
-    [["auth", "--help"], "fonte auth exec --help"],
+    [["auth", "--help"], "fonte auth login"],
     [["auth", "exec", "--help"], "bearer-bound child"],
     [["remove", "--help"], "Fonte-owned local installation state"],
     [["broadcast", "--help"], "Fonte broadcast commands"],
@@ -217,6 +217,14 @@ test("invalid JSON calls stay private and every current command help matches its
     [["broadcast", "audience", "preview", "--help"], "eligible counts"],
     [["broadcast", "test", "send", "--help"], "--environment sandbox"],
     [["broadcast", "test", "status", "--help"], "--environment production"],
+    [["broadcast", "send", "--help"], "broadcast send now --help"],
+    [["broadcast", "send", "now", "--help"], "one explicit Send effect"],
+    [["broadcast", "send", "schedule", "--help"], "future time"],
+    [["broadcast", "send", "status", "--help"], "GET only"],
+    [
+      ["broadcast", "send", "increase-limit", "--help"],
+      "explicit customer authority",
+    ],
     [["broadcast", "preflight", "--help"], "--expected-version <n>"],
     [["broadcast", "authorize", "--help"], "--idempotency-key <key>"],
     [["broadcast", "status", "--help"], "[--watch]"],
@@ -255,7 +263,7 @@ test("invalid JSON calls stay private and every current command help matches its
     ],
   ]) {
     const result = await runProgram(argv, dependencies);
-    assert.equal(result.exitCode, 0);
+    assert.equal(result.exitCode, 0, argv.join(" "));
     assert.match(
       result.stdout,
       new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),

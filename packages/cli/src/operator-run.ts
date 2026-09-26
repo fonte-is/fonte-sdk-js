@@ -6,6 +6,11 @@ import {
   CoreOperatorError,
 } from "./operator-client.js";
 import { withAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
+import {
+  broadcastSendInstructionReceiptDescriptor,
+  executeBroadcastSendInstructionCommand,
+  isBroadcastSendInstructionCommand,
+} from "./operator-broadcast-send-instruction-run.js";
 import { withAmbiguousSequenceRecovery } from "./operator-sequence-recovery.js";
 import {
   executeProviderAudienceCommand,
@@ -44,10 +49,27 @@ import {
   isSequenceCommand,
   sequenceReceiptDescriptor,
 } from "./operator-sequence-run.js";
+import {
+  campaignFailureReceipt,
+  campaignReceiptDescriptor,
+  executeCampaignCommand,
+  isCampaignCommand,
+} from "./operator-campaign-run.js";
+import {
+  executeSegmentCommand,
+  isSegmentCommand,
+  segmentFailureReceipt,
+  segmentReceiptDescriptor,
+} from "./operator-segment-run.js";
 import { runBroadcastCanary } from "./operator-broadcast-canary.js";
+import { createCoreRequester } from "./operator-core-request.js";
+import { createCanonicalBroadcastClient } from "./operator-broadcast-canonical-send.js";
+import { createBroadcastDraftLifecycleClient } from "./operator-broadcast-draft-lifecycle-client.js";
+import { sendPrepared } from "./operator-broadcast-paved.js";
 import type {
   OperatorCommand,
   OperatorReceipt,
+  OperatorReceiptResult,
   OperatorResult,
   SandboxTestResult,
 } from "./operator-types.js";
@@ -94,12 +116,70 @@ export async function runOperatorCommand(
       dependencies.configUrl,
     );
     const bearer = await dependencies.authorize(config, dependencies.signal);
+    if (command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
+      || command.kind === "broadcast_canonical_control") {
+      const request = createCoreRequester({ coreApiBaseUrl: config.coreApiBaseUrl, bearer,
+        fetch: dependencies.fetch as typeof fetch, signal: dependencies.signal });
+      const canonical = createCanonicalBroadcastClient(request);
+      if (command.kind === "broadcast_canonical_send") {
+        return sendPrepared(command.sendInput, {
+          draftLifecycle: async () => createBroadcastDraftLifecycleClient(request),
+          canonical: async () => canonical,
+        });
+      }
+      if (command.kind === "broadcast_canonical_control") {
+        const operation = await canonical.control(command);
+        return currentReceipt(command, { kind: "executable_broadcast_operation", status: "accepted", operation },
+          operation.phase === "complete" || operation.phase === "ended" ? "terminal"
+            : operation.phase === "paused" ? "blocked" : "queued",
+          `broadcast_send_${operation.phase}`, "controlled");
+      }
+      const operation = await canonical.read({ workspace: command.workspace, draftId: command.draftId });
+      return {
+        schema_version: "fonte.cli.operator_receipt.v1", command: command.kind,
+        outcome: operation === null ? "completed" : operation.phase === "complete" || operation.phase === "ended"
+          ? "terminal" : operation.phase === "paused" ? "blocked" : "queued",
+        reason: operation === null ? "broadcast_send_operation_absent" : `broadcast_send_${operation.phase}`,
+        workspace: command.workspace,
+        authority: { status: "current", contract_id: "fonte.core.broadcast_send" },
+        core_effect: "none", result: operation === null ? null
+          : { kind: "executable_broadcast_operation", status: "accepted", operation },
+      };
+    }
     const client = createCoreOperatorClient({
       coreApiBaseUrl: config.coreApiBaseUrl,
       bearer,
       fetch: dependencies.fetch as typeof fetch,
       signal: dependencies.signal,
     });
+    if (isCampaignCommand(command)) {
+      const result = await executeCampaignCommand(
+        command,
+        client.campaignMetadata,
+      );
+      const descriptor = campaignReceiptDescriptor(command, result);
+      return currentReceipt(
+        command,
+        result,
+        descriptor.outcome,
+        descriptor.reason,
+        descriptor.coreEffect,
+      );
+    }
+    if (isSegmentCommand(command)) {
+      const result = await executeSegmentCommand(
+        command,
+        client.segmentMetadata,
+      );
+      const descriptor = segmentReceiptDescriptor(command, result);
+      return currentReceipt(
+        command,
+        result,
+        descriptor.outcome,
+        descriptor.reason,
+        descriptor.coreEffect,
+      );
+    }
     const result = await execute(
       command,
       client,
@@ -112,6 +192,9 @@ export async function runOperatorCommand(
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
+    if (isCampaignCommand(command))
+      return campaignFailureReceipt(command, error);
+    if (isSegmentCommand(command)) return segmentFailureReceipt(command, error);
     return withAmbiguousSequenceRecovery(
       command,
       withAmbiguousBroadcastRecovery<OperatorReceipt>(command, {
@@ -149,6 +232,9 @@ async function execute(
     client,
   );
   if (marketingSettings) return marketingSettings;
+  if (isBroadcastSendInstructionCommand(command)) {
+    return executeBroadcastSendInstructionCommand(command, client, sleep);
+  }
   if (isSequenceCommand(command))
     return executeSequenceCommand(command, client);
   if (isProviderConnectionCommand(command)) {
@@ -238,6 +324,17 @@ function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
 ): OperatorReceipt {
+  if (result.kind === "broadcast_send_operation") {
+    const send = broadcastSendInstructionReceiptDescriptor(command, result);
+    if (!send) throw new TypeError("operator_receipt_unmappable");
+    return currentReceipt(
+      command,
+      result,
+      send.outcome,
+      send.reason,
+      send.coreEffect,
+    );
+  }
   const providerEvidence = providerEvidenceReceiptDescriptor(command, result);
   if (providerEvidence) {
     return currentReceipt(
@@ -359,7 +456,7 @@ function successReceipt(
 }
 function currentReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
-  result: OperatorResult,
+  result: OperatorReceiptResult,
   outcome: "queued" | "terminal" | "completed" | "blocked",
   reason: string,
   coreEffect:
@@ -401,36 +498,48 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind === "sequence_activate"
-      ? "fonte.core.sequence_activation.v1"
-      : command.kind.startsWith("sequence_")
-        ? "fonte.core.sequence_authoring.v1"
-      : command.kind === "workspace_marketing_settings_read"
-        ? "fonte.core.workspace_marketing_settings.v1"
-        : command.kind === "broadcast_preflight"
-          ? "fonte.core.broadcast_preflight.v1"
-          : command.kind === "broadcast_audience_append"
-            ? "fonte.core.production_broadcast_audience_append.v1"
-            : command.kind.startsWith("broadcast_") &&
-                command.kind !== "broadcast_test_send" &&
-                command.kind !== "broadcast_test_status"
-              ? "fonte.core.production_broadcast.v1"
-              : command.kind === "bridge_contact_import_status"
-                ? "fonte.core.contact_import.v1"
-                : command.kind.startsWith("bridge_provider_placement_")
-                  ? "fonte.core.provider_placement_application.v1"
-                  : command.kind.startsWith("bridge_provider_rotation_")
-                    ? "fonte.core.provider_rotation_partition.v1"
-                    : command.kind.startsWith("bridge_resend_")
-                      ? "fonte.core.resend_bridge.v1"
-                      : command.kind.startsWith("bridge_connection_")
-                        ? "fonte.core.provider_connections.v1"
-                        : command.kind.startsWith("bridge_provider_")
-                          ? "fonte.core.provider_audience.v1"
-                          : command.kind.startsWith(
-                                "provider_evidence_candidate_",
-                              )
-                            ? "fonte.core.provider_evidence_candidate.v1"
-                            : "fonte.core.sandbox_canary.v1",
+    contract_id: command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
+      || command.kind === "broadcast_canonical_control"
+      ? "fonte.core.broadcast_send"
+      : command.kind.startsWith("campaign_")
+      ? "fonte.core.campaign_configuration.v1"
+      : command.kind.startsWith("segment_")
+        ? "fonte.core.native_segment.v1"
+        : command.kind.startsWith("broadcast_send_") ||
+            command.kind === "broadcast_schedule" ||
+            command.kind === "broadcast_schedule_replace" ||
+            command.kind === "broadcast_spend_limit_increase"
+          ? "fonte.core.broadcast_send_instruction.v3"
+          : command.kind === "sequence_activate"
+            ? "fonte.core.sequence_activation.v1"
+            : command.kind.startsWith("sequence_")
+              ? "fonte.core.sequence_authoring.v1"
+              : command.kind === "workspace_marketing_settings_read"
+                ? "fonte.core.workspace_marketing_settings.v1"
+                : command.kind === "broadcast_preflight"
+                  ? "fonte.core.broadcast_preflight.v1"
+                  : command.kind === "broadcast_audience_append"
+                    ? "fonte.core.production_broadcast_audience_append.v1"
+                    : command.kind.startsWith("broadcast_") &&
+                        command.kind !== "broadcast_test_send" &&
+                        command.kind !== "broadcast_test_status"
+                      ? "fonte.core.production_broadcast.v1"
+                      : command.kind === "bridge_contact_import_status"
+                        ? "fonte.core.contact_import.v1"
+                        : command.kind.startsWith("bridge_provider_placement_")
+                          ? "fonte.core.provider_placement_application.v1"
+                          : command.kind.startsWith("bridge_provider_rotation_")
+                            ? "fonte.core.provider_rotation_partition.v1"
+                            : command.kind.startsWith("bridge_resend_")
+                              ? "fonte.core.resend_bridge.v1"
+                              : command.kind.startsWith("bridge_connection_")
+                                ? "fonte.core.provider_connections.v1"
+                                : command.kind.startsWith("bridge_provider_")
+                                  ? "fonte.core.provider_audience.v1"
+                                  : command.kind.startsWith(
+                                        "provider_evidence_candidate_",
+                                      )
+                                    ? "fonte.core.provider_evidence_candidate.v1"
+                                    : "fonte.core.sandbox_canary.v1",
   };
 }

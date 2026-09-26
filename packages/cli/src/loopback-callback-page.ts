@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 export type CallbackPageOutcome = "pending" | "complete" | "failed" | "expired";
 
+export const callbackCompleteScript = "try { window.close(); } catch {}";
+
 const content = {
   pending: {
     title: "Completing authorization",
@@ -160,6 +162,7 @@ export function renderCallbackPage(outcome: CallbackPageOutcome): string {
         <p class="description">${copy.description}</p>
       </div>
     </main>
+    ${outcome === "complete" ? `<script>${callbackCompleteScript}</script>` : ""}
   </body>
 </html>`;
 }

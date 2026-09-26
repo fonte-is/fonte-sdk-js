@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageDirectory = path.join(root, "packages", "cli");
 const packageName = "@fonte-is/cli";
-const packageVersion = "0.2.0";
+const packageVersion = "0.3.0";
 const registryUrl = "https://registry.npmjs.org/";
 const reviewedPackageRef = "9f682498864534031611520059cbc0d11d041916";
 const reviewedSourceTree = "101863430e72514e46816ce0b3c8902cf3927b65";

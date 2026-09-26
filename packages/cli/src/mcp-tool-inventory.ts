@@ -1,0 +1,78 @@
+import {
+  MCP_BROADCAST_DRAFT_CREATE_TOOL,
+  MCP_BROADCAST_DRAFT_READ_TOOL,
+} from "./mcp-broadcast-draft-lifecycle-tools.js";
+import { MCP_BROADCAST_DRAFT_REVISION_TOOL } from "./mcp-broadcast-draft-revision-tools.js";
+import {
+  MCP_BROADCAST_HTML_PREPARE_TOOL,
+  MCP_BROADCAST_HTML_REVISE_TOOL,
+} from "./mcp-broadcast-html-preparation-tools.js";
+import {
+  MCP_BROADCAST_RENDER_TOOL,
+  MCP_BROADCAST_TEST_READ_TOOL,
+  MCP_BROADCAST_TEST_REQUEST_TOOL,
+} from "./mcp-broadcast-render-test-tools.js";
+import {
+  MCP_BROADCAST_SENDER_LIST_TOOL,
+  MCP_BROADCAST_SENDER_UPDATE_TOOL,
+} from "./mcp-broadcast-sender-tools.js";
+import {
+  MCP_BROADCAST_SCHEDULE_REPLACE_TOOL,
+  MCP_BROADCAST_SCHEDULE_TOOL,
+  MCP_BROADCAST_SEND_CANCEL_TOOL,
+  MCP_BROADCAST_SEND_NOW_TOOL,
+  MCP_BROADCAST_SEND_READ_TOOL,
+  MCP_BROADCAST_SPEND_LIMIT_INCREASE_TOOL,
+} from "./mcp-broadcast-send-instruction-tools.js";
+import { MCP_BROADCAST_TARGETING_UPDATE_TOOL } from "./mcp-broadcast-targeting-tools.js";
+import {
+  MCP_BROADCAST_PREPARE_PAVED_TOOL,
+  MCP_BROADCAST_SEND_PAVED_TOOL,
+} from "./mcp-broadcast-paved-tools.js";
+import { MCP_CAMPAIGN_TOOLS } from "./mcp-campaign-tools.js";
+import { MCP_SEGMENT_TOOLS } from "./mcp-segment-tools.js";
+import { MCP_SEQUENCE_TOOLS } from "./mcp-sequence-tools.js";
+import { MCP_FONTE_STATUS_TOOL } from "./mcp-status-types.js";
+import { MCP_WORKSPACE_LIST_TOOL } from "./mcp-workspace-catalog-tools.js";
+
+export const MCP_SEQUENCE_ALLOWLIST = { tools: MCP_SEQUENCE_TOOLS } as const;
+
+export const MCP_CAMPAIGN_SEGMENT_TOOLS = [
+  ...MCP_SEQUENCE_TOOLS,
+  ...MCP_CAMPAIGN_TOOLS,
+  ...MCP_SEGMENT_TOOLS,
+] as const;
+
+export const MCP_BROADCAST_TOOLS = [
+  MCP_BROADCAST_DRAFT_CREATE_TOOL,
+  MCP_BROADCAST_DRAFT_READ_TOOL,
+  MCP_BROADCAST_DRAFT_REVISION_TOOL,
+  MCP_BROADCAST_SENDER_LIST_TOOL,
+  MCP_BROADCAST_SENDER_UPDATE_TOOL,
+  MCP_BROADCAST_TARGETING_UPDATE_TOOL,
+  MCP_BROADCAST_RENDER_TOOL,
+  MCP_BROADCAST_TEST_REQUEST_TOOL,
+  MCP_BROADCAST_TEST_READ_TOOL,
+  MCP_BROADCAST_SEND_NOW_TOOL,
+  MCP_BROADCAST_SCHEDULE_TOOL,
+  MCP_BROADCAST_SEND_READ_TOOL,
+  MCP_BROADCAST_SCHEDULE_REPLACE_TOOL,
+  MCP_BROADCAST_SEND_CANCEL_TOOL,
+  MCP_BROADCAST_SPEND_LIMIT_INCREASE_TOOL,
+  MCP_BROADCAST_HTML_PREPARE_TOOL,
+  MCP_BROADCAST_HTML_REVISE_TOOL,
+] as const;
+
+/** Canonical registration and setup/status inventory for the one local host. */
+export const MCP_FONTE_TOOLS = [
+  MCP_FONTE_STATUS_TOOL,
+  MCP_BROADCAST_PREPARE_PAVED_TOOL,
+  MCP_BROADCAST_SEND_PAVED_TOOL,
+  MCP_WORKSPACE_LIST_TOOL,
+  ...MCP_SEQUENCE_TOOLS,
+  ...MCP_BROADCAST_TOOLS,
+  ...MCP_CAMPAIGN_TOOLS,
+  ...MCP_SEGMENT_TOOLS,
+] as const;
+
+export const MCP_FONTE_ALLOWLIST = { tools: MCP_FONTE_TOOLS } as const;

@@ -14,7 +14,7 @@ export function renderHuman(receipt: AnyCliReceipt): string {
   if (receipt.schema_version === "fonte.cli.operator_receipt.v1") {
     return renderOperatorHuman(receipt);
   }
-  if (receipt.schema_version === "fonte.cli.test_receipt.v1")
+  if (receipt.schema_version === "fonte.cli.test_receipt.v2")
     return renderTest(receipt);
   if (receipt.schema_version === "fonte.cli.invalid_invocation.v1") {
     return [
@@ -91,7 +91,7 @@ function renderTest(receipt: HostedTestReceipt): string {
     `Sandbox draft retained: ${receipt.sandbox_draft_id}.`,
     "Inbox delivery confirmed: no.",
     "Production email: locked pending a verified domain.",
-    "Credential stored: no.",
+    `Refresh credential stored: ${receipt.token_persisted === null ? "unknown" : receipt.token_persisted ? "yes" : "no"}.`,
     "",
   ].join("\n");
 }

@@ -1,6 +1,8 @@
 import type { AnyCliReceipt } from "./types.js";
 import type { HostedConfig } from "./hosted-config.js";
 import type { OperatorDependencies } from "./operator-run.js";
+import type { AuthCommandDependencies } from "./auth-commands.js";
+import type { FonteSetupDependencies } from "./local-setup.js";
 
 export interface ProjectProfile {
   root: string;
@@ -35,8 +37,10 @@ export interface ProgramDependencies {
   runner: CommandRunner;
   releaseRunner?: CapturedCommandRunner;
   authExec?: AuthorizedConsumerDependencies;
+  auth?: AuthCommandDependencies;
   operator?: OperatorDependencies;
   hosted?: HostedTestDependencies;
+  setup?: FonteSetupDependencies;
 }
 
 export interface AuthorizedConsumerDependencies {
@@ -53,6 +57,7 @@ export interface AuthorizedConsumerDependencies {
 }
 
 export interface HostedTestDependencies {
+  credentialPersisted?(): boolean | null;
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
   authorize(config: HostedConfig): Promise<string>;
   sleep(milliseconds: number): Promise<void>;

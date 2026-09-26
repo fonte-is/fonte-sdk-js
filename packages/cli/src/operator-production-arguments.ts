@@ -4,6 +4,7 @@ import {
   boundedText,
   controlVersion,
   idempotencyKey,
+  invalidProductionArguments,
   isProduction,
   operatorArguments,
   positiveInteger,
@@ -218,6 +219,25 @@ function control(
   name: "pause" | "resume" | "cancel" | "close",
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  if (argv.includes("--draft-id")) {
+    if (name === "close") invalidProductionArguments("invalid_field", "broadcast close");
+    const options = productionRead(argv, [
+      "--draft-id", "--operation-id", "--request-id", "--expected-generation",
+    ]);
+    const expected = controlVersion(required(options, "--expected-generation"), "--expected-generation");
+    if (!Number.isSafeInteger(Number(expected))) {
+      invalidProductionArguments("invalid_field", "--expected-generation");
+    }
+    return operatorArguments(options, {
+      kind: "broadcast_canonical_control",
+      workspace: workspace(options),
+      draftId: uuid(required(options, "--draft-id"), "--draft-id"),
+      operationId: uuid(required(options, "--operation-id"), "--operation-id"),
+      requestId: uuid(required(options, "--request-id"), "--request-id"),
+      expectedGeneration: Number(expected),
+      action: name,
+    });
+  }
   const options = productionRead(argv, [
     "--broadcast-id",
     "--expected-control-version",

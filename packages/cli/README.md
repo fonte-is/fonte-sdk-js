@@ -19,12 +19,12 @@ npx @fonte-is/cli sequence export --workspace my-workspace --environment sandbox
 npx @fonte-is/cli sequence simulate --workspace my-workspace --environment sandbox --sequence-id welcome-sequence --entered-at-ms 0 --assumed-accepted-at-ms '{"welcome":0}' --json
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment sandbox --draft-id <uuid> --revision 1 --idempotency-key <key>
 npx @fonte-is/cli broadcast test status --workspace my-workspace --environment sandbox --test-id <uuid> --watch
-npx @fonte-is/cli broadcast preflight --workspace my-workspace --environment production --draft-id <uuid> --expected-version 3 --postal-address "1 Synthetic Way"
 npx @fonte-is/cli broadcast audience options --workspace my-workspace --environment production
 npx @fonte-is/cli broadcast draft create --workspace my-workspace --environment production --idempotency-key <uuid> --title "Product update" --subject "August update" --body "<p>Hello</p>" --sender-profile-id <id> --communication-purpose-id <uuid> --all-contacts
 npx @fonte-is/cli broadcast audience preview --workspace my-workspace --environment production --draft-id <uuid>
 npx @fonte-is/cli broadcast test send --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
-npx @fonte-is/cli broadcast authorize --workspace my-workspace --environment production --draft-id <uuid> --revision 1 --postal-address "1 Synthetic Way" --idempotency-key <key>
+npx @fonte-is/cli broadcast send --send-input '<exact reviewed send_input JSON>' --json
+npx @fonte-is/cli broadcast send status --workspace my-workspace --environment production --draft-id <uuid> --json
 npx @fonte-is/cli broadcast status --workspace my-workspace --environment production --broadcast-id <uuid> --watch
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
 npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
@@ -73,20 +73,43 @@ retrying. A `rollback_failed` result means automatic restoration could not be
 proved; stop and inspect `package.json`, the lockfile, `.gitignore`, `fonte/`,
 and `.fonte/` rather than rerunning the command blindly.
 
-`fonte test` first requires a passing local installation check. It then opens
-Fonte in the browser for consent and requests one sandbox email to the verified
-email address on the signed-in account. The short-lived OAuth access token stays
-in memory for that command and is discarded when the process exits. No token is
-copied into the terminal or written to disk.
+## Persistent sign-in
 
-`fonte auth exec -- <command> [args...]` reuses that official browser flow
-without running the sandbox provider proof. It directly spawns the command
-without a shell and supplies the short-lived access token only as
-`FONTE_HUMAN_BEARER` in the child's environment. The CLI never places the
-token in command arguments, terminal output, receipts, files, or persistent
-credential storage. The child should read the value once, delete it from
-`process.env`, keep it in memory for the local bootstrap, and avoid rendering
-it:
+Run `fonte auth login` once. Later `auth exec`, broadcast, Bridge and hosted test
+commands reuse that sign-in and refresh silently. `fonte auth status` reports
+local custody without discovery or server validation; `fonte auth logout` removes this machine's
+stored CLI credential, including when the identity service is unreachable.
+All three commands support `--json`. Use `fonte auth login --switch-account`
+to replace the current CLI sign-in explicitly. Set `FONTE_NONINTERACTIVE=1` to
+disable browser and native human interaction; other values are invalid.
+
+The refresh credential is stored through Fonte's private native adapter using
+macOS Keychain, Windows Credential Manager, or Linux Secret Service on the
+packaged targets. These facilities must be available and unlocked. Linux never
+falls back to kernel keyutils or Windows custody under WSL. There is no plaintext
+file, environment-variable, shell-command, or alternate native-store fallback.
+Local installation commands remain available without credential storage.
+
+Each new process obtains a fresh access token and verifies the authenticated
+user through the configured issuer. Login is bound to the exact issuer, client,
+scopes, API target, redirect and user. Refresh, logout and account changes are
+serialized across processes. Interrupted or uncertain refresh requires a new
+login; no old refresh token is silently retried. Core still checks workspace,
+environment and action permission for every command. Logout removes local
+custody but remote revocation is unsupported in this release; it cannot revoke
+an already handed-off child's bearer or another installation.
+
+`fonte test` requires a passing installation check and requests one sandbox email
+to the signed-in account's verified email. Its v2 receipt reports
+`token_persisted: true` only for confirmed secure refresh custody, `false` for
+known absence, and `null` when a failed store operation leaves custody unknown.
+Access tokens remain in memory and are discarded on process exit.
+
+`fonte auth exec -- <command> [args...]` directly spawns the command without a
+shell and supplies its ephemeral access token only as `FONTE_HUMAN_BEARER` in
+the child's environment. No token is placed in arguments, terminal output,
+receipts, or plaintext files. The child should read the value once, delete it
+from `process.env`, keep it in memory, and avoid rendering it:
 
 ```js
 const bearer = process.env.FONTE_HUMAN_BEARER;
@@ -98,13 +121,12 @@ await bootstrapLocalCore({ bearer });
 The spawned consumer owns its subsequent API use. This command itself makes
 no Core API, provider, email, or production request.
 
-## Sequence authoring and activation MCP
+## Sequence and Broadcast MCP
 
 `fonte-mcp` is a stdio MCP server for the same Core-owned Sequence authoring
-and activation surface as the `fonte sequence` commands. It has exactly nine
-tools: list, read, create, update, validate, diff, export, simulate, and
-activate. It keeps the browser OAuth bearer only in memory and uses no local
-Sequence state.
+surface and the bounded Broadcast draft, targeting, render, test, and v3 Send
+surfaces as the corresponding `fonte` commands. It keeps the browser OAuth
+bearer only in memory and uses no local workflow state.
 
 Activation freezes one exact Core draft revision and its sender/scope/render
 references. It cannot enroll a subscriber, select a recipient, send email,
@@ -114,6 +136,14 @@ is ambiguous, the server returns `outcome: "ambiguous"` with
 `core_effect: "unknown"`; it never resubmits the mutation. A draft mutation
 can be read through `fonte_read_sequence`; activation intentionally receives no
 invented readback because a draft read cannot prove an activated version.
+
+For Broadcast, `fonte_send_broadcast_now` and `fonte_schedule_broadcast` are
+the one explicit human-approval handoff. They submit the saved draft version
+directly to Core without a machine-side review, audience preparation, exact
+count, quote, payment, or provider call. `fonte_read_broadcast_send_operation`
+is GET-only observation. Schedule replacement, cancellation, and the narrowly
+structured spend-limit action bind Core's exact current generations; they do
+not invent authority or reconstruct billing state.
 
 See [MCP_CONTRACT.md](./MCP_CONTRACT.md) for the fixed tool allowlist and
 authentication boundary.
@@ -167,9 +197,12 @@ accepted email contributes one included sandbox usage unit. Account creation,
 arbitrary recipients, production email, and transactional application email
 remain unavailable; production capability requires the verified-domain journey.
 
-The operator commands are thin browser-authorized Core clients and do not
-require a Next.js project. V1 implements the fixed sandbox canary, the bounded
-production draft/audience/test/preflight/authorization/control/result journey,
+The operator commands are thin stored-session Core clients and do not
+require a Next.js project. The current Broadcast v3 path accepts one saved
+draft cheaply and observes the durable operation without recipient-scale work.
+The earlier V1 surface remains for compatible existing operations, including
+the fixed sandbox canary and the bounded production
+draft/audience/test/preflight/authorization/control/result journey,
 Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
 collection discovery, reconciliation, and explicit fingerprint-bound audience
 freeze. Contact-import status returns Core's exact completed batch UUID and
@@ -186,6 +219,17 @@ Preflight observes one exact persisted draft revision. Authorization reuses
 Core's existing authority and immutable recipient freeze. Lost mutation
 responses remain unknown until explicit readback. Unexposed declarations return
 `unsupported_authority` before OAuth or network access.
+
+## Broadcast Send
+
+The local Fonte host returns a reviewed `send_input` only after durable
+audience Prepare is ready. `broadcast send --send-input` accepts that exact
+input, confirms its commercial review, and submits canonical Send once. Core
+creates the executable Broadcast in the Send transaction. If the POST response
+is ambiguous, the CLI reads the stored operation using the same plan and
+request identity; it never posts Send again. `broadcast send status` is GET only.
+The old `broadcast authorize`, `broadcast send now`, and `broadcast send
+schedule` commands refuse new sends with `canonical_send_review_required`.
 
 The candidate evidence journey is JSON-only and the rotation journey is
 aggregate-only. Rotation follows one closed sequence: `start`, `read`, then
@@ -212,7 +256,7 @@ authority, receipt, and future MCP boundary.
 ## Sequence authoring and activation
 
 `sequence list`, `read`, `create`, `update`, `validate`, `diff`, `export`, and
-`simulate` are thin browser-authorized Core clients over the same persisted
+`simulate` are thin stored-session Core clients over the same persisted
 Sequence definition used by future Web views and runtime work. `sequence
 activate` freezes one exact persisted revision and its Core binding. None of
 the commands create local Sequence state. Definitions and activation bindings

@@ -1,4 +1,4 @@
-export const CLI_VERSION = "0.3.1";
+export const CLI_VERSION = "0.3.2";
 export const SDK_PACKAGE = "@fonte-is/nextjs";
 export const SDK_VERSION = "0.1.0";
 export const ADAPTER_ID = "next_app_router";
@@ -54,14 +54,20 @@ export const RECONCILE_COMMAND = [
 
 export const USAGE_TEXT = [
   "Usage:",
+  "  fonte setup --json [--workspace <slug>]",
   "  fonte init [--yes] [--json]",
   "  fonte doctor [--json]",
   "  fonte test --workspace <slug> [--json]",
   "  fonte auth exec -- <command> [args...]",
+  "  fonte auth login [--switch-account] [--json]",
+  "  fonte auth status [--json]",
+  "  fonte auth logout [--json]",
+  "  fonte release --source <remote-sha>",
   "  fonte broadcast <command> ... [--json]",
   "  fonte bridge <command> ... [--json]",
   "  fonte provider-evidence resend <command> ... --json",
-  "  fonte release --source <remote-sha>",
+  "  fonte campaign <list|read|create|update|receipt> ... [--json]",
+  "  fonte segment <list|read|create|update|archive|restore|receipt> ... [--json]",
   "  fonte remove [--yes] [--json]",
   "  fonte --help",
   "  fonte --version",
@@ -74,8 +80,10 @@ export const HELP_TEXT = [
   USAGE_TEXT.trimEnd(),
   "",
   "init and remove print a plan unless --yes is supplied.",
-  "test opens Fonte in your browser and requests one sandbox provider proof.",
-  "auth exec opens Fonte in your browser and runs one bearer-bound child.",
+  "auth login signs in once and selects a credential store; auth logout signs out.",
+  "Later commands refresh silently. Core checks permission for every action.",
+  "test requests one sandbox provider proof.",
+  "auth exec runs one bearer-bound child using your Fonte sign-in.",
   "Run fonte <command> --help for each command's admitted flags and authority.",
   "broadcast test help distinguishes the sandbox canary from production tests.",
   "broadcast production commands consume Core's draft, audience, test, preflight, authorization, control, and result authority.",
@@ -83,7 +91,6 @@ export const HELP_TEXT = [
   "bridge connections list/connect/reconnect use native Resend or Kit OAuth through Core.",
   "bridge collections/reconcile/freeze use Core's provider-audience authority.",
   "provider-evidence resend commands use Core's candidate-scoped GET-only acquisition authority.",
-  "release sends one exact remote commit to the installed production release runtime.",
   "All other broadcast and Bridge declarations have no Core effect.",
   "Transactional application email remains locked.",
   "",

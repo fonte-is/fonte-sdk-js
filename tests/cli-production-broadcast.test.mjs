@@ -241,7 +241,7 @@ test("one isolated fake-Core journey exercises every production operator route w
   assert.equal(receipts[6].result.ready, true);
   assert.equal(receipts[7].result.broadcast_id, broadcastId);
   assert.equal(receipts[10].result.status, "terminal");
-  assert.equal(receipts[11].result.status, "cancelled");
+  assert.equal(receipts[11].result.status, "closed");
   assert.equal(
     receipts[12].result.audience_targeting.communication_purpose_id,
     purposeId,

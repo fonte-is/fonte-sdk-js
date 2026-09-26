@@ -1,6 +1,8 @@
 import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
 import { providerEvidenceHelpEntries } from "./operator-provider-evidence-help.js";
 import { workspaceMarketingSettingsHelpEntries } from "./operator-marketing-settings-help.js";
+import { CAMPAIGN_OPERATOR_HELP } from "./operator-campaign-help.js";
+import { SEGMENT_OPERATOR_HELP } from "./operator-segment-help.js";
 export interface HelpEntry {
   readonly command: readonly string[];
   readonly usage: readonly (readonly string[])[];
@@ -35,7 +37,7 @@ const entries: readonly HelpEntry[] = [
   {
     command: ["auth", "exec"],
     usage: [["-- <command> [args...]"]],
-    detail: "Browser-authorizes and directly starts one bearer-bound child.",
+    detail: "Uses your sign-in to start one bearer-bound child.",
   },
   {
     command: ["remove"],
@@ -148,6 +150,8 @@ const entries: readonly HelpEntry[] = [
       "Previews a draft timeline using explicit assumed delivery acceptances; it never enrolls or sends.",
     json: true,
   },
+  ...metadataHelpEntries(CAMPAIGN_OPERATOR_HELP),
+  ...metadataHelpEntries(SEGMENT_OPERATOR_HELP),
   ...workspaceMarketingSettingsHelpEntries,
   {
     command: ["broadcast", "draft", "create"],
@@ -227,6 +231,79 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["broadcast", "send", "now"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-version <n> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Accepts one saved Broadcast instruction immediately. This is the one explicit Send effect; it performs no review, audience preparation, quote, payment, or provider work.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "schedule"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-version <n> --not-before <ISO-8601> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Accepts one saved Broadcast instruction for the exact future time. Expensive work remains backend-owned and does not begin before it is due.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "status"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid> [--watch]",
+      ],
+    ],
+    detail:
+      "Observes the durable Send operation with GET only. It never prepares, authorizes, retries, or otherwise advances work.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "replace-schedule"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-instruction-generation <n> --expected-version <n>",
+        "--not-before <ISO-8601> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Atomically replaces an unclaimed scheduled instruction with the current saved draft revision and exact timing.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "cancel"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-instruction-generation <n> --request-id <uuid>",
+      ],
+    ],
+    detail:
+      "Requests the generation-fenced v3 cancellation through Core; it never calls a queue or provider directly.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "increase-limit"],
+    usage: [
+      [
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--expected-instruction-generation <n> --expected-approval-generation <n>",
+        "--request-id <uuid>",
+      ],
+    ],
+    detail:
+      "After explicit customer authority, applies Core's exact required recurring account limit and amends approval for the same operation. The client performs no cost math.",
+    json: true,
+  },
+  {
     command: ["broadcast", "preflight"],
     usage: [
       [
@@ -270,18 +347,22 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one browser authorization.",
+      "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one bound sign-in.",
     json: true,
   },
-  ...(["pause", "resume", "close", "cancel"] as const).map((operation) => ({
+  ...(["pause", "resume", "cancel", "close"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [
+      ...(operation === "close" ? [] : [[
+        "--workspace <slug> --environment production --draft-id <uuid>",
+        "--operation-id <uuid> --request-id <uuid> --expected-generation <n>",
+      ]]),
       [
         "--workspace <slug> --environment production --broadcast-id <uuid>",
         "--expected-control-version <n>",
       ],
     ],
-    detail: `${operation[0]!.toUpperCase()}${operation.slice(1)} binds Core's observed control version for a state-idempotent operation; stale opposing commands fail without retry.`,
+    detail: `${operation[0]!.toUpperCase()}${operation.slice(1)} controls the exact canonical Send operation; broadcast-id syntax is retained for historical broadcasts only.`,
     json: true,
   })),
   {
@@ -353,7 +434,7 @@ const entries: readonly HelpEntry[] = [
   ]),
   ...providerAudienceHelpEntries,
   ...providerEvidenceHelpEntries,
-  ...(["prepare", "send", "reconcile", "watch", "duplicate"] as const).map(
+  ...(["prepare", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({
       command: ["broadcast", operation],
       usage: [[]],
@@ -401,9 +482,32 @@ export function operatorRecoveryCommand(argv: readonly string[]): string {
   );
   return entry
     ? `fonte ${entry.command.join(" ")} --help`
-    : argv[0] === "broadcast" || argv[0] === "sequence"
+    : argv[0] === "broadcast" ||
+        argv[0] === "sequence" ||
+        argv[0] === "campaign" ||
+        argv[0] === "segment"
       ? `fonte ${argv[0]} --help`
       : "fonte --help";
+}
+
+function metadataHelpEntries(source: string): readonly HelpEntry[] {
+  return source.split("\n").map((line) => {
+    const [binary, group, operation, ...tokens] = line.trim().split(/\s+/u);
+    if (
+      binary !== "fonte" ||
+      !group ||
+      !operation ||
+      tokens.at(-1) !== "[--json]"
+    ) {
+      throw new Error("operator_metadata_help_invalid");
+    }
+    return {
+      command: [group, operation],
+      usage: [[tokens.slice(0, -1).join(" ")]],
+      detail: `Uses the existing Core ${group} metadata API.`,
+      json: true,
+    };
+  });
 }
 
 function render(entry: HelpEntry): string {
@@ -417,7 +521,7 @@ function render(entry: HelpEntry): string {
     ]),
     "",
     entry.detail,
-    "OAuth is ephemeral; Core remains the sole authority for admitted operations.",
+    "Access tokens stay in memory; Core authorizes every operation.",
     "",
   ].join("\n");
 }

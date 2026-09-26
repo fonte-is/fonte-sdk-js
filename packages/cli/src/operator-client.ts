@@ -8,7 +8,21 @@ import {
   createCoreRequester,
   CoreOperatorError,
   parseCoreReceipt,
+  type CoreRequester,
 } from "./operator-core-request.js";
+import {
+  createBroadcastSendInstructionClient,
+  type BroadcastSendInstructionClient,
+} from "./operator-broadcast-send-instruction-client.js";
+import {
+  CAMPAIGN_SEGMENT_RESPONSE_MAX_BYTES,
+  createCampaignMetadataClient,
+  type CampaignMetadataClient,
+} from "./operator-campaign-client.js";
+import {
+  createSegmentMetadataClient,
+  type SegmentMetadataClient,
+} from "./operator-segment-client.js";
 import {
   createWorkspaceMarketingSettingsClient,
   type WorkspaceMarketingSettingsClient,
@@ -56,6 +70,21 @@ export type {
 } from "./operator-types.js";
 export type { BroadcastPreflightInput } from "./operator-preflight-client.js";
 export type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+export type {
+  AcceptBroadcastSendInput,
+  AmendBroadcastSendApprovalInput,
+  BroadcastSendAllowedAction,
+  BroadcastSendDelivery,
+  BroadcastSendOperation,
+  BroadcastSendOperationPhase,
+  BroadcastSendOperationResult,
+  BroadcastSendTiming,
+  BroadcastSpendLimitRequiredAction,
+  CancelBroadcastSendInput,
+  ReadBroadcastSendOperationInput,
+  ReplaceBroadcastSendScheduleInput,
+  ResolveBroadcastSpendLimitInput,
+} from "./operator-broadcast-send-instruction-types.js";
 export type {
   ContactImportStatusInput,
   ContactImportStatusResult,
@@ -190,7 +219,10 @@ export interface CoreOperatorClient
     ProviderEvidenceClient,
     WorkspaceInvitationClient,
     WorkspaceMarketingSettingsClient,
-    SequenceAuthoringClient {
+    SequenceAuthoringClient,
+    BroadcastSendInstructionClient {
+  readonly campaignMetadata: CampaignMetadataClient;
+  readonly segmentMetadata: SegmentMetadataClient;
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
   readSandboxTest(input: SandboxTestReadInput): Promise<SandboxTestResult>;
   preflightBroadcast(
@@ -230,7 +262,17 @@ export interface ResendBridgeCopyInput extends ResendBridgePreviewInput {
 export function createCoreOperatorClient(
   options: CoreOperatorClientOptions,
 ): CoreOperatorClient {
-  const request = createCoreRequester(options);
+  const request = createCoreRequester({
+    ...options,
+    maxResponseBytes: CAMPAIGN_SEGMENT_RESPONSE_MAX_BYTES,
+  });
+  return createCoreOperatorClientWithRequester(request);
+}
+
+/** Composes operator clients over the caller's existing bounded requester. */
+export function createCoreOperatorClientWithRequester(
+  request: CoreRequester,
+): CoreOperatorClient {
   return {
     ...createProductionOperatorClient(request),
     ...createProviderAudienceClient(request),
@@ -239,6 +281,9 @@ export function createCoreOperatorClient(
     ...createWorkspaceInvitationClient(request),
     ...createWorkspaceMarketingSettingsClient(request),
     ...createSequenceAuthoringClient(request),
+    ...createBroadcastSendInstructionClient(request),
+    campaignMetadata: createCampaignMetadataClient(request),
+    segmentMetadata: createSegmentMetadataClient(request),
     async sendSandboxTest(input) {
       const response = await request(
         `/v1/workspaces/${segment(input.workspace)}/email-sandbox/canaries?environment=sandbox`,
