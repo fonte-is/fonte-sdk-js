@@ -13,7 +13,10 @@ import { type BroadcastRenderTestClientProvider } from "./mcp-broadcast-render-t
 import { registerMcpBroadcastSenderTools } from "./mcp-broadcast-sender-registration.js";
 import { type BroadcastSenderClientProvider } from "./mcp-broadcast-sender-tools.js";
 import { registerMcpBroadcastTargetingTool } from "./mcp-broadcast-targeting-registration.js";
-import { registerMcpBroadcastSendInstructionTools } from "./mcp-broadcast-send-instruction-registration.js";
+import {
+  registerMcpBroadcastSendInstructionTools,
+  MCP_BROADCAST_LEGACY_SEND_READ_TOOL,
+} from "./mcp-broadcast-send-instruction-registration.js";
 import { type BroadcastSendInstructionClientProvider } from "./mcp-broadcast-send-instruction-tools.js";
 import { type BroadcastTargetingClientProvider } from "./mcp-broadcast-targeting-tools.js";
 import { type WorkspaceCatalogClientProvider } from "./mcp-workspace-catalog-tools.js";
@@ -32,6 +35,11 @@ import { createBroadcastSenderClient } from "./operator-broadcast-sender-client.
 import { createBroadcastTargetingClient } from "./operator-broadcast-targeting-client.js";
 import { createBroadcastSendInstructionClient } from "./operator-broadcast-send-instruction-client.js";
 import { createCanonicalBroadcastClient } from "./operator-broadcast-canonical-send.js";
+import { createAuthenticatedBroadcastProvider } from "./broadcast-runtime.js";
+import {
+  registerMcpBroadcastBgTools,
+  type BroadcastMcpProvider,
+} from "./mcp-broadcast-bg-tools.js";
 import {
   createBroadcastRecipientSetClient,
   type BroadcastRecipientSetClient,
@@ -44,11 +52,6 @@ import { registerMcpCampaignTools } from "./mcp-campaign-registration.js";
 import { registerMcpSegmentTools } from "./mcp-segment-registration.js";
 import { registerFonteStatusTool } from "./mcp-status-registration.js";
 import type { FonteReadinessReader } from "./mcp-readiness.js";
-import { registerMcpBroadcastPavedTools } from "./mcp-broadcast-paved-registration.js";
-import {
-  createBroadcastPavedOperator,
-  type BroadcastPavedOperator,
-} from "./operator-broadcast-paved.js";
 import { createProductionDraftClient } from "./operator-production-draft-client.js";
 import {
   createCoreOperatorClientWithRequester,
@@ -65,10 +68,10 @@ export {
 export const MCP_SERVER_NAME = "fonte";
 
 export type SequenceMcpSessionOptions = McpClientAuthOptions;
-export type BroadcastRecipientSetClientProvider = () => Promise<
-  BroadcastRecipientSetClient
->;
+export type BroadcastRecipientSetClientProvider =
+  () => Promise<BroadcastRecipientSetClient>;
 export interface FonteMcpClientProviders {
+  readonly broadcastBg: BroadcastMcpProvider;
   readonly workspaceCatalog: WorkspaceCatalogClientProvider;
   readonly sequence: SequenceMcpClientProvider;
   readonly broadcastDraftLifecycle: BroadcastDraftLifecycleClientProvider;
@@ -77,7 +80,9 @@ export interface FonteMcpClientProviders {
   readonly broadcastTargeting: BroadcastTargetingClientProvider;
   readonly broadcastRenderTest: BroadcastRenderTestClientProvider;
   readonly broadcastSendInstruction: BroadcastSendInstructionClientProvider;
-  readonly canonicalBroadcast: () => Promise<ReturnType<typeof createCanonicalBroadcastClient>>;
+  readonly canonicalBroadcast: () => Promise<
+    ReturnType<typeof createCanonicalBroadcastClient>
+  >;
   readonly broadcastRecipientSets: BroadcastRecipientSetClientProvider;
   readonly broadcastHtmlPreparation: BroadcastHtmlPreparationClientProvider;
   readonly campaignMetadata: () => Promise<
@@ -116,6 +121,7 @@ export function createDurableFonteMcpSession(
     render,
   });
   return {
+    broadcastBg: createAuthenticatedBroadcastProvider(options),
     workspaceCatalog: async () =>
       createWorkspaceCatalogClient((await authenticated()).request),
     sequence: async () =>
@@ -187,22 +193,10 @@ export function createFonteMcpServer(
 ): McpServer {
   const server = mcpServer(fonteInstructions);
   registerFonteStatusTool(server, readinessReader);
-  const broadcastPavedOperator: BroadcastPavedOperator =
-    createBroadcastPavedOperator({
-      workspaceCatalog: providers.workspaceCatalog,
-      readSelectedWorkspace: () => readinessReader.readSelectedWorkspace(),
-      draftLifecycle: providers.broadcastDraftLifecycle,
-      draftRevision: providers.broadcastDraftRevision,
-      senders: providers.broadcastSender,
-      targeting: providers.broadcastTargeting,
-      productionDrafts: providers.productionDrafts,
-      render: providers.broadcastRenderTest,
-      send: providers.broadcastSendInstruction,
-      canonical: providers.canonicalBroadcast,
-      recipientSetSupplier: providers.broadcastRecipientSets,
-      readFile: readBroadcastLocalFile,
-    });
-  registerMcpBroadcastPavedTools(server, broadcastPavedOperator);
+  registerMcpBroadcastBgTools(server, async () => ({
+    ...(await providers.broadcastBg()),
+    readSelectedWorkspace: () => readinessReader.readSelectedWorkspace(),
+  }));
   registerMcpWorkspaceCatalogTool(server, providers.workspaceCatalog);
   registerMcpSequenceTools(server, providers.sequence);
   registerMcpBroadcastDraftLifecycleTools(
@@ -219,6 +213,7 @@ export function createFonteMcpServer(
   registerMcpBroadcastSendInstructionTools(
     server,
     providers.broadcastSendInstruction,
+    { readToolName: MCP_BROADCAST_LEGACY_SEND_READ_TOOL },
   );
   registerMcpBroadcastHtmlPreparationTools(
     server,
@@ -240,4 +235,4 @@ const sequenceInstructions =
   "The local fonte-mcp stdio host provides Sequence draft authoring and version activation through Fonte Core using the selected local Fonte credential store; it does not share credentials with hosted MCP or the legacy private transport. For login_required, login_changed, login_revoked, or login_refresh_uncertain, run fonte auth login outside MCP. For secure_storage_interaction_required, unlock the selected credential store and retry. For secure_storage_unavailable, run interactive fonte auth login to choose the supported per-user session file, then restart MCP. MCP never prompts or switches storage. This server cannot enroll, send, deliver, or manage recipients.";
 
 const fonteInstructions =
-  "The local Fonte host provides fonte_status, fonte_prepare_broadcast, and fonte_send_broadcast as the normal Broadcast path. Use fonte_prepare_broadcast repeatedly as needed. It may prepare a CSV audience from an explicitly supplied audience_file; if preparation returns preparing, call fonte_prepare_broadcast again with the same input. This requires no human input. Preparation never Sends, Schedules, Test Sends, or calls an email provider. Send is a separate explicit action and requires the exact send_input returned by a ready_to_send preparation. If preparation asks for missing information or choices, resolve only that prompt before preparing again. The host also exposes workspace discovery, existing Sequence and Broadcast operations, including verified-account test request/readback, and Campaign/Segment metadata. Sender discovery matches verified profiles and does not guess among ambiguous choices. Initialize and tools/list never log in. For sign-in readiness, follow the one next_action from fonte_status. For secure-storage recovery, run fonte auth login outside MCP when asked. MCP never prompts, changes credential storage, or switches workspaces. This host does not share credentials with hosted MCP or the legacy private transport.";
+  "The normal Broadcast path is fonte_prepare_broadcast to request Core's review of an exact draft version, explicit user approval, then fonte_send_broadcast with the approved review references. Preparation never authorizes execution. Observe the returned operation URI with fonte_read_broadcast_send_operation. After response loss use fonte_recover_broadcast_request with the same saved request key; never generate another Send. Processing is not executable and an executable job is not evidence of provider acceptance. Changed inputs require an explicitly approved new review and a version-checked revision of the same unstarted operation. Existing authoring, testing, scheduling and historical control tools remain available. Sender discovery never guesses among ambiguous profiles. Initialize and tools/list never log in. Follow fonte_status for sign-in readiness; run fonte auth login outside MCP for secure-storage recovery. MCP never prompts, switches credential storage or switches workspaces.";

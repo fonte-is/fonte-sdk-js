@@ -18,6 +18,8 @@ const handleSignals =
   process.argv[2] === "auth" ||
   (process.argv[2] === "broadcast" &&
     (process.argv[3] === "canary" ||
+      process.argv[3] === "review" ||
+      process.argv[3] === "operation" ||
       process.argv[3] === "send" ||
       (process.argv[3] === "audience" && process.argv[4] === "append")));
 if (handleSignals) {

@@ -1,20 +1,23 @@
-import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
-
+import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
-
-import { CoreOperatorError } from "../../packages/cli/dist/operator-core-request.js";
 import {
   createFonteMcpServer,
   MCP_FONTE_TOOLS,
 } from "../../packages/cli/dist/mcp-sequence-server.js";
+import { createAuthenticatedBroadcastProvider } from "../../packages/cli/dist/broadcast-runtime.js";
+import { createBroadcastFileStore } from "../../packages/cli/dist/broadcast-file-store.js";
+import {
+  coreOrigin,
+  scope,
+  workspaceId,
+  reviewRequest,
+  ready,
+  json,
+} from "./broadcast-bg1.mjs";
 
-const workspace = "northstar";
-const draftId = "00000000-0000-4000-8000-000000000751";
-const senderId = "sender-synthetic-primary";
-const purposeId = "purpose-synthetic-primary";
-const csvPath = process.env.PAVED_CSV_FILE;
 const proofPath = process.env.PAVED_PROOF_FILE;
+const storeDirectory = process.env.PAVED_REQUEST_DIRECTORY;
 const counts = {
   selectedWorkspaceReads: 0,
   supplierProviderCalls: 0,
@@ -22,188 +25,136 @@ const counts = {
   supplierReadCalls: 0,
   sendCalls: 0,
   draftReadWorkspace: null,
+  legacyCanonicalProviderCalls: 0,
+  legacyPrepareCalls: 0,
+  legacySendCalls: 0,
+  legacyOtherProviderCalls: 0,
+  quoteConfirmCalls: 0,
+  bgReviewPosts: 0,
+  catalogReads: 0,
 };
-
-const draft = {
-  draft_id: draftId,
-  title: "Synthetic draft",
-  sender_profile_id: senderId,
-  reply_to: null,
-  audience_kind: "recipient_expression",
-  audience_contact_import_batch_id: null,
-  recipient_expression: { include: [], exclude: [] },
-  recipient_selection: null,
-  communication_purpose_id: purposeId,
-  subscription_name: null,
-  subject: "Synthetic subject",
-  preheader: null,
-  text_body: "Synthetic body",
-  active_source: "composer",
-  composer_body: "Synthetic body",
-  html_body: null,
-  created_at: "2026-09-24T10:00:00.000Z",
-  updated_at: "2026-09-24T10:00:00.000Z",
+const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
+const hosted = {
+  schema: "fonte.cli.hosted_config.v1",
+  authorizationServer: "https://identity.example.test/auth/v1",
+  clientId: "fonte-cli-client-v0",
+  coreApiBaseUrl: coreOrigin,
+  redirectUri: "http://127.0.0.1:49671/callback",
+  scopes: ["email"],
 };
-
+const neverLegacy = async () => {
+  counts.legacyOtherProviderCalls++;
+  throw new Error("unexpected_legacy_supplier");
+};
 const providers = {
-  workspaceCatalog: async () => ({
-    async listWorkspaces() {
-      return [
-        {
-          slug: "other-workspace",
-          name: "Other Workspace",
-          role: "owner",
-          available_environments: ["production"],
-        },
-        {
-          slug: workspace,
-          name: "Northstar",
-          role: "owner",
-          available_environments: ["production"],
-        },
-      ];
+  broadcastBg: createAuthenticatedBroadcastProvider({
+    configUrl,
+    authorize: async () => "synthetic-bg1-prepare-bearer",
+    store: createBroadcastFileStore(storeDirectory),
+    fetch: async (input, init = {}) => {
+      if (String(input) === configUrl) return json(hosted);
+      const uri = new URL(String(input));
+      assert.equal(uri.origin, coreOrigin);
+      if (uri.pathname === "/v1/workspaces") {
+        counts.catalogReads++;
+        return json({
+          workspaces: [
+            {
+              workspaceId,
+              tenantId: "tenant_bg1",
+              accountId: "account_bg1",
+              slug: scope.workspace,
+              workspaceSlug: scope.workspace,
+              workspaceCode: scope.workspace,
+              displayName: "Synthetic BG-1",
+              role: "owner",
+              availableEnvironments: [scope.environment],
+            },
+          ],
+        });
+      }
+      if (uri.pathname.endsWith("/send-plan")) counts.quoteConfirmCalls++;
+      assert.equal(
+        uri.pathname,
+        `/v1/workspaces/${scope.workspace}/broadcast-drafts/${scope.draftId}/broadcast-review`,
+      );
+      assert.equal(uri.searchParams.get("environment"), scope.environment);
+      assert.equal(init.method, "POST");
+      assert.equal(init.redirect, "error");
+      assert.deepEqual(JSON.parse(init.body), reviewRequest);
+      counts.bgReviewPosts++;
+      return json(ready);
     },
   }),
-  sequence: async () => ({}),
+  workspaceCatalog: neverLegacy,
+  sequence: neverLegacy,
   broadcastDraftLifecycle: async () => ({
     async readBroadcastDraft(input) {
       counts.draftReadWorkspace = input.workspace;
-      return {
-        kind: "broadcast_draft",
-        outcome: null,
-        draft_id: draftId,
-        revision: 1,
-        draft: structuredClone(draft),
-      };
+      throw new Error("unexpected_legacy_draft_read");
     },
   }),
-  broadcastDraftRevision: async () => ({}),
-  broadcastSender: async () => ({
-    async listBroadcastSenders() {
-      return {
-        kind: "broadcast_sender_catalog",
-        sender_profiles: [
-          {
-            sender_profile_id: senderId,
-            name: "Synthetic Sender",
-            email: "sender@example.test",
-            default_reply_to: "reply@example.test",
-          },
-        ],
-      };
-    },
-    async updateBroadcastSender() {
-      throw new Error("unexpected_sender_update");
-    },
-  }),
-  broadcastTargeting: async () => ({
-    async updateBroadcastTargeting() {
-      throw new Error("unexpected_targeting_update");
-    },
-  }),
-  broadcastRenderTest: async () => ({
-    async renderBroadcastDraft() {
-      throw new Error("unexpected_render");
-    },
-  }),
+  broadcastDraftRevision: neverLegacy,
+  broadcastSender: neverLegacy,
+  broadcastTargeting: neverLegacy,
+  broadcastRenderTest: neverLegacy,
   broadcastSendInstruction: async () => {
-    counts.sendCalls += 1;
-    throw new Error("unexpected_send");
+    counts.sendCalls++;
+    throw new Error("unexpected_legacy_send");
   },
   broadcastRecipientSets: async () => {
-    counts.supplierProviderCalls += 1;
+    counts.supplierProviderCalls++;
     return {
-      async readBroadcastRecipientSet(input) {
-        counts.supplierReadCalls += 1;
-        if (counts.supplierCreateCalls === 0) {
-          throw new CoreOperatorError(
-            "broadcast_recipient_set_not_found",
-            404,
-            "none",
-          );
-        }
-        return {
-          kind: "broadcast_recipient_set",
-          one_time_set_id: input.setId,
-          draft_id: input.draftId,
-          status: "pending",
-          operation_status: "pending",
-          contact_import_batch_id: null,
-          created_at: "2026-09-24T10:00:00.000Z",
-          population_effect: "broadcast_only_not_everyone",
-        };
+      async readBroadcastRecipientSet() {
+        counts.supplierReadCalls++;
+        throw new Error("unexpected_csv_supplier_read");
       },
-      async createBroadcastRecipientSet(input) {
-        counts.supplierCreateCalls += 1;
-        if (input.csvFilePath !== csvPath) {
-          throw new Error("unexpected_csv_path");
-        }
-        const bytes = readFileSync(input.csvFilePath);
-        return {
-          recipient_set: {
-            kind: "broadcast_recipient_set",
-            one_time_set_id: input.setId,
-            draft_id: input.draftId,
-            status: "pending",
-            operation_status: "pending",
-            contact_import_batch_id: null,
-            created_at: "2026-09-24T10:00:00.000Z",
-            population_effect: "broadcast_only_not_everyone",
-          },
-          source: {
-            file_name: "synthetic-audience.csv",
-            sha256: createHash("sha256").update(bytes).digest("hex"),
-            byte_length: bytes.byteLength,
-            row_count: 1,
-          },
-        };
+      async createBroadcastRecipientSet() {
+        counts.supplierCreateCalls++;
+        throw new Error("unexpected_csv_supplier_create");
       },
     };
   },
-  productionDrafts: async () => ({
-    async listProductionAudienceOptions() {
-      return {
-        kind: "broadcast_audience_options",
-        communication_purposes: [
-          { communication_purpose_id: purposeId, label: "Marketing" },
-        ],
-        sources: [],
-      };
-    },
-  }),
-  campaignMetadata: async () => ({}),
-  segmentMetadata: async () => ({}),
-  broadcastHtmlPreparation: async () => ({}),
+  canonicalBroadcast: async () => {
+    counts.legacyCanonicalProviderCalls++;
+    return {
+      async prepare() {
+        counts.legacyPrepareCalls++;
+        throw new Error("unexpected_legacy_quote");
+      },
+      async send() {
+        counts.legacySendCalls++;
+        throw new Error("unexpected_legacy_confirm");
+      },
+      async read() {
+        throw new Error("unexpected_legacy_send_read");
+      },
+    };
+  },
+  productionDrafts: neverLegacy,
+  campaignMetadata: neverLegacy,
+  segmentMetadata: neverLegacy,
+  broadcastHtmlPreparation: neverLegacy,
 };
-
 const readinessReader = {
-  async inspectHost() {
-    return { initialized: true, tools: MCP_FONTE_TOOLS };
-  },
-  async readSession() {
-    return {
-      status: { state: "ready", serverCheck: "not_checked" },
-      storageAvailable: true,
-    };
-  },
-  async listWorkspaces() {
-    return [
-      { slug: "other-workspace", name: "Other Workspace" },
-      { slug: workspace, name: "Northstar" },
-    ];
-  },
-  async readSelectedWorkspace() {
-    counts.selectedWorkspaceReads += 1;
-    return workspace;
+  inspectHost: async () => ({ initialized: true, tools: MCP_FONTE_TOOLS }),
+  readSession: async () => ({
+    status: { state: "ready", serverCheck: "not_checked" },
+    storageAvailable: true,
+  }),
+  listWorkspaces: async () => [
+    { slug: "legacy-selected-workspace", name: "Legacy selected workspace" },
+  ],
+  readSelectedWorkspace: async () => {
+    counts.selectedWorkspaceReads++;
+    return "legacy-selected-workspace";
   },
 };
-
-const server = createFonteMcpServer(providers, readinessReader);
 process.once("SIGTERM", () => {
-  if (proofPath) writeFileSync(proofPath, JSON.stringify(counts), "utf8");
+  if (proofPath) writeFileSync(proofPath, JSON.stringify(counts));
   process.exit(0);
 });
-await server.connect(
+await createFonteMcpServer(providers, readinessReader).connect(
   new StdioServerTransport(process.stdin, process.stdout, {
     maxBufferSize: 1_048_576,
   }),
