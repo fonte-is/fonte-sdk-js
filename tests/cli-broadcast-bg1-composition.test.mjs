@@ -14,6 +14,7 @@ import {
 } from "../packages/cli/dist/operator-workspace-catalog-client.js";
 import { MCP_FONTE_TOOLS } from "../packages/cli/dist/mcp-sequence-server.js";
 import { runProgram } from "../packages/cli/dist/program.js";
+import { HostedTestBlockedError } from "../packages/cli/dist/hosted-errors.js";
 import {
   coreOrigin,
   scope,
@@ -168,6 +169,47 @@ test("actual program help describes exact review, recovery and read-only observa
     });
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, text);
+  }
+});
+
+test("actual program preserves the original request key when login fails before any Core effect", async () => {
+  const scoped = [
+    "--workspace",
+    scope.workspace,
+    "--environment",
+    scope.environment,
+    "--draft-id",
+    scope.draftId,
+  ];
+  for (const args of [
+    [
+      "broadcast",
+      "review",
+      ...scoped,
+      "--request-id",
+      requestId,
+      "--expected-version",
+      "1",
+    ],
+    ["broadcast", "send", "--send-input", JSON.stringify(saved())],
+    ["broadcast", "send", "recover", ...scoped, "--request-id", requestId],
+  ]) {
+    const result = await runProgram([...args, "--json"], {
+      cwd: process.cwd(),
+      randomUUID: () => assert.fail("must preserve the existing request key"),
+      runner: {
+        run: () => assert.fail("login failure must not start a process"),
+      },
+      broadcast: async () => {
+        throw new HostedTestBlockedError("login_required");
+      },
+    });
+    assert.equal(result.exitCode, 3);
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(receipt.reason, "login_required");
+    assert.equal(receipt.core_effect, "none");
+    assert.equal(receipt.request_id, requestId);
+    assert.equal(receipt.operation, null);
   }
 });
 

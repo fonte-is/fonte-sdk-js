@@ -68,7 +68,14 @@ export async function runBroadcastProgram(
   } catch (error) {
     const result = {
       ...sequenceMcpFailure(error),
-      request_id: null,
+      request_id:
+        command.kind === "broadcast_bg_send"
+          ? command.input.request.requestId
+          : command.kind === "broadcast_bg_review"
+            ? command.input.requestId
+            : command.kind === "broadcast_bg_recover"
+              ? command.requestId
+              : null,
       operation: null,
     };
     return {

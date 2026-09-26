@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { BroadcastClientOptions } from "./broadcast-client.js";
+import type { BroadcastScope } from "./broadcast-contracts.js";
+import { CoreOperatorError } from "./operator-core-request.js";
 import {
   runBroadcastCommand,
   type BroadcastCommand,
@@ -22,7 +24,10 @@ export const MCP_BROADCAST_BG_TOOLS = {
 const ceiling = z.number().int().min(1).max(2_147_483_647).default(60_000);
 const wait = z.number().int().min(0).max(2_147_483_647).default(0);
 const observation = { request_timeout_ms: ceiling, wait_ms: wait };
-export const broadcastBgReviewToolInput = broadcastScopeSchema.extend({
+const selectedScope = broadcastScopeSchema.extend({
+  workspace: broadcastScopeSchema.shape.workspace.optional(),
+});
+export const broadcastBgReviewToolInput = selectedScope.extend({
   request: broadcastReviewRequestSchema,
   ...observation,
 });
@@ -30,11 +35,11 @@ export const broadcastBgSendToolInput = z.strictObject({
   send_input: savedBroadcastRequestSchema,
   ...observation,
 });
-export const broadcastBgRecoverToolInput = broadcastScopeSchema.extend({
+export const broadcastBgRecoverToolInput = selectedScope.extend({
   request_id: broadcastUuid,
   ...observation,
 });
-export const broadcastBgReadToolInput = broadcastScopeSchema.extend({
+export const broadcastBgReadToolInput = selectedScope.extend({
   operation_uri: z.string().min(1).max(2048),
   kind: z.enum(["review", "send"]).default("send"),
   ...observation,
@@ -42,22 +47,24 @@ export const broadcastBgReadToolInput = broadcastScopeSchema.extend({
 export interface BroadcastMcpDependencies extends BroadcastClientOptions {
   readonly sleep: (milliseconds: number) => Promise<void>;
   readonly now?: () => number;
+  readonly readSelectedWorkspace?: () => Promise<string | null>;
 }
 export type BroadcastMcpProvider = () => Promise<BroadcastMcpDependencies>;
 
 export function createBroadcastBgToolHandlers(provider: BroadcastMcpProvider) {
-  const execute = async (command: BroadcastCommand) => {
+  const execute = async (
+    requestId: string | null,
+    command: (
+      dependencies: BroadcastMcpDependencies,
+    ) => Promise<BroadcastCommand>,
+  ) => {
     try {
-      return await runBroadcastCommand(command, await provider());
+      const dependencies = await provider();
+      return await runBroadcastCommand(
+        await command(dependencies),
+        dependencies,
+      );
     } catch (error) {
-      const requestId =
-        command.kind === "broadcast_bg_send"
-          ? command.input.request.requestId
-          : command.kind === "broadcast_bg_review"
-            ? command.input.requestId
-            : command.kind === "broadcast_bg_recover"
-              ? command.requestId
-              : null;
       return {
         ...sequenceMcpFailure(error),
         request_id: requestId,
@@ -79,20 +86,20 @@ export function createBroadcastBgToolHandlers(provider: BroadcastMcpProvider) {
         wait_ms: _wait,
         ...scope
       } = value;
-      return execute({
+      return execute(body.requestId, async (dependencies) => ({
         kind: "broadcast_bg_review",
-        scope,
+        scope: await resolveScope(scope, dependencies),
         input: body,
         ...common(value),
-      });
+      }));
     },
     async send(input: unknown) {
       const value = broadcastBgSendToolInput.parse(input);
-      return execute({
+      return execute(value.send_input.request.requestId, async () => ({
         kind: "broadcast_bg_send",
         input: value.send_input,
         ...common(value),
-      });
+      }));
     },
     async recover(input: unknown) {
       const value = broadcastBgRecoverToolInput.parse(input);
@@ -102,12 +109,12 @@ export function createBroadcastBgToolHandlers(provider: BroadcastMcpProvider) {
         wait_ms: _wait,
         ...scope
       } = value;
-      return execute({
+      return execute(requestId, async (dependencies) => ({
         kind: "broadcast_bg_recover",
-        scope,
+        scope: await resolveScope(scope, dependencies),
         requestId,
         ...common(value),
-      });
+      }));
     },
     async read(input: unknown) {
       const value = broadcastBgReadToolInput.parse(input);
@@ -118,15 +125,26 @@ export function createBroadcastBgToolHandlers(provider: BroadcastMcpProvider) {
         wait_ms: _wait,
         ...scope
       } = value;
-      return execute({
+      return execute(null, async (dependencies) => ({
         kind: "broadcast_bg_read",
-        scope,
+        scope: await resolveScope(scope, dependencies),
         operationUri,
         operationKind,
         ...common(value),
-      });
+      }));
     },
   };
+}
+async function resolveScope(
+  scope: Omit<BroadcastScope, "workspace"> & { readonly workspace?: string },
+  dependencies: BroadcastMcpDependencies,
+): Promise<BroadcastScope> {
+  const workspace =
+    scope.workspace ?? (await dependencies.readSelectedWorkspace?.());
+  const result = broadcastScopeSchema.safeParse({ ...scope, workspace });
+  if (!result.success)
+    throw new CoreOperatorError("workspace_selection_required", null, "none");
+  return result.data;
 }
 /** Root composes this once in the authenticated MCP session, replacing the existing normal
  * fonte_prepare_broadcast/send/read registrations. Never duplicate tool names or retired now. */

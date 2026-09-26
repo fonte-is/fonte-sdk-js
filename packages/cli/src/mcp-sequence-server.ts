@@ -193,7 +193,10 @@ export function createFonteMcpServer(
 ): McpServer {
   const server = mcpServer(fonteInstructions);
   registerFonteStatusTool(server, readinessReader);
-  registerMcpBroadcastBgTools(server, providers.broadcastBg);
+  registerMcpBroadcastBgTools(server, async () => ({
+    ...(await providers.broadcastBg()),
+    readSelectedWorkspace: () => readinessReader.readSelectedWorkspace(),
+  }));
   registerMcpWorkspaceCatalogTool(server, providers.workspaceCatalog);
   registerMcpSequenceTools(server, providers.sequence);
   registerMcpBroadcastDraftLifecycleTools(
