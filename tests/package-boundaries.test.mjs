@@ -157,8 +157,8 @@ test("runtime exports stay intentionally narrow", async () => {
       ],
     ],
     ["@fonte-is/core/server", ["FonteApiError", "collect", "createClient"]],
-    ["@fonte-is/react", ["FonteProvider", "useFonte"]],
-    ["@fonte-is/nextjs", ["FonteProvider", "useFonte"]],
+    ["@fonte-is/react", ["Fonte", "FonteProvider", "useFonte"]],
+    ["@fonte-is/nextjs", ["Fonte", "FonteProvider", "useFonte"]],
     ["@fonte-is/nextjs/server", ["collect"]],
     [
       "@fonte-is/nextjs/installation-verification",

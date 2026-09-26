@@ -14,7 +14,7 @@
   },
   "scripts": {
     "clean": "node scripts/clean.mjs",
-    "build": "node scripts/run-packages.mjs build",
+    "build": "node scripts/run-packages.mjs build && npm run build:website",
     "typecheck": "node scripts/run-packages.mjs typecheck",
     "typecheck:strict": "node scripts/run-packages.mjs typecheck:strict",
     "format": "prettier --write .",
@@ -28,7 +28,8 @@
     "smoke:local-pack-consumers": "node scripts/smoke-local-consumers.mjs",
     "smoke:node-floor": "npx --yes node@20.9.0 .artifacts/consumers/vanilla/index.mjs",
     "smoke:packed-browser": "node scripts/smoke-packed-browser.mjs",
-    "verify:local": "npm run clean && npm run build && npm run typecheck:strict && npm test && npm run pack:local && npm run verify:packs && npm run lint:packs && npm run smoke:packed-cli && npm run check:core-boundary && npm run smoke:local-pack-consumers && npm run smoke:node-floor && npm run smoke:packed-browser"
+    "verify:local": "npm run clean && npm run build && npm run typecheck:strict && npm test && npm run pack:local && npm run verify:packs && npm run lint:packs && npm run smoke:packed-cli && npm run check:core-boundary && npm run smoke:local-pack-consumers && npm run smoke:node-floor && npm run smoke:packed-browser",
+    "build:website": "node scripts/build-website.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
@@ -41,6 +42,7 @@
     "publint": "^0.3.23",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "esbuild": "0.27.2"
   }
 }
