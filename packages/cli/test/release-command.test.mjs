@@ -8,6 +8,14 @@ import { runReleaseCommand } from "../dist/release-command.js";
 
 const source = "a".repeat(40);
 const main = "b".repeat(40);
+const cacheHome = mkdtempSync(join(tmpdir(), "fonte-release-cache-test-"));
+const priorCacheHome = process.env.XDG_CACHE_HOME;
+process.env.XDG_CACHE_HOME = cacheHome;
+test.after(() => {
+  rmSync(cacheHome, { recursive: true, force: true });
+  if (priorCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
+  else process.env.XDG_CACHE_HOME = priorCacheHome;
+});
 
 function releaseRunner({ executor = true, remoteSource = true } = {}) {
   const calls = [];
@@ -15,6 +23,14 @@ function releaseRunner({ executor = true, remoteSource = true } = {}) {
     calls,
     async run(command, args, cwd) {
       calls.push({ command, args: [...args], cwd });
+      if (command === "git" && args[0] === "init")
+        mkdirSync(join(cwd, ".git", "objects", "info"), { recursive: true });
+      if (command === "git" && args[0] === "fetch")
+        writeFileSync(join(cwd, ".git", "FETCH_HEAD"), `${source}\n`);
+      if (command === "git" && args[0] === "worktree")
+        mkdirSync(join(cwd, ".git", "worktrees", "source"), {
+          recursive: true,
+        });
       if (command === "git" && args[0] === "rev-parse") {
         const sourceCheckout = cwd.endsWith("/source");
         const sourceFetch = calls.some(
@@ -65,7 +81,7 @@ test("Core and umbrella invocations use the current canonical release engine wit
       runner.calls
         .filter((call) => call.command === "git" && call.args[0] === "fetch")
         .map((call) => call.args.at(-1)),
-      ["main", source, source],
+      ["main", source],
     );
     assert.deepEqual(
       runner.calls.find(

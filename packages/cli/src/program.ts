@@ -31,7 +31,7 @@ import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
 import { runOperatorCommand } from "./operator-run.js";
 import { runFonteSetup } from "./local-setup.js";
-import { runReleaseCommand } from "./release-command.js";
+import { runReleaseProgram } from "./release-program.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
 export async function runProgram(
@@ -88,8 +88,8 @@ export async function runProgram(
   if (parsed.command === "release") {
     if (!dependencies.releaseRunner) return executionFailure();
     try {
-      return await runReleaseCommand(
-        parsed.releaseSource!,
+      return await runReleaseProgram(
+        argv,
         dependencies.cwd,
         dependencies.releaseRunner,
       );

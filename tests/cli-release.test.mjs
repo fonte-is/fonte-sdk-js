@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { parseArguments } from "../packages/cli/dist/arguments.js";
@@ -12,12 +15,28 @@ const runtimeResult = {
   stdout: `{"status":"VERIFIED","source":"${source}"}\n`,
   stderr: "",
 };
+const cacheHome = mkdtempSync(join(tmpdir(), "fonte-release-program-test-"));
+const priorCacheHome = process.env.XDG_CACHE_HOME;
+process.env.XDG_CACHE_HOME = cacheHome;
+test.after(() => {
+  rmSync(cacheHome, { recursive: true, force: true });
+  if (priorCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
+  else process.env.XDG_CACHE_HOME = priorCacheHome;
+});
 
 function dependencies(options = {}) {
   const calls = [];
   const releaseRunner = {
     async run(command, args, cwd) {
       calls.push({ command, args: [...args], cwd });
+      if (command === "git" && args[0] === "init")
+        mkdirSync(join(cwd, ".git", "objects", "info"), { recursive: true });
+      if (command === "git" && args[0] === "fetch")
+        writeFileSync(join(cwd, ".git", "FETCH_HEAD"), `${source}\n`);
+      if (command === "git" && args[0] === "worktree")
+        mkdirSync(join(cwd, ".git", "worktrees", "source"), {
+          recursive: true,
+        });
       if (command === process.execPath) return runtimeResult;
       if (command === "git" && args[0] === "status") {
         return {
