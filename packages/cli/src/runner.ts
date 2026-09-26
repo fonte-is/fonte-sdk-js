@@ -17,7 +17,7 @@ export const systemRunner: CommandRunner = {
 };
 
 export const releaseRunner: CapturedCommandRunner = {
-  run(command, args, cwd) {
+  run(command, args, cwd, output) {
     return new Promise((resolve, reject) => {
       const child = spawn(command, [...args], {
         cwd,
@@ -28,10 +28,18 @@ export const releaseRunner: CapturedCommandRunner = {
       let stderr = "";
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => { stdout += chunk; });
-      child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+      child.stdout.on("data", (chunk: string) => {
+        if (output?.stdout) output.stdout(chunk);
+        else stdout += chunk;
+      });
+      child.stderr.on("data", (chunk: string) => {
+        if (output?.stderr) output.stderr(chunk);
+        else stderr += chunk;
+      });
       child.once("error", reject);
-      child.once("close", (code) => resolve({ exitCode: code ?? 1, stdout, stderr }));
+      child.once("close", (code) =>
+        resolve({ exitCode: code ?? 1, stdout, stderr }),
+      );
     });
   },
 };

@@ -11,6 +11,14 @@ if (process.argv[2] === "release") {
     process.argv.slice(2),
     process.cwd(),
     releaseRunner,
+    {
+      stdout: (chunk) => {
+        process.stdout.write(chunk);
+      },
+      stderr: (chunk) => {
+        process.stderr.write(chunk);
+      },
+    },
   );
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);

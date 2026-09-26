@@ -2,7 +2,11 @@ import { EXECUTION_ERROR_TEXT, USAGE_TEXT } from "./constants.js";
 import { CliUsageError } from "./errors.js";
 import { parseReleaseArguments } from "./release-arguments.js";
 import { runReleaseCommand } from "./release-command.js";
-import type { CapturedCommandRunner, CommandResult } from "./runtime-types.js";
+import type {
+  CapturedCommandRunner,
+  CommandOutput,
+  CommandResult,
+} from "./runtime-types.js";
 import type { ParsedArguments } from "./types.js";
 
 /** Release needs Git credentials and the canonical executor, not a Fonte session. */
@@ -10,6 +14,7 @@ export async function runReleaseProgram(
   argv: readonly string[],
   cwd: string,
   runner: CapturedCommandRunner,
+  output?: CommandOutput,
 ): Promise<CommandResult> {
   let parsed: ParsedArguments;
   try {
@@ -34,7 +39,7 @@ export async function runReleaseProgram(
   if (parsed.command === "help")
     return { exitCode: 0, stdout: parsed.helpText!, stderr: "" };
   try {
-    return await runReleaseCommand(parsed.releaseSource!, cwd, runner);
+    return await runReleaseCommand(parsed.releaseSource!, cwd, runner, output);
   } catch {
     return { exitCode: 1, stdout: "", stderr: EXECUTION_ERROR_TEXT };
   }

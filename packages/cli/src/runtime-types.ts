@@ -29,7 +29,14 @@ export interface CapturedCommandRunner {
     command: string,
     args: readonly string[],
     cwd: string,
+    output?: CommandOutput,
   ): Promise<{ exitCode: number; stdout: string; stderr: string }>;
+}
+
+/** Streamed channels are consumed immediately rather than replayed in the result. */
+export interface CommandOutput {
+  stdout?(chunk: string): void;
+  stderr?(chunk: string): void;
 }
 
 export interface ProgramDependencies {
