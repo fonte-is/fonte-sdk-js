@@ -13,7 +13,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CapturedCommandRunner, CommandResult } from "./runtime-types.js";
+import type {
+  CapturedCommandRunner,
+  CommandOutput,
+  CommandResult,
+} from "./runtime-types.js";
 
 const commitShaPattern = /^[0-9a-f]{40}$/;
 const remote = "https://github.com/fonte-is/fonte-core.git";
@@ -112,16 +116,18 @@ export async function runReleaseCommand(
   explicitSource: string,
   _cwd: string,
   runner: CapturedCommandRunner,
+  output?: CommandOutput,
 ): Promise<CommandResult> {
   if (!commitShaPattern.test(explicitSource))
     return blocked("source_sha_invalid", explicitSource);
-  return releaseFromRemote(explicitSource, runner, objectCache());
+  return releaseFromRemote(explicitSource, runner, objectCache(), output);
 }
 
 async function releaseFromRemote(
   explicitSource: string,
   runner: CapturedCommandRunner,
   cache: string | undefined,
+  output?: CommandOutput,
 ): Promise<CommandResult> {
   const root = realpathSync(
     mkdtempSync(join(tmpdir(), "fonte-release-tooling-")),
@@ -150,7 +156,7 @@ async function releaseFromRemote(
           attached &&
           (await run("git", ["fsck", "--full", "--no-dangling"])).exitCode !== 0
         )
-          return releaseFromRemote(explicitSource, runner, undefined);
+          return releaseFromRemote(explicitSource, runner, undefined, output);
         // This is only a hint about locally available objects. The remote main
         // ref is still fetched and resolved afresh, regardless of this value.
         const tipFile = join(cache, "tooling-tip");
@@ -164,7 +170,7 @@ async function releaseFromRemote(
             negotiation.push(`--negotiation-tip=${tip}`);
         }
       } catch {
-        return releaseFromRemote(explicitSource, runner, undefined);
+        return releaseFromRemote(explicitSource, runner, undefined, output);
       }
     }
     if (
@@ -267,7 +273,9 @@ async function releaseFromRemote(
     ) {
       return blocked("source_checkout_unavailable", explicitSource);
     }
-    const result = await run(
+    // Git output remains captured for source verification. Only the executor's
+    // existing output is forwarded, with its stdout/stderr channels unchanged.
+    const result = await runner.run(
       process.execPath,
       [
         join(tooling, executor),
@@ -277,6 +285,7 @@ async function releaseFromRemote(
         source,
       ],
       source,
+      output,
     );
     return {
       exitCode:
