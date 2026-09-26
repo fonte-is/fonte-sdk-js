@@ -1,4 +1,4 @@
-export const CLI_VERSION = "0.3.0";
+export const CLI_VERSION = "0.3.2";
 export const SDK_PACKAGE = "@fonte-is/nextjs";
 export const SDK_VERSION = "0.1.0";
 export const ADAPTER_ID = "next_app_router";
@@ -62,6 +62,7 @@ export const USAGE_TEXT = [
   "  fonte auth login [--switch-account] [--json]",
   "  fonte auth status [--json]",
   "  fonte auth logout [--json]",
+  "  fonte release --source <remote-sha>",
   "  fonte broadcast <command> ... [--json]",
   "  fonte bridge <command> ... [--json]",
   "  fonte provider-evidence resend <command> ... --json",
@@ -92,6 +93,13 @@ export const HELP_TEXT = [
   "provider-evidence resend commands use Core's candidate-scoped GET-only acquisition authority.",
   "All other broadcast and Bridge declarations have no Core effect.",
   "Transactional application email remains locked.",
+  "",
+].join("\n");
+
+export const RELEASE_HELP_TEXT = [
+  "Usage: fonte release --source <remote-sha>",
+  "",
+  "The source must be a full commit SHA fetchable from origin.",
   "",
 ].join("\n");
 

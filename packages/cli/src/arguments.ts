@@ -3,6 +3,7 @@ import { CliUsageError } from "./errors.js";
 import { operatorHelp } from "./operator-help.js";
 import { parseOperatorArguments } from "./operator-arguments.js";
 import { AUTH_HELP_TEXT } from "./auth-commands.js";
+import { RELEASE_HELP_TEXT } from "./constants.js";
 
 /** Implement exactly the invocation grammar in CONTRACT.md. */
 export function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -33,6 +34,7 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   const command = argv[0];
   if (command === "setup") return parseSetupArguments(argv.slice(1));
   if (command === "auth") return parseAuthArguments(argv.slice(1));
+  if (command === "release") return parseReleaseArguments(argv.slice(1));
   if (
     command === "broadcast" ||
     command === "bridge" ||
@@ -82,6 +84,25 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     apply: flags.has("--yes"),
     json: flags.has("--json"),
   };
+}
+
+function parseReleaseArguments(argv: readonly string[]): ParsedArguments {
+  if (argv.length === 1 && argv[0] === "--help") {
+    return { command: "help", apply: false, json: false, helpText: RELEASE_HELP_TEXT };
+  }
+  if (argv.length !== 2 || argv[0] !== "--source") {
+    throw new CliUsageError("invalid_release_arguments", {
+      kind: "invalid_field",
+      field: argv[0] ?? "--source",
+    });
+  }
+  if (!/^[0-9a-f]{40}$/.test(argv[1])) {
+    throw new CliUsageError("invalid_release_source", {
+      kind: "invalid_field",
+      field: "--source",
+    });
+  }
+  return { command: "release", apply: false, json: false, releaseSource: argv[1] };
 }
 
 function parseSetupArguments(argv: readonly string[]): ParsedArguments {

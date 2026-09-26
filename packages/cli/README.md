@@ -43,6 +43,16 @@ npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
 
+## Release launcher
+
+After the matching Core executor and this CLI package are activated, run
+`fonte release --source <remote-core-commit-sha>` with a full 40-character
+commit SHA. The CLI resolves Core `main` to one exact tooling commit per
+invocation, checks out the requested remote application source separately, and
+invokes Core's single release executor with `--source` and `--source-root`.
+It waits for that executor's final result and forwards its output and failure. Core
+owns artifact qualification, deployment, and live verification.
+
 `init` without `--yes` prints a deterministic plan and makes no changes. The
 CLI supports Node.js 20.9 or newer and npm projects with exactly one regular
 Next.js App Router `app/layout.*` or `src/app/layout.*` file. Add `--json` to

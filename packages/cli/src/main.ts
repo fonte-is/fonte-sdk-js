@@ -7,7 +7,7 @@ import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
 import { createClientAuthRuntime } from "./client-auth-runtime.js";
 import { withLoginLock } from "./login-lock.js";
-import { systemRunner } from "./runner.js";
+import { releaseRunner, systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
 import { createDurableFonteMcpSession } from "./mcp-sequence-server.js";
 import { createLocalFonteSetupDependencies } from "./local-readiness-adapter.js";
@@ -61,6 +61,7 @@ const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
   runner: systemRunner,
+  releaseRunner,
   auth: {
     session: login,
     signal: cancellation.signal,
