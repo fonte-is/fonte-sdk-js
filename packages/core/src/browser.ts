@@ -1,6 +1,9 @@
 "use client";
 import { shouldCaptureSourceTouch } from "./browser-attribution.js";
-import { createDeliveryClient } from "./browser-delivery.js";
+import {
+  createDeliveryClient,
+  type BrowserObservationTransport,
+} from "./browser-delivery.js";
 import { createScopeReader } from "./browser-scope.js";
 import { clean } from "./collect-contract.js";
 import { permitted } from "./collection-policy.js";
@@ -17,6 +20,14 @@ import type { CollectionPolicy } from "./collection-policy.js";
 import type { CollectBody } from "./collect-types.js";
 const eventTypes: CaptureEventType[] = ["page_view", "source_touch"];
 export function createCapture(config: CaptureConfig): Capture {
+  const engine = createCaptureEngine(config);
+  return { page: engine.page, retry: engine.retry, reset: engine.reset };
+}
+/** Internal supplier shared by the unchanged legacy wrapper and website port. */
+export function createCaptureEngine(
+  config: CaptureConfig,
+  transport?: BrowserObservationTransport,
+): Capture & { resetContext(): void } {
   const storage = clean(config.storage, 120).replace(/:+$/g, "");
   if (!storage) throw Error("fonte_storage_key_required");
   const collectPath = config.collect ?? "/api/fonte/collect";
@@ -55,6 +66,7 @@ export function createCapture(config: CaptureConfig): Capture {
     collectPath,
     policy,
     onDelivery: config.onDelivery,
+    transport,
   });
   let currentHref: string | undefined;
   let currentDocument: Document | undefined;
@@ -125,6 +137,12 @@ export function createCapture(config: CaptureConfig): Capture {
       scopeReader.reset(true);
       currentHref = undefined;
       currentDocument = undefined;
+    },
+    resetContext() {
+      currentHref = undefined;
+      currentDocument = undefined;
+      scopeReader.reset();
+      delivery.reset();
     },
   };
 }
