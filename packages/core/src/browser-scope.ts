@@ -94,11 +94,9 @@ export function createScopeReader(config: {
   };
   const reset = (explicitErasure = false) => {
     continuity = null;
-    if (
-      typeof window === "undefined" ||
-      (!usedPersistentStorage && !explicitErasure)
-    )
-      return;
+    const eraseOwnedStorage = usedPersistentStorage || explicitErasure;
+    usedPersistentStorage = false;
+    if (typeof window === "undefined" || !eraseOwnedStorage) return;
     try {
       window.localStorage.removeItem(config.journeyStorageKey);
       window.localStorage.removeItem(config.deviceStorageKey);
