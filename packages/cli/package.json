@@ -14,6 +14,10 @@
   },
   "type": "module",
   "exports": {
+    "./broadcast-client": {
+      "types": "./dist/broadcast-operator-client.d.ts",
+      "import": "./dist/broadcast-operator-client.js"
+    },
     "./operator-client": {
       "types": "./dist/operator-client.d.ts",
       "import": "./dist/operator-client.js"

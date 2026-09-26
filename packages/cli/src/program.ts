@@ -32,12 +32,15 @@ import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
 import { runOperatorCommand } from "./operator-run.js";
 import { runFonteSetup } from "./local-setup.js";
 import { runReleaseProgram } from "./release-program.js";
+import { runBroadcastProgram } from "./broadcast-program.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
 export async function runProgram(
   argv: readonly string[],
   dependencies: ProgramDependencies,
 ): Promise<CommandResult> {
+  const broadcast = await runBroadcastProgram(argv, dependencies);
+  if (broadcast) return broadcast;
   let parsed: ParsedArguments;
   try {
     parsed = parseArguments(argv);
