@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { createCapture } from "@fonte-is/core";
-import { FonteProvider } from "@fonte-is/nextjs";
+import { Fonte, FonteProvider } from "@fonte-is/nextjs";
 
 const capture = createCapture({
   storage: "packed-browser",
@@ -16,7 +16,21 @@ const capture = createCapture({
   capturePolicy: { mode: "all" },
 });
 
-export function FonteRuntime({ children }: { children: ReactNode }) {
+export function FonteRuntime({
+  children,
+  websiteSite,
+}: {
+  children: ReactNode;
+  websiteSite?: string;
+}) {
+  if (websiteSite)
+    return (
+      <>
+        <Fonte site={websiteSite} consent="external" />
+        <div data-fonte-placement="newsletter" />
+        {children}
+      </>
+    );
   return (
     <FonteProvider capture={capture}>
       <output id="capture-result">active</output>
