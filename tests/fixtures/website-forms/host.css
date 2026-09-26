@@ -1,0 +1,17 @@
+* {
+  font-family: fantasy;
+  border: 7px dashed magenta;
+  color: magenta;
+}
+button {
+  background: magenta;
+  padding: 40px;
+  border-radius: 100px;
+}
+input {
+  width: 3px;
+  background: magenta;
+}
+body {
+  margin: 13px;
+}
