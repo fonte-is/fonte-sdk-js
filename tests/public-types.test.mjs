@@ -57,11 +57,25 @@ const surfaces = new Map([
   ],
   [
     "packages/react/dist/index.d.ts",
-    ["Capture", "FonteProvider", "FonteProviderProps", "useFonte"],
+    [
+      "Capture",
+      "Fonte",
+      "FonteProps",
+      "FonteProvider",
+      "FonteProviderProps",
+      "useFonte",
+    ],
   ],
   [
     "packages/nextjs/dist/index.d.ts",
-    ["Capture", "FonteProvider", "FonteProviderProps", "useFonte"],
+    [
+      "Capture",
+      "Fonte",
+      "FonteProps",
+      "FonteProvider",
+      "FonteProviderProps",
+      "useFonte",
+    ],
   ],
   [
     "packages/nextjs/dist/server.d.ts",
