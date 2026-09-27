@@ -120,7 +120,8 @@ export interface LocalManifest {
     | "0.3.1"
     | "0.3.2"
     | "0.3.3"
-    | "0.3.4";
+    | "0.3.4"
+    | "0.3.5";
   adapter_id: "next_app_router";
   adapter_version: "v1";
   sdk_package: "@fonte-is/nextjs";

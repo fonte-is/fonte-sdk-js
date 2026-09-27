@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
 import {
-  chmodSync,
   mkdtempSync,
-  readdirSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -48,17 +47,11 @@ test("fresh cold and warm processes fetch source once and observe new canonical 
       fetches.filter((line) => line.endsWith(fixture.source)).length,
       1,
     );
-    if (phase === "warm") {
-      assert.ok(fetches.some((line) => line.includes("--negotiation-tip=")));
-      const received = readFileSync(trace, "utf8")
-        .split("\n")
-        .filter(
-          (line) =>
-            /built-in: git (?:index-pack|unpack-objects) /u.test(line) &&
-            !/--pack_header=\d+,0(?:\s|$)/u.test(line),
-        );
-      assert.equal(received.length, 1, received.join("\n"));
-    }
+    assert.equal(
+      fetches.some((line) => /--negotiation-tip|--refetch/u.test(line)),
+      false,
+    );
+    assert.doesNotMatch(readFileSync(trace, "utf8"), /built-in: git fsck /u);
   }
 });
 
@@ -86,31 +79,31 @@ test("four concurrent cold CLI processes keep source fetch receipts and checkout
   assert.equal(warm.status, 0, warm.stderr || warm.stdout);
 });
 
-test("a corrupt cached object falls back to verified cold remote objects", (t) => {
+test("leftover Git caches cannot add validation or poison a fresh release checkout", (t) => {
   const directory = workspace(t);
   const fixture = syntheticReleaseRemote(directory);
-  assert.equal(launch(directory, fixture).status, 0);
   const objects = join(
     directory,
     "cache",
     "fonte",
     "release-git-v1",
     "objects",
+    "aa",
   );
-  const prefix = readdirSync(objects).find((name) =>
-    /^[0-9a-f]{2}$/u.test(name),
-  );
-  assert.ok(prefix);
-  const object = readdirSync(join(objects, prefix))[0];
-  assert.ok(object);
-  chmodSync(join(objects, prefix, object), 0o600);
-  writeFileSync(join(objects, prefix, object), "tampered cached Git object");
-  const result = launch(directory, fixture);
+  mkdirSync(objects, { recursive: true });
+  const object = join(objects, "b".repeat(38));
+  writeFileSync(object, "tampered cached Git object");
+  const trace = join(directory, "cache-ignored.trace");
+  const result = launch(directory, fixture, fixture.source, {
+    env: fixture.environment(fixture.source, undefined, trace),
+  });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /release_status=VERIFIED/u);
+  assert.equal(readFileSync(object, "utf8"), "tampered cached Git object");
+  assert.doesNotMatch(readFileSync(trace, "utf8"), /built-in: git fsck /u);
 });
 
-test("cached application objects cannot authorize source absent from the current upstream", (t) => {
+test("a prior checkout cannot authorize source absent from the current upstream", (t) => {
   const directory = workspace(t);
   const original = syntheticReleaseRemote(directory);
   assert.equal(launch(directory, original).status, 0);
