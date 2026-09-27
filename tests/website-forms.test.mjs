@@ -55,7 +55,9 @@ test("frozen intent retries by identity and changed intent gets a fresh UUID", a
 });
 
 let server, browser, origin;
-const evidence = "/private/tmp/fon822-website-forms-evidence";
+const evidence =
+  process.env.FONTE_WEBSITE_FORMS_EVIDENCE ??
+  "/private/tmp/fon822-website-forms-evidence";
 before(async () => {
   server = createServer(async (req, res) => {
     try {
@@ -819,6 +821,198 @@ for (const framesCompleted of [0, 1]) {
     );
   });
 }
+
+async function queuedInlineFixture(t) {
+  const page = await fixture(t);
+  await holdOpeningFrames(page);
+  await page.evaluate(() => {
+    const keys = ["newsletter", "second", "third"];
+    for (const key of keys.slice(1)) {
+      const marker = document.createElement("div");
+      marker.dataset.fontePlacement = key;
+      document.getElementById("content").append(marker);
+    }
+    window.batchPlacements = keys.map((key) => ({
+      key,
+      presentation: "inline",
+      paths: ["/host"],
+      form: window.form,
+    }));
+    window.install(window.batchPlacements);
+    window.batchHosts = keys.map((key) =>
+      document.querySelector(`[data-fonte-placement="${key}"] fonte-form`),
+    );
+  });
+  await page.waitForFunction(
+    () =>
+      window.openingFrames.size === 1 &&
+      window.forms.counts().mounted === 1 &&
+      window.batchHosts.every(
+        (host) => host.shadowRoot.querySelector("link").sheet,
+      ),
+    undefined,
+    { polling: 20 },
+  );
+  return page;
+}
+
+test("additional inline surfaces become ready one per frame with natural layout and host state intact", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.locator("#host-input").fill("Host stays editable");
+  const initial = await page.evaluate(() => ({
+    counts: window.forms.counts(),
+    scroll: window.scrollY,
+    height: window.batchHosts
+      .find((host) => host.shadowRoot.querySelector("form"))
+      .getBoundingClientRect().height,
+    observations: window.observations.length,
+  }));
+  assert.deepEqual(initial.counts, { mounted: 1, unavailable: 2 });
+  for (const mountedCount of [2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+      mounted: mountedCount,
+      unavailable: 3 - mountedCount,
+    });
+    assert.equal(
+      await page.locator("#host-input").inputValue(),
+      "Host stays editable",
+    );
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+    assert.equal(await page.evaluate(() => window.scrollY), initial.scroll);
+  }
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.batchHosts.map((host) => host.getBoundingClientRect().height),
+    ),
+    [initial.height, initial.height, initial.height],
+  );
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.equal(
+    await page.evaluate(() => window.observations.length),
+    initial.observations,
+  );
+});
+
+test("a settings update before queued inline rendering uses only the current copy and revision", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.evaluate(() => {
+    window.batchPlacements = window.batchPlacements.map((placement) => ({
+      ...placement,
+      form: {
+        ...window.form,
+        publishedRevision: 2,
+        headline: "Updated before render",
+      },
+    }));
+    window.forms.apply(window.settings(window.batchPlacements));
+  });
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 1);
+  assert.equal(
+    await page.evaluate(
+      () =>
+        window.batchHosts.filter(
+          (host) => host.shadowRoot.querySelector("form") === null,
+        ).length,
+    ),
+    2,
+  );
+  await page.evaluate(() => window.advanceOpeningFrame());
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.batchHosts.map(
+        (host) => host.shadowRoot.querySelector("h2").textContent,
+      ),
+    ),
+    ["Updated before render", "Updated before render", "Updated before render"],
+  );
+  const third = page.locator('[data-fonte-placement="third"] fonte-form');
+  await third.locator('input[name="email"]').fill("fixture@example.test");
+  await third.getByRole("button", { name: "Subscribe", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.calls[0].publishedRevision), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+for (const mode of ["destroy", "disabled settings", "navigation"]) {
+  test(`${mode} cancels queued inline rendering and stale frame callbacks cannot restore a surface`, async (t) => {
+    const page = await queuedInlineFixture(t);
+    await page.evaluate((mode) => {
+      window.staleInlineFrame = window.openingFrames.values().next().value;
+      if (mode === "destroy") window.forms.destroy();
+      else if (mode === "disabled settings") window.forms.apply(null);
+      else {
+        history.pushState(null, "", "/other");
+        window.forms.navigate();
+      }
+      document.getElementById("host-input").focus();
+      window.staleInlineFrame(performance.now());
+    }, mode);
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+    assert.equal(await page.locator("fonte-form").count(), 0);
+    assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+      mounted: 0,
+      unavailable: 0,
+    });
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+    assert.equal(
+      await page.evaluate(() =>
+        window.batchHosts.every(
+          (host) => host.shadowRoot.querySelector("input") === null,
+        ),
+      ),
+      true,
+    );
+  });
+}
+
+test("removing a queued inline marker cancels its view while other surfaces finish and reinsertion rebinds once", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.evaluate(() => {
+    window.removedBatchHost = window.batchHosts.find(
+      (host) => host.shadowRoot.querySelector("form") === null,
+    );
+    window.removedBatchMarker = window.removedBatchHost.parentElement;
+    window.removedBatchKey = window.removedBatchMarker.dataset.fontePlacement;
+    window.removedBatchMarker.remove();
+  });
+  await page.waitForFunction(
+    () => window.removedBatchHost.shadowRoot.querySelector("link") === null,
+  );
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.equal(
+    await page.evaluate(() =>
+      window.removedBatchHost.shadowRoot.querySelector("input"),
+    ),
+    null,
+  );
+  await page.evaluate(() =>
+    document.getElementById("content").append(window.removedBatchMarker),
+  );
+  await page.waitForFunction(() => window.openingFrames.size === 1, undefined, {
+    polling: 20,
+  });
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 3);
+  assert.equal(
+    await page.evaluate(
+      () =>
+        document
+          .querySelector(`[data-fonte-placement="${window.removedBatchKey}"]`)
+          .querySelectorAll("fonte-form").length,
+    ),
+    1,
+  );
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
 
 test("captures source-only modal and inline screenshot/trace evidence", async (t) => {
   const page = await fixture(t);
