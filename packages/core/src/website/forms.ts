@@ -39,7 +39,15 @@ export function createWebsiteForms(options: {
   const inlineRenders = new Set<() => void>();
   let inlineRenderStarted = false;
   let inlineFrame: number | null = null;
-  const renderInlineFrame = () => {
+  let inlineFrameGeneration = 0;
+  const requestInlineFrame = () => {
+    const generation = ++inlineFrameGeneration;
+    inlineFrame = window.requestAnimationFrame(() =>
+      renderInlineFrame(generation),
+    );
+  };
+  const renderInlineFrame = (generation: number) => {
+    if (generation !== inlineFrameGeneration) return;
     inlineFrame = null;
     if (!active) return;
     const render = inlineRenders.values().next().value;
@@ -47,8 +55,7 @@ export function createWebsiteForms(options: {
       inlineRenders.delete(render);
       render();
     }
-    if (active && inlineRenders.size)
-      inlineFrame = window.requestAnimationFrame(renderInlineFrame);
+    if (active && inlineRenders.size) requestInlineFrame();
   };
   const scheduleInlineRender = (render: () => void) => {
     if (!active) return () => {};
@@ -60,13 +67,13 @@ export function createWebsiteForms(options: {
       return () => {};
     }
     inlineRenders.add(render);
-    if (inlineFrame === null)
-      inlineFrame = window.requestAnimationFrame(renderInlineFrame);
+    if (inlineFrame === null) requestInlineFrame();
     return () => {
       inlineRenders.delete(render);
       if (!inlineRenders.size && inlineFrame !== null) {
         window.cancelAnimationFrame(inlineFrame);
         inlineFrame = null;
+        inlineFrameGeneration++;
       }
     };
   };
@@ -298,6 +305,7 @@ export function createWebsiteForms(options: {
       active = false;
       if (inlineFrame !== null) window.cancelAnimationFrame(inlineFrame);
       inlineFrame = null;
+      inlineFrameGeneration++;
       inlineRenders.clear();
       document.removeEventListener("DOMContentLoaded", ready);
       stopObserving();

@@ -1014,6 +1014,41 @@ test("removing a queued inline marker cancels its view while other surfaces fini
   assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
 });
 
+test("a cancelled inline frame cannot consume a newly queued settings generation", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.evaluate(() => {
+    window.oldInlineFrame = window.openingFrames.values().next().value;
+    window.forms.apply(null);
+    window.forms.apply(
+      window.settings(
+        window.batchPlacements.map((placement) => ({
+          ...placement,
+          form: { ...window.form, headline: "New generation" },
+        })),
+      ),
+    );
+  });
+  await page.waitForFunction(() => window.openingFrames.size === 1, undefined, {
+    polling: 20,
+  });
+  await page.evaluate(() => window.oldInlineFrame(performance.now()));
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 0);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+  for (const count of [1, 2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+  }
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.deepEqual(await page.locator("fonte-form h2").allTextContents(), [
+    "New generation",
+    "New generation",
+    "New generation",
+  ]);
+});
+
 test("captures source-only modal and inline screenshot/trace evidence", async (t) => {
   const page = await fixture(t);
   await page
