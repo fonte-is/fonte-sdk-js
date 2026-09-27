@@ -720,6 +720,106 @@ test("CSS load gates even modal construction until the release stylesheet is ava
   await mounted(page);
 });
 
+async function holdOpeningFrames(page) {
+  await page.evaluate(() => {
+    let id = 0;
+    window.openingFrames = new Map();
+    window.requestAnimationFrame = (callback) => {
+      window.openingFrames.set(++id, callback);
+      return id;
+    };
+    window.cancelAnimationFrame = (frame) => window.openingFrames.delete(frame);
+    window.advanceOpeningFrame = () => {
+      const [frame, callback] = window.openingFrames.entries().next().value;
+      window.openingFrames.delete(frame);
+      callback(performance.now());
+    };
+  });
+}
+
+test("overlay opens after a rendering frame while inline readiness is immediate", async (t) => {
+  const page = await fixture(t);
+  await holdOpeningFrames(page);
+  await page.evaluate(() =>
+    window.install([
+      {
+        key: "newsletter",
+        presentation: "inline",
+        paths: ["*"],
+        form: window.form,
+      },
+      {
+        key: "overlay",
+        presentation: "popup",
+        paths: ["*"],
+        form: window.form,
+      },
+    ]),
+  );
+  await page.waitForFunction(
+    () =>
+      window.openingFrames.size === 1 && window.forms.counts().mounted === 1,
+    undefined,
+    { polling: 20 },
+  );
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 1);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.equal(
+    await page
+      .locator("dialog input[name=email]")
+      .evaluate((input) => input.getRootNode().activeElement === input),
+    true,
+  );
+});
+
+for (const framesCompleted of [0, 1]) {
+  test(`destroy cancels pending overlay frame after ${framesCompleted} completed frames`, async (t) => {
+    const page = await fixture(t);
+    await holdOpeningFrames(page);
+    await page.evaluate(() =>
+      window.install([
+        {
+          key: "overlay",
+          presentation: "popup",
+          paths: ["*"],
+          form: window.form,
+        },
+      ]),
+    );
+    await page.waitForFunction(
+      () => window.openingFrames.size === 1,
+      undefined,
+      { polling: 20 },
+    );
+    if (framesCompleted)
+      await page.evaluate(() => window.advanceOpeningFrame());
+    await page.evaluate(() => {
+      const stale = window.openingFrames.values().next().value;
+      window.forms.destroy();
+      document.getElementById("opener").focus();
+      stale(performance.now());
+    });
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+    assert.equal(await page.locator("fonte-form").count(), 0);
+    assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+      mounted: 0,
+      unavailable: 0,
+    });
+    assert.equal(
+      await page
+        .locator("#opener")
+        .evaluate((input) => document.activeElement === input),
+      true,
+    );
+  });
+}
+
 test("captures source-only modal and inline screenshot/trace evidence", async (t) => {
   const page = await fixture(t);
   await page

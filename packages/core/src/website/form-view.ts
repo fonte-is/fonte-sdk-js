@@ -40,6 +40,7 @@ export function createFormView(options: {
   let review: HTMLButtonElement | null = null;
   let dialog: HTMLDialogElement | null = null;
   let opener: Element | null = null;
+  let openingFrame: number | null = null;
   const host = document.createElement("fonte-form");
   const shadow = host.attachShadow({ mode: "open" });
   const link = document.createElement("link");
@@ -272,22 +273,32 @@ export function createFormView(options: {
     options.failed();
     destroy();
   };
+  const open = () => {
+    openingFrame = null;
+    if (!active || !host.isConnected) return;
+    if (!dialog || typeof dialog.showModal !== "function") return fail();
+    try {
+      opener = focusedElement();
+      dialog.showModal();
+      shown = true;
+      email?.focus();
+    } catch {
+      return fail();
+    }
+    options.ready();
+  };
   const load = () => {
     if (!active || loaded || !host.isConnected) return;
     loaded = true;
     render();
-    if (overlay) {
-      if (!dialog || typeof dialog.showModal !== "function") return fail();
-      try {
-        opener = focusedElement();
-        dialog.showModal();
-        shown = true;
-        email?.focus();
-      } catch {
-        return fail();
-      }
-    }
-    options.ready();
+    if (!overlay) return options.ready();
+    // Let one rendering frame settle inline surfaces before top-layer opening
+    // forces layout. Two bounded frames are not an ongoing scheduling loop.
+    openingFrame = window.requestAnimationFrame(() => {
+      openingFrame = null;
+      if (!active || !host.isConnected) return;
+      openingFrame = window.requestAnimationFrame(open);
+    });
   };
   link.addEventListener("load", load);
   link.addEventListener("error", fail);
@@ -300,6 +311,8 @@ export function createFormView(options: {
       (document.activeElement === host ||
         (focused !== null && shadow.contains(focused)));
     active = false;
+    if (openingFrame !== null) window.cancelAnimationFrame(openingFrame);
+    openingFrame = null;
     submission.destroy();
     clearInputs();
     link.removeEventListener("load", load);
