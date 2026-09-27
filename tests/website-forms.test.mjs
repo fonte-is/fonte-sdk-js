@@ -1049,6 +1049,207 @@ test("a cancelled inline frame cannot consume a newly queued settings generation
   ]);
 });
 
+async function waitingOverlayFixture(t) {
+  const page = await queuedInlineFixture(t);
+  await page.locator("#host-input").fill("Host stays editable");
+  await page.evaluate(() => {
+    window.overlayPlacement = {
+      key: "overlay",
+      presentation: "popup",
+      paths: ["/host"],
+      form: window.form,
+    };
+    window.forms.apply(
+      window.settings([...window.batchPlacements, window.overlayPlacement]),
+    );
+  });
+  await page.locator("dialog").waitFor({ state: "attached" });
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+  return page;
+}
+
+test("overlay waits for the inline batch and two settling frames before becoming ready", async (t) => {
+  const page = await waitingOverlayFixture(t);
+  const height = await page.evaluate(
+    () =>
+      window.batchHosts
+        .find((host) => host.shadowRoot.querySelector("form"))
+        .getBoundingClientRect().height,
+  );
+  for (const count of [2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+  }
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+    mounted: 4,
+    unavailable: 0,
+  });
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.batchHosts.map((host) => host.getBoundingClientRect().height),
+    ),
+    [height, height, height],
+  );
+  assert.equal(
+    await page.locator("#host-input").inputValue(),
+    "Host stays editable",
+  );
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+test("new inline work before opening restarts the existing two-frame settling period", async (t) => {
+  const page = await fixture(t);
+  await holdOpeningFrames(page);
+  await page.evaluate(() => {
+    window.overlayPlacement = {
+      key: "overlay",
+      presentation: "popup",
+      paths: ["/host"],
+      form: window.form,
+    };
+    window.install([window.overlayPlacement]);
+  });
+  await page.waitForFunction(() => window.openingFrames.size === 1);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  await page.evaluate(() => {
+    const keys = ["newsletter", "second", "third"];
+    for (const key of keys.slice(1)) {
+      const marker = document.createElement("div");
+      marker.dataset.fontePlacement = key;
+      document.getElementById("content").append(marker);
+    }
+    window.batchPlacements = keys.map((key) => ({
+      key,
+      presentation: "inline",
+      paths: ["/host"],
+      form: window.form,
+    }));
+    window.forms.apply(
+      window.settings([...window.batchPlacements, window.overlayPlacement]),
+    );
+  });
+  await page.waitForFunction(
+    () =>
+      window.forms.counts().mounted === 1 && window.openingFrames.size === 2,
+  );
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+  for (const count of [2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+  }
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 4);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+for (const mode of ["destroy", "disabled settings", "navigation"]) {
+  test(`${mode} removes a waiting overlay without stale opening or inline frames`, async (t) => {
+    const page = await waitingOverlayFixture(t);
+    await page.evaluate((mode) => {
+      const stale = window.openingFrames.values().next().value;
+      if (mode === "destroy") window.forms.destroy();
+      else if (mode === "disabled settings") window.forms.apply(null);
+      else {
+        history.pushState(null, "", "/other");
+        window.forms.navigate();
+      }
+      document.getElementById("host-input").focus();
+      stale(performance.now());
+    }, mode);
+    assert.equal(await page.locator("fonte-form").count(), 0);
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+  });
+}
+
+test("removing remaining queued inline markers releases the waiting overlay exactly once", async (t) => {
+  const page = await waitingOverlayFixture(t);
+  await page.evaluate(() => {
+    for (const host of window.batchHosts)
+      if (!host.shadowRoot.querySelector("form")) host.parentElement.remove();
+  });
+  await page.waitForFunction(
+    () =>
+      window.batchHosts.filter((host) => host.isConnected).length === 1 &&
+      window.openingFrames.size === 1,
+  );
+  for (let frame = 0; frame < 2; frame++)
+    await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+test("a replacement generation cannot receive an old waiting overlay callback", async (t) => {
+  const page = await waitingOverlayFixture(t);
+  await page.evaluate(() => {
+    window.oldInlineFrame = window.openingFrames.values().next().value;
+    window.forms.apply(null);
+    window.forms.apply(
+      window.settings(
+        [...window.batchPlacements, window.overlayPlacement].map(
+          (placement) => ({
+            ...placement,
+            form: { ...window.form, headline: "Replacement generation" },
+          }),
+        ),
+      ),
+    );
+  });
+  await page.waitForFunction(
+    () =>
+      window.openingFrames.size === 1 &&
+      document.querySelectorAll("fonte-form").length === 4 &&
+      [...document.querySelectorAll("fonte-form")].every(
+        (host) => host.shadowRoot.querySelector("link").sheet,
+      ),
+  );
+  await page.evaluate(() => window.oldInlineFrame(performance.now()));
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 0);
+  for (const count of [1, 2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+  }
+  for (let frame = 0; frame < 2; frame++)
+    await page.evaluate(() => window.advanceOpeningFrame());
+  assert.deepEqual(
+    await page.locator("fonte-form h2").allTextContents(),
+    Array(4).fill("Replacement generation"),
+  );
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
 test("captures source-only modal and inline screenshot/trace evidence", async (t) => {
   const page = await fixture(t);
   await page

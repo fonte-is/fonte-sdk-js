@@ -37,9 +37,26 @@ export function createWebsiteForms(options: {
   const markers = new Map<string, Set<Element>>();
   const surfaces = new Map<string, Surface>();
   const inlineRenders = new Set<() => void>();
+  const inlineWaiters = new Set<() => void>();
   let inlineRenderStarted = false;
   let inlineFrame: number | null = null;
   let inlineFrameGeneration = 0;
+  const releaseInlineWaiters = () => {
+    if (!active || inlineRenders.size || inlineFrame !== null) return;
+    const ready = [...inlineWaiters];
+    inlineWaiters.clear();
+    for (const callback of ready) callback();
+  };
+  const afterInlineRenders = (callback: (deferred: boolean) => void) => {
+    if (!active) return () => {};
+    if (!inlineRenders.size && inlineFrame === null) {
+      callback(false);
+      return () => {};
+    }
+    const ready = () => callback(true);
+    inlineWaiters.add(ready);
+    return () => inlineWaiters.delete(ready);
+  };
   const requestInlineFrame = () => {
     const generation = ++inlineFrameGeneration;
     inlineFrame = window.requestAnimationFrame(() =>
@@ -56,6 +73,7 @@ export function createWebsiteForms(options: {
       render();
     }
     if (active && inlineRenders.size) requestInlineFrame();
+    else releaseInlineWaiters();
   };
   const scheduleInlineRender = (render: () => void) => {
     if (!active) return () => {};
@@ -75,6 +93,7 @@ export function createWebsiteForms(options: {
         inlineFrame = null;
         inlineFrameGeneration++;
       }
+      releaseInlineWaiters();
     };
   };
   const overlayState = documents.get(document) ?? {
@@ -160,6 +179,7 @@ export function createWebsiteForms(options: {
       stylesheetUrl: options.stylesheetUrl,
       submit: options.submit,
       scheduleInlineRender,
+      afterInlineRenders,
       ready() {
         if (!active || surfaces.get(placement.key) !== surface) return;
         surface.state = "mounted";
@@ -307,6 +327,7 @@ export function createWebsiteForms(options: {
       inlineFrame = null;
       inlineFrameGeneration++;
       inlineRenders.clear();
+      inlineWaiters.clear();
       document.removeEventListener("DOMContentLoaded", ready);
       stopObserving();
       for (const key of surfaces.keys()) remove(key);

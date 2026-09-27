@@ -20,6 +20,7 @@ export function createFormView(options: {
   stylesheetUrl: string;
   submit: SubmitWebsiteForm;
   scheduleInlineRender: (render: () => void) => () => void;
+  afterInlineRenders: (callback: (deferred: boolean) => void) => () => void;
   ready: () => void;
   failed: () => void;
   dismissed: () => void;
@@ -44,6 +45,7 @@ export function createFormView(options: {
   let opener: Element | null = null;
   let openingFrame: number | null = null;
   let cancelInlineRender: (() => void) | null = null;
+  let cancelInlineWait: (() => void) | null = null;
   const host = document.createElement("fonte-form");
   const shadow = host.attachShadow({ mode: "open" });
   const link = document.createElement("link");
@@ -290,6 +292,24 @@ export function createFormView(options: {
     }
     options.ready();
   };
+  const beginOpening = () => {
+    if (!active || !host.isConnected) return;
+    // The finite inline batch settles before these existing two frames. Check
+    // again at opening in case a later CSS load queued more inline work.
+    openingFrame = window.requestAnimationFrame(() => {
+      openingFrame = null;
+      if (!active || !host.isConnected) return;
+      openingFrame = window.requestAnimationFrame(() => {
+        openingFrame = null;
+        if (!active || !host.isConnected) return;
+        cancelInlineWait = options.afterInlineRenders((deferred) => {
+          cancelInlineWait = null;
+          if (deferred) beginOpening();
+          else open();
+        });
+      });
+    });
+  };
   const load = () => {
     if (!active || loaded || !host.isConnected) return;
     loaded = true;
@@ -305,12 +325,9 @@ export function createFormView(options: {
     }
     render();
     rendered = true;
-    // Let one rendering frame settle inline surfaces before top-layer opening
-    // forces layout. Two bounded frames are not an ongoing scheduling loop.
-    openingFrame = window.requestAnimationFrame(() => {
-      openingFrame = null;
-      if (!active || !host.isConnected) return;
-      openingFrame = window.requestAnimationFrame(open);
+    cancelInlineWait = options.afterInlineRenders(() => {
+      cancelInlineWait = null;
+      beginOpening();
     });
   };
   link.addEventListener("load", load);
@@ -326,6 +343,8 @@ export function createFormView(options: {
     active = false;
     cancelInlineRender?.();
     cancelInlineRender = null;
+    cancelInlineWait?.();
+    cancelInlineWait = null;
     if (openingFrame !== null) window.cancelAnimationFrame(openingFrame);
     openingFrame = null;
     submission.destroy();
