@@ -362,6 +362,135 @@ for (const presentation of ["popup", "slide_in"])
     assert.equal(await page.locator("fonte-form").count(), 0);
   });
 
+for (const presentation of ["popup", "slide_in"]) {
+  test(`${presentation} native autofocus selects email once before surface readiness`, async (t) => {
+    const page = await fixture(t);
+    await page.locator("#opener").focus();
+    await page.evaluate((presentation) => {
+      window.openFocus = {
+        calls: 0,
+        transitions: [],
+        autofocus: false,
+        nativeEmail: false,
+      };
+      const focus = HTMLInputElement.prototype.focus;
+      HTMLInputElement.prototype.focus = function (...args) {
+        if (this.name === "email") window.openFocus.calls++;
+        return focus.apply(this, args);
+      };
+      const showModal = HTMLDialogElement.prototype.showModal;
+      HTMLDialogElement.prototype.showModal = function (...args) {
+        const email = this.querySelector('input[name="email"]');
+        const root = this.getRootNode();
+        window.openFocus.autofocus = email.autofocus;
+        root.addEventListener("focusin", (event) =>
+          window.openFocus.transitions.push(
+            event.target.name || event.target.textContent,
+          ),
+        );
+        const result = showModal.apply(this, args);
+        window.openFocus.nativeEmail = root.activeElement === email;
+        window.openFocus.mountedDuringOpen = window.forms.counts().mounted;
+        return result;
+      };
+      window.install([
+        { key: "overlay", presentation, paths: ["*"], form: window.form },
+      ]);
+    }, presentation);
+    await mounted(page);
+    assert.deepEqual(await page.evaluate(() => window.openFocus), {
+      calls: 0,
+      transitions: ["email"],
+      autofocus: true,
+      nativeEmail: true,
+      mountedDuringOpen: 0,
+    });
+    assert(
+      await page
+        .locator('dialog input[name="email"]')
+        .evaluate((node) => node.getRootNode().activeElement === node),
+    );
+    await page.keyboard.press("Escape");
+    assert(
+      await page
+        .locator("#opener")
+        .evaluate((node) => document.activeElement === node),
+    );
+  });
+}
+
+test("overlay explicitly focuses email when native modal autofocus leaves another target", async (t) => {
+  const page = await fixture(t);
+  await page.locator("#opener").focus();
+  await page.evaluate(() => {
+    window.fallbackFocus = {
+      calls: 0,
+      mountedAtFocus: null,
+      nativeEmail: null,
+    };
+    const focus = HTMLInputElement.prototype.focus;
+    HTMLInputElement.prototype.focus = function (...args) {
+      if (this.name === "email") {
+        window.fallbackFocus.calls++;
+        window.fallbackFocus.mountedAtFocus = window.forms.counts().mounted;
+      }
+      return focus.apply(this, args);
+    };
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = function (...args) {
+      const result = showModal.apply(this, args);
+      this.querySelector("button").focus();
+      window.fallbackFocus.nativeEmail =
+        this.getRootNode().activeElement ===
+        this.querySelector('input[name="email"]');
+      return result;
+    };
+    window.install([
+      {
+        key: "overlay",
+        presentation: "popup",
+        paths: ["*"],
+        form: window.form,
+      },
+    ]);
+  });
+  await mounted(page);
+  assert.deepEqual(await page.evaluate(() => window.fallbackFocus), {
+    calls: 1,
+    mountedAtFocus: 0,
+    nativeEmail: false,
+  });
+  assert(
+    await page
+      .locator('dialog input[name="email"]')
+      .evaluate((node) => node.getRootNode().activeElement === node),
+  );
+  await page.keyboard.press("Escape");
+  assert(
+    await page
+      .locator("#opener")
+      .evaluate((node) => document.activeElement === node),
+  );
+});
+
+test("inline email has no autofocus and preserves the current host focus", async (t) => {
+  const page = await fixture(t);
+  await page.locator("#opener").focus();
+  await install(page);
+  await mounted(page);
+  assert.equal(
+    await email(page).evaluate(
+      (node) => node.autofocus || node.hasAttribute("autofocus"),
+    ),
+    false,
+  );
+  assert(
+    await page
+      .locator("#opener")
+      .evaluate((node) => document.activeElement === node),
+  );
+});
+
 test("disconnected overlay opener is not restored and host classes/styles stay intact", async (t) => {
   const page = await fixture(t);
   await page.locator("#opener").focus();

@@ -238,6 +238,7 @@ export function createFormView(options: {
       return input;
     };
     email = field("Email address", "email", "email", true);
+    if (overlay) email.autofocus = true;
     firstName = current.firstNameEnabled
       ? field("First name", "firstName", "text", false)
       : null;
@@ -286,7 +287,7 @@ export function createFormView(options: {
       opener = focusedElement();
       dialog.showModal();
       shown = true;
-      email?.focus();
+      if (email && focusedElement() !== email) email.focus();
     } catch {
       return fail();
     }
