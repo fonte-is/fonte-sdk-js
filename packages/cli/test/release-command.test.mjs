@@ -8,15 +8,6 @@ import { runReleaseCommand } from "../dist/release-command.js";
 
 const source = "a".repeat(40);
 const main = "b".repeat(40);
-const cacheHome = mkdtempSync(join(tmpdir(), "fonte-release-cache-test-"));
-const priorCacheHome = process.env.XDG_CACHE_HOME;
-process.env.XDG_CACHE_HOME = cacheHome;
-test.after(() => {
-  rmSync(cacheHome, { recursive: true, force: true });
-  if (priorCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
-  else process.env.XDG_CACHE_HOME = priorCacheHome;
-});
-
 function releaseRunner({ executor = true, remoteSource = true } = {}) {
   const calls = [];
   return {
