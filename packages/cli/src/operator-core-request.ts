@@ -6,6 +6,8 @@ export interface CoreRequestOptions {
   readonly fetch: typeof fetch;
   readonly maxResponseBytes?: number;
   readonly signal?: AbortSignal;
+  /** Shared ceiling for GET, mutation and the response body read. */
+  readonly timeoutMs?: number;
 }
 
 export interface CorePostOptions {
@@ -46,12 +48,16 @@ export function createCoreRequester(
     throw new CoreOperatorError("authorization_token_missing", null, "none");
   }
   const maxResponseBytes = responseLimitBytes(options.maxResponseBytes);
+  const defaultTimeoutMs = requestTimeoutMs(options.timeoutMs);
   return async (path, callOptions) => {
     if (options.signal?.aborted) {
       throw new CoreOperatorError("operation_cancelled", null, "none");
     }
     const post = callOptions && "body" in callOptions ? callOptions : undefined;
-    const timeoutMs = requestTimeoutMs(callOptions?.timeoutMs);
+    const timeoutMs =
+      callOptions?.timeoutMs === undefined
+        ? defaultTimeoutMs
+        : requestTimeoutMs(callOptions.timeoutMs);
     const request = preparedRequest(baseUrl, bearer, path, post);
     const deadline = AbortSignal.timeout(timeoutMs);
     const signal = options.signal
@@ -280,7 +286,7 @@ function parseResponseBody(
 
 function requestTimeoutMs(value: number | undefined): number {
   if (value === undefined) return 15_000;
-  if (!Number.isInteger(value) || value < 1 || value > 60_000) {
+  if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647) {
     throw new CoreOperatorError("core_request_timeout_invalid", null, "none");
   }
   return value;
@@ -319,7 +325,12 @@ function failureEffect(
 }
 
 function validatedBaseUrl(value: string): string {
-  const url = new URL(value);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new CoreOperatorError("core_api_base_url_invalid", null, "none");
+  }
   const loopback =
     url.protocol === "http:" &&
     (url.hostname === "127.0.0.1" || url.hostname === "localhost");
@@ -336,6 +347,13 @@ function validatedBaseUrl(value: string): string {
 }
 
 function validatedRequestUrl(baseUrl: string, path: string): string {
+  if (/^https?:\/\//u.test(path)) {
+    try {
+      return validateCoreRequestUrl(path, baseUrl);
+    } catch {
+      throw new CoreOperatorError("core_request_invalid", null, "none");
+    }
+  }
   if (!path.startsWith("/") || path.startsWith("//") || /[\r\n]/.test(path)) {
     throw new CoreOperatorError("core_request_invalid", null, "none");
   }
@@ -345,4 +363,25 @@ function validatedRequestUrl(baseUrl: string, path: string): string {
     throw new CoreOperatorError("core_request_invalid", null, "none");
   }
   return url.toString();
+}
+
+/** Returned operation references carry no authority to forward authentication off-origin. */
+export function validateCoreRequestUrl(path: string, baseUrl: string): string {
+  try {
+    const base = new URL(validatedBaseUrl(baseUrl));
+    const target = new URL(path, base);
+    if (
+      typeof path !== "string" ||
+      /[\u0000-\u0020\u007f]/u.test(path) ||
+      target.origin !== base.origin ||
+      target.username ||
+      target.password ||
+      target.hash ||
+      !["http:", "https:"].includes(target.protocol)
+    )
+      throw new TypeError("origin");
+    return target.href;
+  } catch {
+    throw new CoreOperatorError("core_operation_uri_invalid", null, "none");
+  }
 }

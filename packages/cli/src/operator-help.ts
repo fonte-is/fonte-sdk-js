@@ -231,6 +231,54 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["broadcast", "review"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production> --draft-id <uuid>",
+        "--expected-version <n> --request-id <uuid> [--audience-mode <reuse_compatible|refresh>]",
+        "[--request-timeout-ms <ms>] [--wait-ms <ms>]",
+      ],
+    ],
+    detail:
+      "Requests Core's review of an exact draft version. Audience refresh is explicit. Review never authorizes execution.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send"],
+    usage: [
+      [
+        "--send-input <approved-reference-json> [--request-timeout-ms <ms>] [--wait-ms <ms>]",
+      ],
+    ],
+    detail:
+      "Persists and submits the exact approved review references. Processing is not executable; an executable job is not provider acceptance. The default request ceiling is 60 seconds.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "send", "recover"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production> --draft-id <uuid> --request-id <uuid>",
+        "[--request-timeout-ms <ms>] [--wait-ms <ms>]",
+      ],
+    ],
+    detail:
+      "Recovers the exact durably saved request after response loss. It never creates another approval or request identity.",
+    json: true,
+  },
+  {
+    command: ["broadcast", "operation"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production> --draft-id <uuid>",
+        "--operation-uri <returned-uri> --kind <review|send> [--request-timeout-ms <ms>] [--wait-ms <ms>]",
+      ],
+    ],
+    detail:
+      "Reads only the returned operation URI on the configured Core origin. A foreground wait limit returns pending with the operation identity.",
+    json: true,
+  },
+  {
     command: ["broadcast", "send", "now"],
     usage: [
       [
@@ -239,7 +287,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Accepts one saved Broadcast instruction immediately. This is the one explicit Send effect; it performs no review, audience preparation, quote, payment, or provider work.",
+      "Retired unreviewed entrypoint. Review the exact draft, then use broadcast send with the approved send-input.",
     json: true,
   },
   {
@@ -353,10 +401,14 @@ const entries: readonly HelpEntry[] = [
   ...(["pause", "resume", "cancel", "close"] as const).map((operation) => ({
     command: ["broadcast", operation],
     usage: [
-      ...(operation === "close" ? [] : [[
-        "--workspace <slug> --environment production --draft-id <uuid>",
-        "--operation-id <uuid> --request-id <uuid> --expected-generation <n>",
-      ]]),
+      ...(operation === "close"
+        ? []
+        : [
+            [
+              "--workspace <slug> --environment production --draft-id <uuid>",
+              "--operation-id <uuid> --request-id <uuid> --expected-generation <n>",
+            ],
+          ]),
       [
         "--workspace <slug> --environment production --broadcast-id <uuid>",
         "--expected-control-version <n>",
@@ -533,7 +585,7 @@ function overview(): string {
       .filter((entry) => entry.command[0] === "broadcast")
       .map((entry) => `  fonte ${entry.command.join(" ")} --help`),
     "",
-    "Create a new draft UUID when content or audience inputs change.",
+    "Review the exact draft version before Send. Audience refresh is explicit; recovery reuses the saved request identity.",
     "",
   ].join("\n");
 }

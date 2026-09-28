@@ -85,7 +85,7 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
     clientInfo: { name: "fonte-broadcast-test", version: "1.0.0" },
   });
   assert.equal(initialized.result.serverInfo.name, "fonte");
-  assert.match(initialized.result.instructions, /verified-account test/);
+  assert.match(initialized.result.instructions, /Processing is not executable/);
   child.notify("notifications/initialized", {});
 
   const listed = await child.request("tools/list", {});
@@ -202,10 +202,8 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
     request_id: sendRequestId,
     expected_draft_version: 4,
   });
-  assert.equal(sent.outcome, "completed");
-  assert.equal(sent.operation.operation.operation_id, sendOperationId);
-  assert.equal(sent.operation.operation.phase, "queued");
-  assert.equal(sent.operation.operation.total, null);
+  assert.equal(sent.reason, "canonical_send_review_required");
+  assert.equal(sent.core_effect, "none");
   await verifyLoggedOutSession(child, rendered.render.render_proof);
 });
 
@@ -248,7 +246,6 @@ async function verifyLoggedOutSession(child, renderProof) {
   assert.equal(child.stderr(), "");
   assertNoSecret(child.output());
 }
-
 
 async function verifyTargeting(child) {
   const targeted = await call(child, "fonte_update_broadcast_targeting", {

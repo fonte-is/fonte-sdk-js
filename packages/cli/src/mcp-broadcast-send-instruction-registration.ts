@@ -38,9 +38,16 @@ const effect = {
   openWorldHint: false,
 } as const;
 
+export const MCP_BROADCAST_LEGACY_SEND_READ_TOOL =
+  "fonte_read_legacy_broadcast_send_operation";
+
 export function registerMcpBroadcastSendInstructionTools(
   server: McpServer,
   provider: BroadcastSendInstructionClientProvider,
+  options: {
+    readonly includeSendRead?: boolean;
+    readonly readToolName?: string;
+  } = {},
 ): void {
   const sendNow = createBroadcastSendNowToolHandler(provider);
   server.registerTool(
@@ -70,19 +77,23 @@ export function registerMcpBroadcastSendInstructionTools(
     async (input) => result(await schedule(input)),
   );
 
-  const read = createBroadcastSendReadToolHandler(provider);
-  server.registerTool(
-    MCP_BROADCAST_SEND_READ_TOOL,
-    {
-      title: "Read Broadcast Send operation",
-      description:
-        "Observes one durable v3 Send operation with GET only. It never prepares, authorizes, retries, or advances work. Describe authorizing, packaging, and activation-pending phases as Preparing unless diagnostics were requested.",
-      inputSchema: readBroadcastSendOperationInputSchema,
-      outputSchema: broadcastSendInstructionOutputSchema,
-      annotations: observe,
-    },
-    async (input) => result(await read(input)),
-  );
+  if (options.includeSendRead !== false) {
+    const read = createBroadcastSendReadToolHandler(provider);
+    server.registerTool(
+      options.readToolName ?? MCP_BROADCAST_SEND_READ_TOOL,
+      {
+        title: options.readToolName
+          ? "Read historical Broadcast Send operation"
+          : "Read Broadcast Send operation",
+        description:
+          "Observes one durable v3 Send operation with GET only. It never prepares, authorizes, retries, or advances work. Describe authorizing, packaging, and activation-pending phases as Preparing unless diagnostics were requested.",
+        inputSchema: readBroadcastSendOperationInputSchema,
+        outputSchema: broadcastSendInstructionOutputSchema,
+        annotations: observe,
+      },
+      async (input) => result(await read(input)),
+    );
+  }
 
   const replace = createBroadcastScheduleReplaceToolHandler(provider);
   server.registerTool(

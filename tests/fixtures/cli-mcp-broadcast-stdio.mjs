@@ -47,8 +47,8 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    // Keep every authenticated step through the non-effect Send receipt live.
-    if (authorizations > 12) {
+    // Eleven authoring/read steps precede logout. Retired Send-now performs no auth/Core call.
+    if (authorizations > 11) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";

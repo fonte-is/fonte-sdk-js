@@ -14,6 +14,9 @@ export interface McpClientAuthOptions {
   readonly authorize: ClientAuthRuntime["authorize"];
   readonly renewAuthorization?: ClientAuthRuntime["renewAuthorization"];
   readonly signal?: AbortSignal;
+  /** Domain-specific bounds; other clients retain the existing defaults. */
+  readonly maxResponseBytes?: number;
+  readonly requestTimeoutMs?: number;
 }
 
 export interface McpAuthenticatedBoundary {
@@ -69,7 +72,8 @@ function requester(
     coreApiBaseUrl: hosted.coreApiBaseUrl,
     bearer,
     fetch: options.fetch,
-    maxResponseBytes: CORE_RESPONSE_LIMIT_BYTES,
+    maxResponseBytes: options.maxResponseBytes ?? CORE_RESPONSE_LIMIT_BYTES,
+    timeoutMs: options.requestTimeoutMs,
     signal: options.signal,
   });
 }

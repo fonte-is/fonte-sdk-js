@@ -32,6 +32,38 @@ export function createWorkspaceCatalogClient(
   };
 }
 
+/** Resolve a caller's code/slug through current authenticated catalog facts.
+ * The public display summaries stay unchanged; IDs are used only for scope checks. */
+export async function resolveAuthorizedWorkspaceId(
+  request: CoreRequester,
+  workspace: string,
+  timeoutMs?: number,
+): Promise<string> {
+  const entries = parseCoreReceipt(
+    (value) => {
+      workspaceCatalogReceipt(value);
+      return record(value).workspaces as Record<string, unknown>[];
+    },
+    await request(
+      "/v1/workspaces",
+      timeoutMs === undefined ? undefined : { timeoutMs },
+    ),
+  );
+  const matches = entries.filter(
+    (entry) =>
+      entry.slug === workspace ||
+      entry.workspaceCode === workspace ||
+      entry.workspaceId === workspace,
+  );
+  if (matches.length !== 1)
+    throw new CoreOperatorError(
+      "broadcast_workspace_unavailable",
+      null,
+      "none",
+    );
+  return text(matches[0]!.workspaceId, 200);
+}
+
 function workspaceCatalogReceipt(value: unknown): readonly WorkspaceSummary[] {
   const root = record(value);
   exactKeys(root, ["workspaces"]);
