@@ -1,0 +1,52 @@
+{
+  "errors": [
+    {
+      "status": 400,
+      "body": {
+        "schema": "audience_count_error.v1",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "code": "audience_count_invalid_request"
+      }
+    },
+    {
+      "status": 422,
+      "body": {
+        "schema": "audience_count_error.v1",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "code": "audience_targeting_incomplete"
+      }
+    },
+    {
+      "status": 404,
+      "body": {
+        "schema": "audience_count_error.v1",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "code": "audience_source_unavailable"
+      }
+    },
+    {
+      "status": 503,
+      "body": {
+        "schema": "audience_count_error.v1",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "code": "audience_count_unavailable"
+      }
+    },
+    {
+      "status": 429,
+      "body": {
+        "schema": "audience_count_error.v1",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "code": "audience_count_capacity_exceeded"
+      }
+    },
+    {
+      "status": 504,
+      "body": {
+        "schema": "audience_count_error.v1",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "code": "audience_count_timeout"
+      }
+    }
+  ]
+}
