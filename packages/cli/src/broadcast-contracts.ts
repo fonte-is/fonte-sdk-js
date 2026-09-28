@@ -72,6 +72,7 @@ export interface BroadcastBlocker {
     | "request_conflict"
     | "request_superseded"
     | "broadcast_audience_empty"
+    | "broadcast_audience_unavailable"
     | "sender_route_unavailable"
     | "commercial_action_required"
     | "access_revoked"
