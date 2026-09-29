@@ -31,6 +31,10 @@ const expression = z.strictObject({ include: z.array(reference).max(100), exclud
 export const audienceCountRequestSchemaV1 = z.strictObject({
   schema: z.literal("audience_count_request.v1"), requestId: uuid,
   recipientExpression: expression, communicationPurposeId: uuid.nullable(), sourceCampaignId: uuid.nullable(),
+  minimumDraftExclusionActionId: uuid.optional(),
+}).superRefine((value, context) => {
+  if (Object.hasOwn(value, "minimumDraftExclusionActionId") && value.minimumDraftExclusionActionId === undefined)
+    context.addIssue({ code: "custom", message: "Invalid minimumDraftExclusionActionId" });
 });
 export type AudienceCountRequestV1 = z.output<typeof audienceCountRequestSchemaV1>;
 export const audienceCountInputSchema = z.strictObject({ workspace: z.string().min(2).max(63).regex(/^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/),
@@ -112,9 +116,12 @@ function standaloneRequester(options: AudienceCountRequesterOptions, timeoutMs: 
 
 export async function audienceCountSelectionDigestV1(workspaceId: string, environment: "sandbox" | "production", draftId: string,
   request: AudienceCountRequestV1): Promise<string> {
+  const checked = audienceCountRequestSchemaV1.parse(request);
+  if (checked.recipientExpression.include.length === 0)
+    throw new CoreOperatorError("audience_targeting_incomplete", 422, "none");
   const canonical = { schema: "audience_count_selection.v1", workspaceId: uuid.parse(workspaceId), environment, draftId: uuid.parse(draftId),
-    communicationPurposeId: request.communicationPurposeId, sourceCampaignId: request.sourceCampaignId,
-    include: sorted(request.recipientExpression.include), exclude: sorted(request.recipientExpression.exclude) };
+    communicationPurposeId: checked.communicationPurposeId, sourceCampaignId: checked.sourceCampaignId,
+    include: sorted(checked.recipientExpression.include), exclude: sorted(checked.recipientExpression.exclude) };
   const bytes = new TextEncoder().encode(JSON.stringify(canonical));
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("");

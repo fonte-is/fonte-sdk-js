@@ -12,6 +12,7 @@ import { createAudienceCountToolHandler, registerMcpAudienceCountTool, MCP_AUDIE
 import { CoreOperatorError } from "../packages/cli/dist/operator-core-request.js";
 
 const valid = JSON.parse(readFileSync(new URL("./fixtures/audience-count-contract/valid.json", import.meta.url), "utf8"));
+const action = JSON.parse(readFileSync(new URL("./fixtures/audience-count-contract/minimum-draft-exclusion-action.json", import.meta.url), "utf8"));
 const errors = JSON.parse(readFileSync(new URL("./fixtures/audience-count-contract/errors.json", import.meta.url), "utf8"));
 const fixtureInput = { workspace: "synthetic-workspace", draftId: valid.scope.draftId, request: valid.request };
 const options = (url: string) => ({ coreApiBaseUrl: url, bearer: "synthetic-token", fetch,
@@ -47,6 +48,38 @@ test("FON-837 fixture digest, one unsaved count POST and zero result", async () 
     assert.deepEqual(local.calls[0]?.body, { ...valid.request, recipientExpression: valid.normalizedRecipientExpression });
     assert.equal(local.calls[0]?.authorization, "Bearer synthetic-token");
   } finally { await local.close(); }
+});
+
+test("optional draft CSV action is forwarded unchanged and excluded from digest", async () => {
+  const withAction = { workspace: fixtureInput.workspace, draftId: fixtureInput.draftId, request: action.request };
+  assert.equal(await audienceCountSelectionDigestV1(action.scope.workspaceId, action.scope.environment,
+    action.scope.draftId, action.request), valid.selectionDigest);
+  const local = await server(() => ({ status: 200, body: valid.result }));
+  try {
+    assert.equal((await countBroadcastAudience(withAction, options(local.url))).recipientCount, 0);
+    assert.equal(local.calls.length, 1);
+    assert.equal((local.calls[0]?.body as { minimumDraftExclusionActionId: string }).minimumDraftExclusionActionId,
+      action.minimumDraftExclusionActionId);
+    assert.equal(parseAudienceCountArguments(["broadcast", "audience-count", "--count-input", JSON.stringify(withAction)])
+      ?.input.request.minimumDraftExclusionActionId, action.minimumDraftExclusionActionId);
+  } finally { await local.close(); }
+  assert.equal(Object.hasOwn(parseAudienceCountArguments(["broadcast", "audience-count", "--count-input", JSON.stringify(fixtureInput)])!.input.request,
+    "minimumDraftExclusionActionId"), false);
+  let mcpAction: string | undefined;
+  const handler = createAudienceCountToolHandler(async () => ({ count: async input => {
+    mcpAction = input.request.minimumDraftExclusionActionId;
+    return valid.result;
+  } }));
+  assert.equal((await handler(withAction)).count?.recipientCount, 0);
+  assert.equal(mcpAction, action.minimumDraftExclusionActionId);
+  for (const malformed of [null, "not-a-uuid", 13, undefined]) {
+    const bad = { ...withAction, request: { ...withAction.request, minimumDraftExclusionActionId: malformed } };
+    await assert.rejects(countBroadcastAudience(bad, options("http://127.0.0.1:1")), /audience_count_invalid_request/);
+    if (malformed !== undefined)
+      assert.throws(() => parseAudienceCountArguments(["broadcast", "audience-count", "--count-input", JSON.stringify(bad)]));
+  }
+  const unknown = { ...withAction, request: { ...withAction.request, anotherFreshnessField: action.minimumDraftExclusionActionId } };
+  await assert.rejects(countBroadcastAudience(unknown, options("http://127.0.0.1:1")), /audience_count_invalid_request/);
 });
 
 test("mismatch and oversized count receipts fail closed", async () => {
