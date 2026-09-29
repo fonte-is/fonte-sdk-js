@@ -231,27 +231,9 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
-    command: ["broadcast", "send", "now"],
-    usage: [
-      [
-        "--workspace <slug> --environment production --draft-id <uuid>",
-        "--expected-version <n> --request-id <uuid>",
-      ],
-    ],
-    detail:
-      "Accepts one saved Broadcast instruction immediately. This is the one explicit Send effect; it performs no review, audience preparation, quote, payment, or provider work.",
-    json: true,
-  },
-  {
-    command: ["broadcast", "send", "schedule"],
-    usage: [
-      [
-        "--workspace <slug> --environment production --draft-id <uuid>",
-        "--expected-version <n> --not-before <ISO-8601> --request-id <uuid>",
-      ],
-    ],
-    detail:
-      "Accepts one saved Broadcast instruction for the exact future time. Expensive work remains backend-owned and does not begin before it is due.",
+    command: ["broadcast", "send"],
+    usage: [["--send-input '<exact reviewed send_input JSON>'"]],
+    detail: "Submits the exact customer-reviewed Send once and reads the same operation after an ambiguous response.",
     json: true,
   },
   {

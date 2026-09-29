@@ -13,8 +13,6 @@ const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
 const operationId = "synthetic-test-composition-v2";
 const systemId = "00000000-0000-4000-8000-000000000153";
-const sendRequestId = "00000000-0000-4000-8000-000000000154";
-const sendOperationId = "00000000-0000-4000-8000-000000000155";
 const senderId = "sender_synthetic_primary";
 const digest = `sha256:${"c".repeat(64)}`;
 const html =
@@ -196,16 +194,8 @@ test("fresh authenticated fonte-mcp exposes the bounded Broadcast chain", async 
   assert.equal(read.test_result.inbox_confirmation, "unavailable");
 
   await verifyTargeting(child);
-  const sent = await call(child, "fonte_send_broadcast_now", {
-    workspace,
-    draft_id: draftId,
-    request_id: sendRequestId,
-    expected_draft_version: 4,
-  });
-  assert.equal(sent.outcome, "completed");
-  assert.equal(sent.operation.operation.operation_id, sendOperationId);
-  assert.equal(sent.operation.operation.phase, "queued");
-  assert.equal(sent.operation.operation.total, null);
+  assert.equal(MCP_FONTE_ALLOWLIST.tools.includes("fonte_send_broadcast_now"), false);
+  assert.equal(MCP_FONTE_ALLOWLIST.tools.includes("fonte_schedule_broadcast"), false);
   await verifyLoggedOutSession(child, rendered.render.render_proof);
 });
 

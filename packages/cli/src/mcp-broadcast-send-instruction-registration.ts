@@ -6,20 +6,14 @@ import {
   increaseBroadcastSpendLimitInputSchema,
   readBroadcastSendOperationInputSchema,
   replaceBroadcastScheduleInputSchema,
-  scheduleBroadcastInputSchema,
-  sendBroadcastNowInputSchema,
 } from "./mcp-broadcast-send-instruction-types.js";
 import {
   createBroadcastScheduleReplaceToolHandler,
-  createBroadcastScheduleToolHandler,
   createBroadcastSendCancelToolHandler,
-  createBroadcastSendNowToolHandler,
   createBroadcastSendReadToolHandler,
   createBroadcastSpendLimitIncreaseToolHandler,
   MCP_BROADCAST_SCHEDULE_REPLACE_TOOL,
-  MCP_BROADCAST_SCHEDULE_TOOL,
   MCP_BROADCAST_SEND_CANCEL_TOOL,
-  MCP_BROADCAST_SEND_NOW_TOOL,
   MCP_BROADCAST_SEND_READ_TOOL,
   MCP_BROADCAST_SPEND_LIMIT_INCREASE_TOOL,
   type BroadcastSendInstructionClientProvider,
@@ -42,34 +36,6 @@ export function registerMcpBroadcastSendInstructionTools(
   server: McpServer,
   provider: BroadcastSendInstructionClientProvider,
 ): void {
-  const sendNow = createBroadcastSendNowToolHandler(provider);
-  server.registerTool(
-    MCP_BROADCAST_SEND_NOW_TOOL,
-    {
-      title: "Send Broadcast now",
-      description:
-        "Retired unreviewed Send entrypoint. Use fonte_prepare_broadcast and fonte_send_broadcast with the exact reviewed send_input.",
-      inputSchema: sendBroadcastNowInputSchema,
-      outputSchema: broadcastSendInstructionOutputSchema,
-      annotations: effect,
-    },
-    async (input) => result(await sendNow(input)),
-  );
-
-  const schedule = createBroadcastScheduleToolHandler(provider);
-  server.registerTool(
-    MCP_BROADCAST_SCHEDULE_TOOL,
-    {
-      title: "Schedule Broadcast",
-      description:
-        "Retired unreviewed Schedule entrypoint. Use the reviewed canonical Send path.",
-      inputSchema: scheduleBroadcastInputSchema,
-      outputSchema: broadcastSendInstructionOutputSchema,
-      annotations: effect,
-    },
-    async (input) => result(await schedule(input)),
-  );
-
   const read = createBroadcastSendReadToolHandler(provider);
   server.registerTool(
     MCP_BROADCAST_SEND_READ_TOOL,

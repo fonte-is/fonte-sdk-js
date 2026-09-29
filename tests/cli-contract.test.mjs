@@ -26,7 +26,7 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fonte-is/cli");
-  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.version, "0.3.5");
   assert.deepEqual(manifest.bin, {
     fonte: "./dist/main.js",
     "fonte-mcp": "./dist/mcp-main.js",
@@ -156,7 +156,7 @@ test("broadcast close and cancel help compose with the shared operator CLI", asy
       result.stdout,
       new RegExp(`Usage: fonte broadcast ${operation}`),
     );
-    assert.match(result.stdout, /state-idempotent/);
+    assert.match(result.stdout, /Core/);
   }
 
   assert.equal(calls, 0);
@@ -217,20 +217,17 @@ test("invalid JSON calls stay private and every current command help matches its
     [["broadcast", "audience", "preview", "--help"], "eligible counts"],
     [["broadcast", "test", "send", "--help"], "--environment sandbox"],
     [["broadcast", "test", "status", "--help"], "--environment production"],
-    [["broadcast", "send", "--help"], "broadcast send now --help"],
-    [["broadcast", "send", "now", "--help"], "one explicit Send effect"],
-    [["broadcast", "send", "schedule", "--help"], "future time"],
+    [["broadcast", "send", "--help"], "--send-input"],
     [["broadcast", "send", "status", "--help"], "GET only"],
     [
       ["broadcast", "send", "increase-limit", "--help"],
       "explicit customer authority",
     ],
     [["broadcast", "preflight", "--help"], "--expected-version <n>"],
-    [["broadcast", "authorize", "--help"], "--idempotency-key <key>"],
     [["broadcast", "status", "--help"], "[--watch]"],
-    [["broadcast", "pause", "--help"], "state-idempotent"],
-    [["broadcast", "resume", "--help"], "state-idempotent"],
-    [["broadcast", "cancel", "--help"], "state-idempotent"],
+    [["broadcast", "pause", "--help"], "canonical Send operation"],
+    [["broadcast", "resume", "--help"], "canonical Send operation"],
+    [["broadcast", "cancel", "--help"], "canonical Send operation"],
     [["broadcast", "result", "--help"], "frozen audience provenance"],
     [["bridge", "observe", "resend", "--help"], "Resend segment"],
     [["bridge", "copy", "resend", "--help"], "fingerprint-bound"],
@@ -251,7 +248,7 @@ test("invalid JSON calls stay private and every current command help matches its
     ],
     [
       ["provider-evidence", "resend", "advance", "--help"],
-      "never retries automatically",
+      "never retry the mutation",
     ],
     [
       ["provider-evidence", "resend", "seal", "--help"],

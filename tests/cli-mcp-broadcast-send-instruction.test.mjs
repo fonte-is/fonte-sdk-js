@@ -13,7 +13,7 @@ const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000711";
 const requestId = "00000000-0000-4000-8000-000000000712";
 
-test("MCP registers one-effect Send/Schedule, GET observation, and bounded controls", () => {
+test("MCP registers GET observation and bounded controls without retired Send shortcuts", () => {
   const registrations = [];
   registerMcpBroadcastSendInstructionTools(
     {
@@ -24,8 +24,6 @@ test("MCP registers one-effect Send/Schedule, GET observation, and bounded contr
   assert.deepEqual(
     registrations.map(([name]) => name),
     [
-      "fonte_send_broadcast_now",
-      "fonte_schedule_broadcast",
       "fonte_read_broadcast_send_operation",
       "fonte_replace_broadcast_schedule",
       "fonte_cancel_broadcast_send",
