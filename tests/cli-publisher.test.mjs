@@ -65,11 +65,12 @@ test("an occupied version is never overwritten and an exact existing version is 
   assert.deepEqual(exact.npmCalls, ["pack", "view"]);
 });
 
-test("publication invokes once and ambiguous responses require exact registry readback, never a retry", async () => {
+test("publication invokes once, shows npm challenges, and requires exact registry readback", async () => {
   for (const [mode, outcome] of [
     ["success", "published_exact"],
     ["ambiguous_exact", "published_exact_after_ambiguous_response"],
     ["ambiguous_absent", null],
+    ["otp_required", null],
   ]) {
     const result = await runPublisher({ publish: true, mode });
     assert.deepEqual(result.npmCalls, ["pack", "view", "publish", "view"]);
@@ -80,7 +81,8 @@ test("publication invokes once and ambiguous responses require exact registry re
       assert.equal(receipt.publishInvocationCount, 1);
     } else {
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /outcome is unknown.*do not retry/);
+      assert.match(result.stderr, /exact registry identity is absent/);
+      if (mode === "otp_required") assert.match(result.stderr, /EOTP/);
     }
   }
 });
@@ -214,7 +216,8 @@ if (command === "git") {
     process.stdout.write(JSON.stringify({ name: "@fonte-is/cli", version: "0.3.5", dist: { integrity: config.mode === "occupied" ? "different" : config.digests.integrity, shasum: config.digests.sha1 } }));
   } else { process.stderr.write("E404"); process.exit(1); }
 } else if (args[0] === "publish") {
-  if (config.mode !== "ambiguous_absent") fs.writeFileSync(path.join(config.fixture, "published"), "yes");
+  if (!["ambiguous_absent", "otp_required"].includes(config.mode)) fs.writeFileSync(path.join(config.fixture, "published"), "yes");
+  if (config.mode === "otp_required") process.stderr.write("EOTP: one-time authentication required\\n");
   process.exit(config.mode === "success" ? 0 : 1);
 } else { process.stderr.write("unexpected command: " + args[0]); process.exit(2); }
 `;
