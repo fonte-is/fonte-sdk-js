@@ -316,19 +316,6 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
-    command: ["broadcast", "authorize"],
-    usage: [
-      [
-        "--workspace <slug> --environment production --draft-id <uuid>",
-        "--revision <n> --postal-address <address> --idempotency-key <key>",
-        "[--acknowledge-audience-reuse <sha256:identity>]",
-      ],
-    ],
-    detail:
-      "Explicitly authorizes Core to freeze recipients and start the broadcast.",
-    json: true,
-  },
-  {
     command: ["broadcast", "status"],
     usage: [
       [
@@ -336,18 +323,6 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail: "Reads authoritative progress; --watch polls the same read route.",
-    json: true,
-  },
-  {
-    command: ["broadcast", "canary"],
-    usage: [
-      [
-        "--workspace <slug> --environment production --broadcast-id <uuid>",
-        "--release-ceiling <n> --idempotency-key <key>",
-      ],
-    ],
-    detail:
-      "Reads a safe baseline, releases to one cumulative ceiling, watches acceptance, and pauses under one bound sign-in.",
     json: true,
   },
   ...(["pause", "resume", "cancel", "close"] as const).map((operation) => ({

@@ -10,7 +10,6 @@ import {
   positiveInteger,
   productionRead,
   required,
-  reuseOverride,
   sha256,
   uuid,
   workspace,
@@ -36,8 +35,6 @@ export function parseProductionOperatorArguments(
   if (argv[1] === "audience" && argv[2] === "append") {
     return audienceAppend(argv.slice(3));
   }
-  if (argv[1] === "authorize") return authorize(argv.slice(2));
-  if (argv[1] === "canary") return canary(argv.slice(2));
   if (argv[1] === "status") return progress(argv.slice(2));
   if (
     argv[1] === "pause" ||
@@ -164,29 +161,6 @@ function productionTestStatus(
   });
 }
 
-function authorize(argv: readonly string[]): ParsedOperatorArguments {
-  const options = productionRead(argv, [
-    "--draft-id",
-    "--revision",
-    "--postal-address",
-    "--idempotency-key",
-    "--acknowledge-audience-reuse",
-  ]);
-  return operatorArguments(options, {
-    kind: "broadcast_authorize",
-    workspace: workspace(options),
-    draftId: uuid(required(options, "--draft-id"), "--draft-id"),
-    revision: positiveInteger(required(options, "--revision"), "--revision"),
-    postalAddress: content(
-      required(options, "--postal-address"),
-      2_000,
-      "--postal-address",
-    ),
-    idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
-    audienceReuseOverride: reuseOverride(options),
-  });
-}
-
 function progress(argv: readonly string[]): ParsedOperatorArguments {
   const options = productionRead(argv, ["--broadcast-id"], [], ["--watch"]);
   return operatorArguments(options, {
@@ -194,24 +168,6 @@ function progress(argv: readonly string[]): ParsedOperatorArguments {
     workspace: workspace(options),
     broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
     watch: options.flags.has("--watch"),
-  });
-}
-
-function canary(argv: readonly string[]): ParsedOperatorArguments {
-  const options = productionRead(argv, [
-    "--broadcast-id",
-    "--release-ceiling",
-    "--idempotency-key",
-  ]);
-  return operatorArguments(options, {
-    kind: "broadcast_canary",
-    workspace: workspace(options),
-    broadcastId: uuid(required(options, "--broadcast-id"), "--broadcast-id"),
-    releaseCeiling: positiveInteger(
-      required(options, "--release-ceiling"),
-      "--release-ceiling",
-    ),
-    idempotencyKey: idempotencyKey(required(options, "--idempotency-key")),
   });
 }
 

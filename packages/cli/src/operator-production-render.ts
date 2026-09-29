@@ -1,4 +1,3 @@
-import { renderAmbiguousBroadcastRecovery } from "./operator-broadcast-recovery.js";
 import type { OperatorReceipt } from "./operator-types.js";
 
 export function renderProductionOperatorHuman(
@@ -55,10 +54,7 @@ export function renderProductionOperatorHuman(
       "",
     ].join("\n");
   }
-  if (
-    result?.kind === "broadcast_test_queued" ||
-    result?.kind === "broadcast_authorization"
-  ) {
+  if (result?.kind === "broadcast_test_queued") {
     return renderQueued(receipt, result);
   }
   if (result?.kind === "production_test") {
@@ -76,21 +72,6 @@ export function renderProductionOperatorHuman(
       `Broadcast/version: ${result.broadcast_id}/${result.progress_version}.`,
       `Pending/claimed/accepted/refused/unknown/cancelled: ${result.pending_recipient_count}/${result.claimed_recipient_count}/${result.accepted_recipient_count}/${result.refused_recipient_count}/${result.unknown_recipient_count}/${result.cancelled_recipient_count}.`,
       `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
-  if (result?.kind === "broadcast_canary") {
-    const final = result.final;
-    return [
-      `Fonte broadcast canary: ${receipt.outcome}.`,
-      `Operation/broadcast: ${result.operation_id}/${result.broadcast_id}.`,
-      `Cumulative release ceiling: ${result.release_ceiling}.`,
-      `Accepted/refused/unknown/cancelled: ${final?.accepted_recipient_count ?? "unavailable"}/${final?.refused_recipient_count ?? "unavailable"}/${final?.unknown_recipient_count ?? "unavailable"}/${final?.cancelled_recipient_count ?? "unavailable"}.`,
-      `Control state: ${final?.control_state ?? "unavailable"}.`,
-      `Authorization: ${result.authorization.status}; bearer persisted: no.`,
-      `Reason: ${receipt.reason}.`,
-      `Core effect: ${receipt.core_effect}.`,
-      ...renderAmbiguousBroadcastRecovery(receipt),
       "",
     ].join("\n");
   }
@@ -125,11 +106,11 @@ function renderQueued(
   receipt: OperatorReceipt,
   result: Extract<
     NonNullable<OperatorReceipt["result"]>,
-    { readonly kind: "broadcast_test_queued" | "broadcast_authorization" }
+    { readonly kind: "broadcast_test_queued" }
   >,
 ): string {
   return [
-    `${result.kind === "broadcast_test_queued" ? "Fonte verified-account test" : "Fonte production broadcast"}: ${result.replayed ? "idempotent" : "queued"}.`,
+    `Fonte verified-account test: ${result.replayed ? "idempotent" : "queued"}.`,
     `Draft/broadcast: ${result.draft_id}/${result.broadcast_id}.`,
     `Requested/eligible/refused/unknown: ${result.requested_recipient_count}/${result.eligible_recipient_count}/${result.refused_recipient_count}/${result.unknown_recipient_count}.`,
     "Lost responses remain unknown until authoritative readback.",

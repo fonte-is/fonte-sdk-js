@@ -1,5 +1,4 @@
 import { CliUsageError } from "./errors.js";
-import type { AudienceReuseOverrideInput } from "./operator-production-types.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -192,21 +191,6 @@ export function sha256(value: string, field = "value"): string {
     invalidProductionArguments("invalid_field", field);
   }
   return value;
-}
-
-export function reuseOverride(
-  options: ProductionOptions,
-): AudienceReuseOverrideInput | null {
-  const value = options.values.get("--acknowledge-audience-reuse");
-  if (value === undefined) return null;
-  if (!/^sha256:[0-9a-f]{64}$/.test(value)) {
-    invalidProductionArguments("invalid_field", "--acknowledge-audience-reuse");
-  }
-  return {
-    version: "audience_reuse_override.v1",
-    audienceIdentity: value,
-    acknowledged: true,
-  };
 }
 
 export function invalidProductionArguments(

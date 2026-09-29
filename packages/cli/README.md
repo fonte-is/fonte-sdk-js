@@ -200,9 +200,9 @@ remain unavailable; production capability requires the verified-domain journey.
 The operator commands are thin stored-session Core clients and do not
 require a Next.js project. The current Broadcast v3 path accepts one saved
 draft cheaply and observes the durable operation without recipient-scale work.
-The earlier V1 surface remains for compatible existing operations, including
-the fixed sandbox canary and the bounded production
-draft/audience/test/preflight/authorization/control/result journey,
+The earlier V1 read and control surface remains for compatible existing
+operations, including the fixed sandbox canary and production
+draft/audience/test/preflight/control/result commands,
 Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
 collection discovery, reconciliation, and explicit fingerprint-bound audience
 freeze. Contact-import status returns Core's exact completed batch UUID and
@@ -215,8 +215,7 @@ unavailable until its exact application and scope configuration is admitted.
 Reconciliation output contains only provenance and aggregate counts;
 contact rows are never rendered. The CLI selects
 audiences only by Core IDs, never filenames, and never computes eligibility.
-Preflight observes one exact persisted draft revision. Authorization reuses
-Core's existing authority and immutable recipient freeze. Lost mutation
+Preflight observes one exact persisted draft revision. Lost mutation
 responses remain unknown until explicit readback. Unexposed declarations return
 `unsupported_authority` before OAuth or network access.
 
@@ -228,8 +227,9 @@ input, confirms its commercial review, and submits canonical Send once. Core
 creates the executable Broadcast in the Send transaction. If the POST response
 is ambiguous, the CLI reads the stored operation using the same plan and
 request identity; it never posts Send again. `broadcast send status` is GET only.
-The old `broadcast authorize`, `broadcast send now`, and `broadcast send
-schedule` commands refuse new sends with `canonical_send_review_required`.
+The old `broadcast authorize` and release-based `broadcast canary` commands
+have been removed. `broadcast send now` and `broadcast send schedule` refuse
+new sends with `canonical_send_review_required`.
 
 The candidate evidence journey is JSON-only and the rotation journey is
 aggregate-only. Rotation follows one closed sequence: `start`, `read`, then

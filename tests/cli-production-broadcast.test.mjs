@@ -82,6 +82,12 @@ test("production grammar binds factual audience IDs and rejects filename or sand
       ),
     );
   }
+  for (const retired of ["authorize", "canary"]) {
+    assert.throws(() => parseArguments([
+      "broadcast", retired, "--workspace", workspace,
+      "--environment", "production", "--json",
+    ]));
+  }
 });
 
 test("lost production mutations remain unknown until explicit Core readback", async () => {
@@ -240,10 +246,10 @@ test("one isolated fake-Core journey exercises every production operator route w
   assert.equal(receipts[5].result.accepted_email_usage_record_count, 1);
   assert.equal(receipts[6].result.ready, true);
   assert.equal(receipts[7].result.broadcast_id, broadcastId);
-  assert.equal(receipts[10].result.status, "terminal");
-  assert.equal(receipts[11].result.status, "closed");
+  assert.equal(receipts[9].result.status, "terminal");
+  assert.equal(receipts[10].result.status, "closed");
   assert.equal(
-    receipts[12].result.audience_targeting.communication_purpose_id,
+    receipts[11].result.audience_targeting.communication_purpose_id,
     purposeId,
   );
   assert.equal(fake.state.testReads, 2);

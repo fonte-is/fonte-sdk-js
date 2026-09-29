@@ -61,7 +61,6 @@ import {
   segmentFailureReceipt,
   segmentReceiptDescriptor,
 } from "./operator-segment-run.js";
-import { runBroadcastCanary } from "./operator-broadcast-canary.js";
 import { createCoreRequester } from "./operator-core-request.js";
 import { createCanonicalBroadcastClient } from "./operator-broadcast-canonical-send.js";
 import { createBroadcastDraftLifecycleClient } from "./operator-broadcast-draft-lifecycle-client.js";
@@ -95,9 +94,6 @@ export async function runOperatorCommand(
   randomUUID: () => string,
 ): Promise<OperatorReceipt> {
   if (command.kind === "unsupported") return unsupportedReceipt();
-  if (command.kind === "broadcast_canary") {
-    return runBroadcastCanary(command, dependencies, randomUUID(), randomUUID);
-  }
   try {
     const providerEvidenceCandidates = isProviderEvidenceCommand(command)
       ? await loadProviderEvidenceCandidates(

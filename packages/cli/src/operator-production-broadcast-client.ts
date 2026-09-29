@@ -11,14 +11,12 @@ import {
   queuedBroadcast,
 } from "./operator-production-json.js";
 import type {
-  ProductionAuthorizeInput,
   ProductionAudienceAppendInput,
   ProductionAudienceAppendPreflightResult,
   ProductionAudienceAppendResult,
   ProductionBroadcastControlInput,
   ProductionBroadcastProgressResult,
   ProductionBroadcastReadInput,
-  ProductionBroadcastReleaseInput,
   ProductionBroadcastResult,
   ProductionDraftReadInput,
   ProductionTestReadInput,
@@ -34,17 +32,11 @@ export interface ProductionBroadcastClient {
   readProductionTest(
     input: ProductionTestReadInput,
   ): Promise<ProductionTestResult>;
-  authorizeProductionBroadcast(
-    input: ProductionAuthorizeInput,
-  ): Promise<QueuedBroadcastResult>;
   readProductionProgress(
     input: ProductionBroadcastReadInput,
   ): Promise<ProductionBroadcastProgressResult>;
   controlProductionBroadcast(
     input: ProductionBroadcastControlInput,
-  ): Promise<ProductionBroadcastProgressResult>;
-  releaseProductionBroadcast(
-    input: ProductionBroadcastReleaseInput,
   ): Promise<ProductionBroadcastProgressResult>;
   readProductionResult(
     input: ProductionBroadcastReadInput,
@@ -93,9 +85,6 @@ export function createProductionBroadcastClient(
         invalid("none");
       return result;
     },
-    async authorizeProductionBroadcast() {
-      throw new CoreOperatorError("canonical_send_review_required", null, "none");
-    },
     async readProductionProgress(input) {
       return matchingBroadcast(
         parse(
@@ -119,28 +108,6 @@ export function createProductionBroadcastClient(
               body: {
                 operation: input.operation,
                 expectedControlVersion: input.expectedControlVersion,
-              },
-            },
-          ),
-          "unknown",
-        ),
-        input.broadcastId,
-        "unknown",
-      );
-    },
-    async releaseProductionBroadcast(input) {
-      return matchingBroadcast(
-        parse(
-          productionProgress,
-          await request(
-            `${broadcastPath(input)}/control?environment=production`,
-            {
-              idempotencyKey: input.idempotencyKey,
-              lostResponseEffect: "unknown",
-              body: {
-                operation: "release",
-                idempotencyKey: input.idempotencyKey,
-                maximumRecipientCount: input.maximumRecipientCount,
               },
             },
           ),

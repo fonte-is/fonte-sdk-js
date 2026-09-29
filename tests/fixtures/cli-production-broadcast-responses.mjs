@@ -74,19 +74,18 @@ export function audiencePreview() {
   });
 }
 
-export function queued(kind) {
+export function queued() {
   return bound({
     broadcastDraftId: draftId,
-    marketingBroadcastId: kind === "test" ? testId : broadcastId,
-    recipientSnapshotId: `${kind}-snapshot`,
-    sendPlanDecisionId: `${kind}-decision`,
+    marketingBroadcastId: testId,
+    recipientSnapshotId: "test-snapshot",
+    sendPlanDecisionId: "test-decision",
     status: "queued",
-    submittedCount: kind === "test" ? 1 : 3,
-    acceptedCount: kind === "test" ? 1 : 2,
-    refusedCount: kind === "test" ? 0 : 1,
+    submittedCount: 1,
+    acceptedCount: 1,
+    refusedCount: 0,
     unknownCount: 0,
     created: true,
-    ...(kind === "production" ? { audienceTargeting: frozenAudience() } : {}),
   });
 }
 

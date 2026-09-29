@@ -85,12 +85,9 @@ async function handleRequest(state, server, request, response) {
       assert.equal(body.textBody, textBody);
       assert.equal(body.htmlBody, htmlBody);
       state.latestTestId = testId;
-      return send(response, queued("test"), 201);
+      return send(response, queued(), 201);
     }
-    assert.equal(body.operation, "authorize_persisted_production");
-    assert.equal("textBody" in body, false);
-    assert.deepEqual(body.audienceReuseOverride, reuseOverride());
-    return send(response, queued("production"), 201);
+    throw new Error("retired production approval command reached fake Core");
   }
   if (
     url.pathname.endsWith(
