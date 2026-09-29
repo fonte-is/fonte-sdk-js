@@ -8,18 +8,18 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageDirectory = path.join(root, "packages", "cli");
 const packageName = "@fonte-is/cli";
-const packageVersion = "0.3.0";
+const packageVersion = "0.3.5";
 const registryUrl = "https://registry.npmjs.org/";
-const reviewedPackageRef = "9f682498864534031611520059cbc0d11d041916";
-const reviewedSourceTree = "101863430e72514e46816ce0b3c8902cf3927b65";
-const reviewedCliTree = "f1f4c4f02b8ec405856edd8efb1bb7217f41665d";
-const reviewedPackageLockBlob = "ab4b2841f02b25245b4fb7274ff9cb5ce9814cb7";
-const reviewedManifestBlob = "28b092ceddfc4d9afad2922a2d5b62e5d00ee4c0";
+const reviewedPackageRef = "2df2a856d6341757c08ffff27b9bc8c7f4aae4b1";
+const reviewedSourceTree = "370010b616e795a4bdea460c3cb3f78a6b72814f";
+const reviewedCliTree = "66f9b0c6322431fb2db0c18d00f9e3d5c46bb256";
+const reviewedPackageLockBlob = "d9daaf65ca0529afe7a368208a14ac78afe58574";
+const reviewedManifestBlob = "d3f591353d6a34d6c2c667bba29c8908d7504387";
 const reviewedTarballDigests = {
-  sha1: "e4ee7f62b6575754159051464159f17d920156f9",
-  sha256: "947657391a6b87e12354f20f4aa035d1fb09a2e30f3c03342b94d505fcec113f",
+  sha1: "0047ee236f5c6935da438628caeff79f67efd462",
+  sha256: "7ef47a590ec2aa3f898cff916a8ffbe2bbe8b124d82e12446775384aa39868dd",
   integrity:
-    "sha512-+QwsGOMlmRODGB5tgUudTsY28EKg8S5DpJW/ni5E3ueBmD2MUpacFob4tcrQeutbI8XmpYAfVm+zAkNL11FOrA==",
+    "sha512-Vcvy2y3uXe0+ucvdwrBs9jIfnZqO5uNDX60WIi1dycZbV8Oja4s/ZaKQDjishZ7oF/MOIFW8NrzYnZBbumwphQ==",
 };
 
 const options = parseArguments(process.argv.slice(2));
