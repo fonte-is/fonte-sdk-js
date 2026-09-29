@@ -87,6 +87,14 @@ test("publication invokes once, shows npm challenges, and requires exact registr
   }
 });
 
+test("accepted publish waits for delayed registry processing without publishing again", async () => {
+  const result = await runPublisher({ publish: true, mode: "processing" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).outcome, "published_exact");
+  assert.match(result.stderr, /waiting for registry processing/);
+  assert.deepEqual(result.npmCalls, ["pack", "view", "publish", "view", "view"]);
+});
+
 async function runPublisher(options = {}) {
   const fixture = await mkdtemp(
     path.join(os.tmpdir(), "fonte-publisher-test-"),
@@ -212,12 +220,16 @@ if (command === "git") {
   fs.copyFileSync(path.join(config.fixture, "fixture.tgz"), path.join(destination, "fixture.tgz"));
   process.stdout.write(JSON.stringify([{ name: "@fonte-is/cli", version: "0.3.5", filename: "fixture.tgz" }]));
 } else if (args[0] === "view") {
+  if (config.mode === "processing" && fs.existsSync(path.join(config.fixture, "published")) && !fs.existsSync(path.join(config.fixture, "first-processing-read"))) {
+    fs.writeFileSync(path.join(config.fixture, "first-processing-read"), "yes");
+    process.stderr.write("E404"); process.exit(1);
+  }
   if (config.mode === "occupied" || config.mode === "already_exact" || fs.existsSync(path.join(config.fixture, "published"))) {
     process.stdout.write(JSON.stringify({ name: "@fonte-is/cli", version: "0.3.5", dist: { integrity: config.mode === "occupied" ? "different" : config.digests.integrity, shasum: config.digests.sha1 } }));
   } else { process.stderr.write("E404"); process.exit(1); }
 } else if (args[0] === "publish") {
   if (!["ambiguous_absent", "otp_required"].includes(config.mode)) fs.writeFileSync(path.join(config.fixture, "published"), "yes");
   if (config.mode === "otp_required") process.stderr.write("EOTP: one-time authentication required\\n");
-  process.exit(config.mode === "success" ? 0 : 1);
+  process.exit(["success", "processing"].includes(config.mode) ? 0 : 1);
 } else { process.stderr.write("unexpected command: " + args[0]); process.exit(2); }
 `;

@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -144,10 +145,10 @@ try {
         registry = afterAmbiguity;
         outcome = "published_exact_after_ambiguous_response";
       } else {
-        registry = readRegistryIdentity();
+        registry = await waitForRegistryIdentity();
         if (!registry) {
           throw new Error(
-            "publish returned success but exact registry identity is absent",
+            "npm accepted publish but exact registry identity is still pending after five minutes; do not republish",
           );
         }
         verifyRegistryIdentity(registry, digests);
@@ -300,6 +301,18 @@ function readRegistryIdentity() {
   }
   if (/\bE404\b|404 Not Found/i.test(result.stderr)) return null;
   throw new Error("exact registry identity readback failed without a 404");
+}
+
+async function waitForRegistryIdentity() {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const registry = readRegistryIdentity();
+    if (registry) return registry;
+    if (attempt === 0) {
+      process.stderr.write("npm accepted publish; waiting for registry processing.\n");
+    }
+    await delay(5_000);
+  }
+  return null;
 }
 
 function verifyRegistryIdentity(registry, digests) {
