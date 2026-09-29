@@ -125,7 +125,7 @@ try {
       outcome = "already_published_exact";
     } else {
       publishInvoked = true;
-      const publish = spawn("npm", [
+      const publish = spawnInteractivePublish([
         "publish",
         tarballPath,
         "--access",
@@ -137,7 +137,7 @@ try {
         const afterAmbiguity = readRegistryIdentity();
         if (!afterAmbiguity) {
           throw new Error(
-            "publish outcome is unknown and exact registry identity is absent; do not retry",
+            "publish did not succeed and exact registry identity is absent; inspect the npm error above before another attempt",
           );
         }
         verifyRegistryIdentity(afterAmbiguity, digests);
@@ -259,6 +259,22 @@ function spawn(command, args) {
       npm_config_update_notifier: "false",
     },
     stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function spawnInteractivePublish(args) {
+  return spawnSync("npm", args, {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      npm_config_audit: "false",
+      npm_config_fund: "false",
+      npm_config_update_notifier: "false",
+    },
+    // npm needs the caller's terminal to complete its one-time publish challenge.
+    // Its error must be visible even if registry readback remains absent.
+    stdio: "inherit",
   });
 }
 
