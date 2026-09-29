@@ -109,8 +109,7 @@ function ambiguousNextAction(
     );
   }
   if (
-    (command.kind === "broadcast_canary" ||
-      command.kind === "broadcast_control") &&
+    command.kind === "broadcast_control" &&
     command.workspace &&
     command.broadcastId
   ) {

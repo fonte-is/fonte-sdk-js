@@ -58,13 +58,6 @@ export interface ProductionTestReadInput extends ProductionDraftReadInput {
   readonly testId: string;
 }
 
-export interface ProductionAuthorizeInput extends ProductionDraftReadInput {
-  readonly revision: number;
-  readonly postalAddress: string;
-  readonly idempotencyKey: string;
-  readonly audienceReuseOverride: AudienceReuseOverrideInput | null;
-}
-
 export interface ProductionBroadcastReadInput {
   readonly workspace: string;
   readonly broadcastId: string;
@@ -73,11 +66,6 @@ export interface ProductionBroadcastReadInput {
 export interface ProductionBroadcastControlInput extends ProductionBroadcastReadInput {
   readonly operation: "pause" | "resume" | "close" | "cancel_remaining";
   readonly expectedControlVersion: string;
-}
-
-export interface ProductionBroadcastReleaseInput extends ProductionBroadcastReadInput {
-  readonly idempotencyKey: string;
-  readonly maximumRecipientCount: number;
 }
 
 export interface ProductionAudienceAppendInput extends ProductionBroadcastReadInput {
@@ -206,17 +194,10 @@ interface QueuedBroadcastResultBase {
   readonly unknown_recipient_count: number;
 }
 
-export type QueuedBroadcastResult = QueuedBroadcastResultBase &
-  (
-    | {
-        readonly kind: "broadcast_test_queued";
-        readonly audience_targeting: null;
-      }
-    | {
-        readonly kind: "broadcast_authorization";
-        readonly audience_targeting: FrozenAudienceTargetingResult;
-      }
-  );
+export type QueuedBroadcastResult = QueuedBroadcastResultBase & {
+  readonly kind: "broadcast_test_queued";
+  readonly audience_targeting: null;
+};
 
 export interface ProductionTestResult {
   readonly kind: "production_test";

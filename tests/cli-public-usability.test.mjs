@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { withAmbiguousBroadcastRecovery } from "../packages/cli/dist/operator-broadcast-recovery.js";
 import { renderOperatorHuman } from "../packages/cli/dist/operator-render.js";
 import { runProgram } from "../packages/cli/dist/program.js";
 
@@ -81,57 +80,11 @@ test("ambiguous control response has exact readback and forbids mutation retry",
       "Reason: core_api_unavailable.",
       "Core effect: unknown.",
       `Authoritative readback: ${readback}.`,
+      "Retry mutation: false.",
       "Do not retry the mutation.",
       "",
     ].join("\n"),
   );
-});
-
-test("ambiguous canary renderer keeps unknown effect and exact recovery", () => {
-  const receipt = withAmbiguousBroadcastRecovery(
-    { kind: "broadcast_canary", workspace, broadcastId },
-    {
-      schema_version: "fonte.cli.operator_receipt.v1",
-      command: "broadcast_canary",
-      outcome: "blocked",
-      reason: "operator_request_failed",
-      workspace,
-      authority: {
-        status: "current",
-        contract_id: "fonte.core.production_broadcast.v1",
-      },
-      core_effect: "unknown",
-      result: {
-        kind: "broadcast_canary",
-        operation_id: "10000000-0000-4000-8000-000000000202",
-        broadcast_id: broadcastId,
-        environment: "production",
-        release_ceiling: 1,
-        authorization: {
-          status: "released",
-          started_at: "2030-01-01T00:00:00.000Z",
-          ended_at: "2030-01-01T00:01:00.000Z",
-          bearer_persisted: false,
-        },
-        completed_steps: ["read_baseline"],
-        baseline: null,
-        final: null,
-      },
-    },
-  );
-
-  assert.deepEqual(receipt.next_action, {
-    kind: "run_command",
-    command: readback,
-    retry_mutation: false,
-  });
-  const human = renderOperatorHuman(receipt);
-  assert.match(human, /Core effect: unknown\./);
-  assert.match(
-    human,
-    new RegExp(`Authoritative readback: ${escapeRegex(readback)}\\.`),
-  );
-  assert.match(human, /Do not retry the mutation\./);
 });
 
 test("packed public docs define invitation custody and exact replay/readback", async () => {

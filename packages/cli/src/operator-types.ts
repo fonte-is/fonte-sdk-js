@@ -140,15 +140,6 @@ export type OperatorCommand =
       readonly watch: boolean;
     }
   | {
-      readonly kind: "broadcast_authorize";
-      readonly workspace: string;
-      readonly draftId: string;
-      readonly revision: number;
-      readonly postalAddress: string;
-      readonly idempotencyKey: string;
-      readonly audienceReuseOverride: AudienceReuseOverrideInput | null;
-    }
-  | {
       readonly kind: "broadcast_progress";
       readonly workspace: string;
       readonly broadcastId: string;
@@ -165,13 +156,6 @@ export type OperatorCommand =
       readonly kind: "broadcast_result";
       readonly workspace: string;
       readonly broadcastId: string;
-    }
-  | {
-      readonly kind: "broadcast_canary";
-      readonly workspace: string;
-      readonly broadcastId: string;
-      readonly releaseCeiling: number;
-      readonly idempotencyKey: string;
     }
   | {
       readonly kind: "broadcast_audience_append";
@@ -247,29 +231,6 @@ export interface ResendBridgePreviewResult {
   };
 }
 
-export interface BroadcastCanaryResult {
-  readonly kind: "broadcast_canary";
-  readonly operation_id: string;
-  readonly broadcast_id: string;
-  readonly environment: "production";
-  readonly release_ceiling: number;
-  readonly authorization: {
-    readonly status: "not_granted" | "released";
-    readonly started_at: string | null;
-    readonly ended_at: string;
-    readonly bearer_persisted: false;
-  };
-  readonly completed_steps: readonly (
-    | "authoritative_status"
-    | "safe_resume"
-    | "guarded_release"
-    | "authoritative_wait_read"
-    | "safety_pause"
-  )[];
-  readonly baseline: ProductionBroadcastProgressResult | null;
-  readonly final: ProductionBroadcastProgressResult | null;
-}
-
 export interface ResendBridgeCoverage {
   readonly status: "complete" | "partial";
   readonly pages_observed: number;
@@ -303,7 +264,6 @@ export type OperatorResult =
   | { readonly kind: "executable_broadcast_operation"; readonly status: "accepted";
       readonly operation: CanonicalSendStatus }
   | SandboxTestResult
-  | BroadcastCanaryResult
   | ProductionAudienceAppendResult
   | ContactImportStatusResult
   | BroadcastPreflightResult

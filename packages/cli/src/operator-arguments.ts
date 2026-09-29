@@ -13,7 +13,7 @@ import { parseSegmentOperatorArguments } from "./operator-segment-arguments.js";
 import type { ParsedOperatorArguments } from "./operator-types.js";
 
 const missingBroadcast = new Set(
-  "draft audience preflight authorize prepare send reconcile status watch pause resume cancel close duplicate".split(
+  "draft audience preflight prepare send reconcile status watch pause resume cancel close duplicate".split(
     " ",
   ),
 );

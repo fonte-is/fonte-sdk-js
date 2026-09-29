@@ -16,7 +16,6 @@ import {
   text,
   uuid,
 } from "./operator-production-json-values.js";
-import { frozenAudienceTargeting } from "./operator-production-result-json.js";
 import type {
   ProductionBroadcastProgressResult,
   ProductionTestResult,
@@ -35,17 +34,7 @@ export function queuedBroadcast(
   const refused = count(body.refusedCount);
   const unknown = count(body.unknownCount);
   if (requested !== eligible + refused + unknown) invalid();
-  const targeting =
-    body.audienceTargeting === undefined
-      ? null
-      : frozenAudienceTargeting(body.audienceTargeting);
-  if ((kind === "broadcast_authorization") !== (targeting !== null)) invalid();
-  if (
-    targeting &&
-    (targeting.counts.matched !== requested ||
-      targeting.counts.final_eligible !== eligible)
-  )
-    invalid();
+  if (body.audienceTargeting !== undefined) invalid();
   const common = {
     draft_id: uuid(body.broadcastDraftId),
     broadcast_id: uuid(body.marketingBroadcastId),
@@ -57,9 +46,7 @@ export function queuedBroadcast(
     refused_recipient_count: refused,
     unknown_recipient_count: unknown,
   };
-  return kind === "broadcast_test_queued"
-    ? { ...common, kind, audience_targeting: null }
-    : { ...common, kind, audience_targeting: targeting! };
+  return { ...common, kind, audience_targeting: null };
 }
 
 export function productionTest(value: unknown): ProductionTestResult {

@@ -17,7 +17,6 @@ type ProductionOperatorCommand = Extract<
       | "broadcast_audience_append"
       | "broadcast_production_test_send"
       | "broadcast_production_test_status"
-      | "broadcast_authorize"
       | "broadcast_progress"
       | "broadcast_control"
       | "broadcast_result";
@@ -77,9 +76,6 @@ export async function executeProductionCommand(
     const read = () => client.readProductionTest(command);
     return command.watch ? pollTest(read, sleep) : read();
   }
-  if (command.kind === "broadcast_authorize") {
-    throw new CoreOperatorError("canonical_send_review_required", null, "none");
-  }
   if (command.kind === "broadcast_progress") {
     const read = () => client.readProductionProgress(command);
     return command.watch ? pollProgress(read, sleep) : read();
@@ -125,10 +121,7 @@ export function productionReceiptDescriptor(
       coreEffect: result.replayed ? "none" : "created",
     };
   }
-  if (
-    result.kind === "broadcast_test_queued" ||
-    result.kind === "broadcast_authorization"
-  ) {
+  if (result.kind === "broadcast_test_queued") {
     return {
       outcome: "queued",
       reason: result.replayed

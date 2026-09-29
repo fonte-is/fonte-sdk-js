@@ -138,9 +138,8 @@ spending-cap mutation, then amends approval on the same operation. It derives
 no cost, reconstructs no balance, reserves nothing, and never calls a payment
 provider directly.
 
-The preflight, authorize, broadcast-ID status, and broadcast-ID control
-commands below remain as the legacy v1/v2 compatibility surface. They are not
-part of v3 acceptance and must not be inserted before a v3 Send or Schedule.
+Preflight, broadcast-ID status, and broadcast-ID control remain available for
+existing legacy operations. They are not part of v3 Send or Schedule.
 
 ### Legacy v1/v2 compatibility
 
@@ -172,16 +171,8 @@ fonte broadcast preflight --workspace <slug> --environment production \
   --draft-id <uuid> --expected-version <n> --postal-address <address> \
   [--acknowledge-audience-reuse <sha256:identity>]
 
-fonte broadcast authorize --workspace <slug> --environment production \
-  --draft-id <uuid> --revision <n> --postal-address <address> \
-  --idempotency-key <key> \
-  [--acknowledge-audience-reuse <sha256:identity>]
-
 fonte broadcast status --workspace <slug> --environment production \
   --broadcast-id <uuid> [--watch]
-
-fonte broadcast canary --workspace <slug> --environment production \
-  --broadcast-id <uuid> --release-ceiling <n> --idempotency-key <key>
 
 fonte broadcast pause|resume|cancel --workspace <slug> \
   --environment production --broadcast-id <uuid> \
@@ -331,30 +322,7 @@ not expose contact rows, email addresses, provider record IDs, or credentials.
 Successful and blocked partition receipts are both human-renderable; an
 already-attempted Core operation never becomes an output-format failure.
 
-`broadcast canary` is one declared ten-minute operation under one Authorization
-Code + S256 PKCE grant and one in-memory bearer. It reads Core's production
-progress first and proceeds only for the requested workspace and broadcast when
-the baseline is fresh and its released-recipient accounting is exact. Historical
-refused, unknown, and cancelled counts are frozen, not erased. A paused
-broadcast is resumed once with the same bearer; pre-existing pending or claimed
-work must then settle without increasing any frozen safety count. The operator
-supplies an exact cumulative release ceiling; the CLI sends Core only the
-difference between that ceiling and the settled released count, under Core's
-existing idempotency key. It reads progress without mutation retries, requires
-that exact new delta to become newly accepted, preserves the historical
-non-accepted offset, and pauses while the broadcast remains open. A fresh Core
-`terminal` receipt at the exact accepted ceiling, with exact recipient accounting
-and no held, pending, claimed, or remaining work, completes without an additional
-control mutation. An already-terminal baseline reports no Core effect. Terminal
-success retains the distinct receipt reason when new cancellations occurred.
-After resume begins, the first refused,
-unknown, cancelled, stale, or unavailable observation also causes one immediate
-pause attempt. The terminal receipt contains only the frozen operation ID,
-sanitized progress, completed steps, and the ended in-memory authorization
-lifetime. Cancellation, expiry, failed OAuth state, or a distinct invocation
-never inherits that bearer.
-
-When a canary or control mutation response is ambiguous, the receipt keeps
+When a control mutation response is ambiguous, the receipt keeps
 `core_effect: "unknown"` and adds a `next_action` containing the exact
 `fonte broadcast status ... --json` readback plus `retry_mutation: false`.
 The human receipt renders the same authoritative command and explicitly says
