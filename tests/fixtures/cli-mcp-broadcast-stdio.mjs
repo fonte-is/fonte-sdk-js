@@ -11,8 +11,6 @@ const configUrl = "http://127.0.0.1:43111/.well-known/fonte-cli.json";
 const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000151";
 const testId = "00000000-0000-4000-8000-000000000152";
-const sendRequestId = "00000000-0000-4000-8000-000000000154";
-const sendOperationId = "00000000-0000-4000-8000-000000000155";
 const senderId = "sender_synthetic_primary";
 const digest = `sha256:${"c".repeat(64)}`;
 const html =
@@ -47,8 +45,8 @@ const session = createDurableFonteMcpSession({
   },
   authorize: async () => {
     authorizations += 1;
-    // Keep every authenticated step through the non-effect Send receipt live.
-    if (authorizations > 12) {
+    // Keep the authenticated draft, render, test, and targeting steps live.
+    if (authorizations > 11) {
       throw new HostedTestBlockedError("login_required");
     }
     return "synthetic-stdio-broadcast-bearer";
@@ -104,29 +102,6 @@ function route(url, init) {
         },
       ],
     });
-  }
-  if (
-    init.method === "POST" &&
-    path ===
-      `/v1/workspaces/${workspace}/broadcast-drafts/${draftId}` +
-        "/send-intent?environment=production"
-  ) {
-    if (
-      new Headers(init.headers).get("idempotency-key") !== sendRequestId ||
-      JSON.stringify(body) !==
-        JSON.stringify({
-          schema: "broadcast_send_intent.v3",
-          requestId: sendRequestId,
-          executionRail: "canonical_execution_cell_v1",
-          expectedDraftVersion: 4,
-          timing: { mode: "now" },
-        })
-    )
-      return response({ error: "broadcast_send_intent_invalid" }, 400);
-    return response(
-      { status: "accepted", operation: sendOperation(), replayed: false },
-      202,
-    );
   }
   if (
     init.method === "GET" &&
@@ -197,44 +172,6 @@ function route(url, init) {
   )
     return response(testReadReceipt());
   return response({ error: "synthetic_route_missing" }, 404);
-}
-
-function sendOperation() {
-  return {
-    schema: "broadcast_send_operation.v2",
-    operationId: sendOperationId,
-    scope: {
-      workspaceId: "workspace-internal",
-      environment: "production",
-      draftId,
-    },
-    instructionGeneration: 1,
-    approvalGeneration: 1,
-    acceptedAt: "2026-09-22T16:00:00.000Z",
-    timing: { mode: "now" },
-    notBefore: "2026-09-22T16:00:00.000Z",
-    phase: "queued",
-    reason: null,
-    retryable: true,
-    nextAttemptAt: "2026-09-22T16:00:01.000Z",
-    total: null,
-    timestamps: {
-      preparationStartedAt: null,
-      snapshotAt: null,
-      authorizationCommittedAt: null,
-      firstSubmissionAt: null,
-      terminalAt: null,
-    },
-    delivery: {
-      status: "unavailable",
-      reason: "provider_submission_not_started",
-      observedAt: null,
-    },
-    requiredAction: null,
-    allowedActions: ["cancel"],
-    executionAuthorized: false,
-    replayed: false,
-  };
 }
 
 function revisionReceipt(body) {

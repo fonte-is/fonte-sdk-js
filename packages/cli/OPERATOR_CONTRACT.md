@@ -83,18 +83,13 @@ not perform any of those runtime effects.
 
 ## Production journey
 
-### Broadcast v3 Fast Path
+### Production broadcast Send
 
-For a new v3 Send, the explicit customer Send or Schedule direction is the
-single human-approval handoff:
+For a new production broadcast, use the exact reviewed `send_input` produced
+after the customer's approval. The CLI submits that canonical Send once:
 
 ```text
-fonte broadcast send now --workspace <slug> --environment production \
-  --draft-id <uuid> --expected-version <n> --request-id <uuid>
-
-fonte broadcast send schedule --workspace <slug> --environment production \
-  --draft-id <uuid> --expected-version <n> \
-  --not-before <canonical-iso-instant> --request-id <uuid>
+fonte broadcast send --send-input '<exact reviewed send_input JSON>' --json
 
 fonte broadcast send status --workspace <slug> --environment production \
   --draft-id <uuid> [--watch]
@@ -114,14 +109,11 @@ fonte broadcast send increase-limit --workspace <slug> \
   --expected-approval-generation <n> --request-id <uuid>
 ```
 
-Send and Schedule submit exactly one digest-free v3 instruction for the saved
-draft version and return the durable Queued or Scheduled operation. The client
-does not review, prepare, resolve, count, quote, reserve, pay, authorize, or
-dispatch before acceptance. The request ID is both the body replay identity
-and the HTTP idempotency key. A lost mutation response keeps
-`core_effect: unknown`; the same request may be retried with the exact same
-request ID and material, while the bounded operation GET provides independent
-readback by draft identity.
+Core owns review, commercial admission, and executable publication for the
+approved operation. If the Send response is ambiguous, the CLI reads that same
+operation by its saved plan and request identity; it does not post Send again.
+`broadcast send now` and `broadcast send schedule` reject new sends with
+`canonical_send_review_required` before a Core mutation.
 
 Status and status watch are GET-only and cannot advance the operation. Missing
 evidence remains unavailable, never zero or complete. The human lifecycle is
@@ -139,9 +131,11 @@ no cost, reconstructs no balance, reserves nothing, and never calls a payment
 provider directly.
 
 Preflight, broadcast-ID status, and broadcast-ID control remain available for
-existing legacy operations. They are not part of v3 Send or Schedule.
+existing operations. The old production authorization and release endpoints
+return `legacy_broadcast_send_retired`; the CLI has no `broadcast authorize` or
+release-based `broadcast canary` command.
 
-### Legacy v1/v2 compatibility
+### Existing broadcast readback and test tools
 
 ```text
 fonte broadcast marketing-settings read --workspace <slug> \
