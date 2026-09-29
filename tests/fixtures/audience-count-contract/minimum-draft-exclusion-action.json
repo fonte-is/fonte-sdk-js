@@ -1,0 +1,46 @@
+{
+  "scope": {
+    "workspaceId": "00000000-0000-4000-8000-000000000002",
+    "environment": "sandbox",
+    "draftId": "00000000-0000-4000-8000-000000000003"
+  },
+  "request": {
+    "schema": "audience_count_request.v1",
+    "requestId": "00000000-0000-4000-8000-000000000001",
+    "recipientExpression": {
+      "include": [
+        {
+          "kind": "contact",
+          "contactId": "external:abc"
+        },
+        {
+          "kind": "system",
+          "systemId": "00000000-0000-4000-8000-000000000004"
+        },
+        {
+          "kind": "one_time",
+          "oneTimeSetId": "00000000-0000-4000-8000-000000000005"
+        },
+        {
+          "kind": "collection",
+          "collectionId": "00000000-0000-4000-8000-000000000006"
+        },
+        {
+          "kind": "import_batch",
+          "contactImportBatchId": "00000000-0000-4000-8000-000000000007"
+        }
+      ],
+      "exclude": [
+        {
+          "kind": "email_domain",
+          "domain": " EXAMPLE.Test "
+        }
+      ]
+    },
+    "communicationPurposeId": null,
+    "sourceCampaignId": null,
+    "minimumDraftExclusionActionId": "00000000-0000-4000-8000-000000000013"
+  },
+  "minimumDraftExclusionActionId": "00000000-0000-4000-8000-000000000013",
+  "selectionDigest": "d933418696204150f3cd04157ee3faf4185066fde78ab19e6255a18e525df8a3"
+}
