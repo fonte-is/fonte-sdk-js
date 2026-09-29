@@ -36,6 +36,66 @@ export function createWebsiteForms(options: {
   let inlineKeys = new Set<string>();
   const markers = new Map<string, Set<Element>>();
   const surfaces = new Map<string, Surface>();
+  const inlineRenders = new Set<() => void>();
+  const inlineWaiters = new Set<() => void>();
+  let inlineRenderStarted = false;
+  let inlineFrame: number | null = null;
+  let inlineFrameGeneration = 0;
+  const releaseInlineWaiters = () => {
+    if (!active || inlineRenders.size || inlineFrame !== null) return;
+    const ready = [...inlineWaiters];
+    inlineWaiters.clear();
+    for (const callback of ready) callback();
+  };
+  const afterInlineRenders = (callback: (deferred: boolean) => void) => {
+    if (!active) return () => {};
+    if (!inlineRenders.size && inlineFrame === null) {
+      callback(false);
+      return () => {};
+    }
+    const ready = () => callback(true);
+    inlineWaiters.add(ready);
+    return () => inlineWaiters.delete(ready);
+  };
+  const requestInlineFrame = () => {
+    const generation = ++inlineFrameGeneration;
+    inlineFrame = window.requestAnimationFrame(() =>
+      renderInlineFrame(generation),
+    );
+  };
+  const renderInlineFrame = (generation: number) => {
+    if (generation !== inlineFrameGeneration) return;
+    inlineFrame = null;
+    if (!active) return;
+    const render = inlineRenders.values().next().value;
+    if (render) {
+      inlineRenders.delete(render);
+      render();
+    }
+    if (active && inlineRenders.size) requestInlineFrame();
+    else releaseInlineWaiters();
+  };
+  const scheduleInlineRender = (render: () => void) => {
+    if (!active) return () => {};
+    // Preserve the common single-inline path. Additional natural-height
+    // surfaces settle one per frame instead of sharing one large layout.
+    if (!inlineRenderStarted) {
+      inlineRenderStarted = true;
+      render();
+      return () => {};
+    }
+    inlineRenders.add(render);
+    if (inlineFrame === null) requestInlineFrame();
+    return () => {
+      inlineRenders.delete(render);
+      if (!inlineRenders.size && inlineFrame !== null) {
+        window.cancelAnimationFrame(inlineFrame);
+        inlineFrame = null;
+        inlineFrameGeneration++;
+      }
+      releaseInlineWaiters();
+    };
+  };
   const overlayState = documents.get(document) ?? {
     shown: false,
     dismissed: false,
@@ -118,6 +178,8 @@ export function createWebsiteForms(options: {
       parent,
       stylesheetUrl: options.stylesheetUrl,
       submit: options.submit,
+      scheduleInlineRender,
+      afterInlineRenders,
       ready() {
         if (!active || surfaces.get(placement.key) !== surface) return;
         surface.state = "mounted";
@@ -261,6 +323,11 @@ export function createWebsiteForms(options: {
     destroy() {
       if (!active) return;
       active = false;
+      if (inlineFrame !== null) window.cancelAnimationFrame(inlineFrame);
+      inlineFrame = null;
+      inlineFrameGeneration++;
+      inlineRenders.clear();
+      inlineWaiters.clear();
       document.removeEventListener("DOMContentLoaded", ready);
       stopObserving();
       for (const key of surfaces.keys()) remove(key);

@@ -17,7 +17,18 @@ const object = (value: unknown, field: string): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : fail(field);
-const bytes = (value: string) => new TextEncoder().encode(value).length;
+let encoder: TextEncoder | undefined;
+let encodingBuffer: Uint8Array | undefined;
+const bytes = (value: string) => {
+  encoder ??= new TextEncoder();
+  if (typeof encoder.encodeInto !== "function")
+    return encoder.encode(value).length;
+  encodingBuffer ??= new Uint8Array(MAX_SETTINGS_BYTES + 4);
+  const { read, written } = encoder.encodeInto(value, encodingBuffer);
+  // Every caller compares against a cap at most MAX_SETTINGS_BYTES. A partial
+  // read therefore only needs an over-cap result, never a truncated byte count.
+  return read === value.length ? written : MAX_SETTINGS_BYTES + 1;
+};
 const text = (value: unknown, field: string, cap: number): string => {
   if (
     typeof value !== "string" ||

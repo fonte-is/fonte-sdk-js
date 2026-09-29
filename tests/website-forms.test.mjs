@@ -55,7 +55,9 @@ test("frozen intent retries by identity and changed intent gets a fresh UUID", a
 });
 
 let server, browser, origin;
-const evidence = "/private/tmp/fon822-website-forms-evidence";
+const evidence =
+  process.env.FONTE_WEBSITE_FORMS_EVIDENCE ??
+  "/private/tmp/fon822-website-forms-evidence";
 before(async () => {
   server = createServer(async (req, res) => {
     try {
@@ -359,6 +361,135 @@ for (const presentation of ["popup", "slide_in"])
     });
     assert.equal(await page.locator("fonte-form").count(), 0);
   });
+
+for (const presentation of ["popup", "slide_in"]) {
+  test(`${presentation} native autofocus selects email once before surface readiness`, async (t) => {
+    const page = await fixture(t);
+    await page.locator("#opener").focus();
+    await page.evaluate((presentation) => {
+      window.openFocus = {
+        calls: 0,
+        transitions: [],
+        autofocus: false,
+        nativeEmail: false,
+      };
+      const focus = HTMLInputElement.prototype.focus;
+      HTMLInputElement.prototype.focus = function (...args) {
+        if (this.name === "email") window.openFocus.calls++;
+        return focus.apply(this, args);
+      };
+      const showModal = HTMLDialogElement.prototype.showModal;
+      HTMLDialogElement.prototype.showModal = function (...args) {
+        const email = this.querySelector('input[name="email"]');
+        const root = this.getRootNode();
+        window.openFocus.autofocus = email.autofocus;
+        root.addEventListener("focusin", (event) =>
+          window.openFocus.transitions.push(
+            event.target.name || event.target.textContent,
+          ),
+        );
+        const result = showModal.apply(this, args);
+        window.openFocus.nativeEmail = root.activeElement === email;
+        window.openFocus.mountedDuringOpen = window.forms.counts().mounted;
+        return result;
+      };
+      window.install([
+        { key: "overlay", presentation, paths: ["*"], form: window.form },
+      ]);
+    }, presentation);
+    await mounted(page);
+    assert.deepEqual(await page.evaluate(() => window.openFocus), {
+      calls: 0,
+      transitions: ["email"],
+      autofocus: true,
+      nativeEmail: true,
+      mountedDuringOpen: 0,
+    });
+    assert(
+      await page
+        .locator('dialog input[name="email"]')
+        .evaluate((node) => node.getRootNode().activeElement === node),
+    );
+    await page.keyboard.press("Escape");
+    assert(
+      await page
+        .locator("#opener")
+        .evaluate((node) => document.activeElement === node),
+    );
+  });
+}
+
+test("overlay explicitly focuses email when native modal autofocus leaves another target", async (t) => {
+  const page = await fixture(t);
+  await page.locator("#opener").focus();
+  await page.evaluate(() => {
+    window.fallbackFocus = {
+      calls: 0,
+      mountedAtFocus: null,
+      nativeEmail: null,
+    };
+    const focus = HTMLInputElement.prototype.focus;
+    HTMLInputElement.prototype.focus = function (...args) {
+      if (this.name === "email") {
+        window.fallbackFocus.calls++;
+        window.fallbackFocus.mountedAtFocus = window.forms.counts().mounted;
+      }
+      return focus.apply(this, args);
+    };
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = function (...args) {
+      const result = showModal.apply(this, args);
+      this.querySelector("button").focus();
+      window.fallbackFocus.nativeEmail =
+        this.getRootNode().activeElement ===
+        this.querySelector('input[name="email"]');
+      return result;
+    };
+    window.install([
+      {
+        key: "overlay",
+        presentation: "popup",
+        paths: ["*"],
+        form: window.form,
+      },
+    ]);
+  });
+  await mounted(page);
+  assert.deepEqual(await page.evaluate(() => window.fallbackFocus), {
+    calls: 1,
+    mountedAtFocus: 0,
+    nativeEmail: false,
+  });
+  assert(
+    await page
+      .locator('dialog input[name="email"]')
+      .evaluate((node) => node.getRootNode().activeElement === node),
+  );
+  await page.keyboard.press("Escape");
+  assert(
+    await page
+      .locator("#opener")
+      .evaluate((node) => document.activeElement === node),
+  );
+});
+
+test("inline email has no autofocus and preserves the current host focus", async (t) => {
+  const page = await fixture(t);
+  await page.locator("#opener").focus();
+  await install(page);
+  await mounted(page);
+  assert.equal(
+    await email(page).evaluate(
+      (node) => node.autofocus || node.hasAttribute("autofocus"),
+    ),
+    false,
+  );
+  assert(
+    await page
+      .locator("#opener")
+      .evaluate((node) => document.activeElement === node),
+  );
+});
 
 test("disconnected overlay opener is not restored and host classes/styles stay intact", async (t) => {
   const page = await fixture(t);
@@ -819,6 +950,434 @@ for (const framesCompleted of [0, 1]) {
     );
   });
 }
+
+async function queuedInlineFixture(t) {
+  const page = await fixture(t);
+  await holdOpeningFrames(page);
+  await page.evaluate(() => {
+    const keys = ["newsletter", "second", "third"];
+    for (const key of keys.slice(1)) {
+      const marker = document.createElement("div");
+      marker.dataset.fontePlacement = key;
+      document.getElementById("content").append(marker);
+    }
+    window.batchPlacements = keys.map((key) => ({
+      key,
+      presentation: "inline",
+      paths: ["/host"],
+      form: window.form,
+    }));
+    window.install(window.batchPlacements);
+    window.batchHosts = keys.map((key) =>
+      document.querySelector(`[data-fonte-placement="${key}"] fonte-form`),
+    );
+  });
+  await page.waitForFunction(
+    () =>
+      window.openingFrames.size === 1 &&
+      window.forms.counts().mounted === 1 &&
+      window.batchHosts.every(
+        (host) => host.shadowRoot.querySelector("link").sheet,
+      ),
+    undefined,
+    { polling: 20 },
+  );
+  return page;
+}
+
+test("additional inline surfaces become ready one per frame with natural layout and host state intact", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.locator("#host-input").fill("Host stays editable");
+  const initial = await page.evaluate(() => ({
+    counts: window.forms.counts(),
+    scroll: window.scrollY,
+    height: window.batchHosts
+      .find((host) => host.shadowRoot.querySelector("form"))
+      .getBoundingClientRect().height,
+    observations: window.observations.length,
+  }));
+  assert.deepEqual(initial.counts, { mounted: 1, unavailable: 2 });
+  for (const mountedCount of [2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+      mounted: mountedCount,
+      unavailable: 3 - mountedCount,
+    });
+    assert.equal(
+      await page.locator("#host-input").inputValue(),
+      "Host stays editable",
+    );
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+    assert.equal(await page.evaluate(() => window.scrollY), initial.scroll);
+  }
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.batchHosts.map((host) => host.getBoundingClientRect().height),
+    ),
+    [initial.height, initial.height, initial.height],
+  );
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.equal(
+    await page.evaluate(() => window.observations.length),
+    initial.observations,
+  );
+});
+
+test("a settings update before queued inline rendering uses only the current copy and revision", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.evaluate(() => {
+    window.batchPlacements = window.batchPlacements.map((placement) => ({
+      ...placement,
+      form: {
+        ...window.form,
+        publishedRevision: 2,
+        headline: "Updated before render",
+      },
+    }));
+    window.forms.apply(window.settings(window.batchPlacements));
+  });
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 1);
+  assert.equal(
+    await page.evaluate(
+      () =>
+        window.batchHosts.filter(
+          (host) => host.shadowRoot.querySelector("form") === null,
+        ).length,
+    ),
+    2,
+  );
+  await page.evaluate(() => window.advanceOpeningFrame());
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.batchHosts.map(
+        (host) => host.shadowRoot.querySelector("h2").textContent,
+      ),
+    ),
+    ["Updated before render", "Updated before render", "Updated before render"],
+  );
+  const third = page.locator('[data-fonte-placement="third"] fonte-form');
+  await third.locator('input[name="email"]').fill("fixture@example.test");
+  await third.getByRole("button", { name: "Subscribe", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.calls[0].publishedRevision), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+for (const mode of ["destroy", "disabled settings", "navigation"]) {
+  test(`${mode} cancels queued inline rendering and stale frame callbacks cannot restore a surface`, async (t) => {
+    const page = await queuedInlineFixture(t);
+    await page.evaluate((mode) => {
+      window.staleInlineFrame = window.openingFrames.values().next().value;
+      if (mode === "destroy") window.forms.destroy();
+      else if (mode === "disabled settings") window.forms.apply(null);
+      else {
+        history.pushState(null, "", "/other");
+        window.forms.navigate();
+      }
+      document.getElementById("host-input").focus();
+      window.staleInlineFrame(performance.now());
+    }, mode);
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+    assert.equal(await page.locator("fonte-form").count(), 0);
+    assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+      mounted: 0,
+      unavailable: 0,
+    });
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+    assert.equal(
+      await page.evaluate(() =>
+        window.batchHosts.every(
+          (host) => host.shadowRoot.querySelector("input") === null,
+        ),
+      ),
+      true,
+    );
+  });
+}
+
+test("removing a queued inline marker cancels its view while other surfaces finish and reinsertion rebinds once", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.evaluate(() => {
+    window.removedBatchHost = window.batchHosts.find(
+      (host) => host.shadowRoot.querySelector("form") === null,
+    );
+    window.removedBatchMarker = window.removedBatchHost.parentElement;
+    window.removedBatchKey = window.removedBatchMarker.dataset.fontePlacement;
+    window.removedBatchMarker.remove();
+  });
+  await page.waitForFunction(
+    () => window.removedBatchHost.shadowRoot.querySelector("link") === null,
+  );
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.equal(
+    await page.evaluate(() =>
+      window.removedBatchHost.shadowRoot.querySelector("input"),
+    ),
+    null,
+  );
+  await page.evaluate(() =>
+    document.getElementById("content").append(window.removedBatchMarker),
+  );
+  await page.waitForFunction(() => window.openingFrames.size === 1, undefined, {
+    polling: 20,
+  });
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 3);
+  assert.equal(
+    await page.evaluate(
+      () =>
+        document
+          .querySelector(`[data-fonte-placement="${window.removedBatchKey}"]`)
+          .querySelectorAll("fonte-form").length,
+    ),
+    1,
+  );
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+test("a cancelled inline frame cannot consume a newly queued settings generation", async (t) => {
+  const page = await queuedInlineFixture(t);
+  await page.evaluate(() => {
+    window.oldInlineFrame = window.openingFrames.values().next().value;
+    window.forms.apply(null);
+    window.forms.apply(
+      window.settings(
+        window.batchPlacements.map((placement) => ({
+          ...placement,
+          form: { ...window.form, headline: "New generation" },
+        })),
+      ),
+    );
+  });
+  await page.waitForFunction(() => window.openingFrames.size === 1, undefined, {
+    polling: 20,
+  });
+  await page.evaluate(() => window.oldInlineFrame(performance.now()));
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 0);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+  for (const count of [1, 2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+  }
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+  assert.deepEqual(await page.locator("fonte-form h2").allTextContents(), [
+    "New generation",
+    "New generation",
+    "New generation",
+  ]);
+});
+
+async function waitingOverlayFixture(t) {
+  const page = await queuedInlineFixture(t);
+  await page.locator("#host-input").fill("Host stays editable");
+  await page.evaluate(() => {
+    window.overlayPlacement = {
+      key: "overlay",
+      presentation: "popup",
+      paths: ["/host"],
+      form: window.form,
+    };
+    window.forms.apply(
+      window.settings([...window.batchPlacements, window.overlayPlacement]),
+    );
+  });
+  await page.locator("dialog").waitFor({ state: "attached" });
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+  return page;
+}
+
+test("overlay waits for the inline batch and two settling frames before becoming ready", async (t) => {
+  const page = await waitingOverlayFixture(t);
+  const height = await page.evaluate(
+    () =>
+      window.batchHosts
+        .find((host) => host.shadowRoot.querySelector("form"))
+        .getBoundingClientRect().height,
+  );
+  for (const count of [2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+  }
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.deepEqual(await page.evaluate(() => window.forms.counts()), {
+    mounted: 4,
+    unavailable: 0,
+  });
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.batchHosts.map((host) => host.getBoundingClientRect().height),
+    ),
+    [height, height, height],
+  );
+  assert.equal(
+    await page.locator("#host-input").inputValue(),
+    "Host stays editable",
+  );
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+test("new inline work before opening restarts the existing two-frame settling period", async (t) => {
+  const page = await fixture(t);
+  await holdOpeningFrames(page);
+  await page.evaluate(() => {
+    window.overlayPlacement = {
+      key: "overlay",
+      presentation: "popup",
+      paths: ["/host"],
+      form: window.form,
+    };
+    window.install([window.overlayPlacement]);
+  });
+  await page.waitForFunction(() => window.openingFrames.size === 1);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  await page.evaluate(() => {
+    const keys = ["newsletter", "second", "third"];
+    for (const key of keys.slice(1)) {
+      const marker = document.createElement("div");
+      marker.dataset.fontePlacement = key;
+      document.getElementById("content").append(marker);
+    }
+    window.batchPlacements = keys.map((key) => ({
+      key,
+      presentation: "inline",
+      paths: ["/host"],
+      form: window.form,
+    }));
+    window.forms.apply(
+      window.settings([...window.batchPlacements, window.overlayPlacement]),
+    );
+  });
+  await page.waitForFunction(
+    () =>
+      window.forms.counts().mounted === 1 && window.openingFrames.size === 2,
+  );
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 1);
+  for (const count of [2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+  }
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 4);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+for (const mode of ["destroy", "disabled settings", "navigation"]) {
+  test(`${mode} removes a waiting overlay without stale opening or inline frames`, async (t) => {
+    const page = await waitingOverlayFixture(t);
+    await page.evaluate((mode) => {
+      const stale = window.openingFrames.values().next().value;
+      if (mode === "destroy") window.forms.destroy();
+      else if (mode === "disabled settings") window.forms.apply(null);
+      else {
+        history.pushState(null, "", "/other");
+        window.forms.navigate();
+      }
+      document.getElementById("host-input").focus();
+      stale(performance.now());
+    }, mode);
+    assert.equal(await page.locator("fonte-form").count(), 0);
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+    assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+    assert.equal(
+      await page.evaluate(() => document.activeElement.id),
+      "host-input",
+    );
+  });
+}
+
+test("removing remaining queued inline markers releases the waiting overlay exactly once", async (t) => {
+  const page = await waitingOverlayFixture(t);
+  await page.evaluate(() => {
+    for (const host of window.batchHosts)
+      if (!host.shadowRoot.querySelector("form")) host.parentElement.remove();
+  });
+  await page.waitForFunction(
+    () =>
+      window.batchHosts.filter((host) => host.isConnected).length === 1 &&
+      window.openingFrames.size === 1,
+  );
+  for (let frame = 0; frame < 2; frame++)
+    await page.evaluate(() => window.advanceOpeningFrame());
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 2);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
+
+test("a replacement generation cannot receive an old waiting overlay callback", async (t) => {
+  const page = await waitingOverlayFixture(t);
+  await page.evaluate(() => {
+    window.oldInlineFrame = window.openingFrames.values().next().value;
+    window.forms.apply(null);
+    window.forms.apply(
+      window.settings(
+        [...window.batchPlacements, window.overlayPlacement].map(
+          (placement) => ({
+            ...placement,
+            form: { ...window.form, headline: "Replacement generation" },
+          }),
+        ),
+      ),
+    );
+  });
+  await page.waitForFunction(
+    () =>
+      window.openingFrames.size === 1 &&
+      document.querySelectorAll("fonte-form").length === 4 &&
+      [...document.querySelectorAll("fonte-form")].every(
+        (host) => host.shadowRoot.querySelector("link").sheet,
+      ),
+  );
+  await page.evaluate(() => window.oldInlineFrame(performance.now()));
+  assert.equal(await page.evaluate(() => window.forms.counts().mounted), 0);
+  for (const count of [1, 2, 3]) {
+    await page.evaluate(() => window.advanceOpeningFrame());
+    assert.equal(
+      await page.evaluate(() => window.forms.counts().mounted),
+      count,
+    );
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+  }
+  for (let frame = 0; frame < 2; frame++)
+    await page.evaluate(() => window.advanceOpeningFrame());
+  assert.deepEqual(
+    await page.locator("fonte-form h2").allTextContents(),
+    Array(4).fill("Replacement generation"),
+  );
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal(await page.evaluate(() => window.openingFrames.size), 0);
+});
 
 test("captures source-only modal and inline screenshot/trace evidence", async (t) => {
   const page = await fixture(t);
