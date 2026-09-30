@@ -359,11 +359,14 @@ test("a late page receipt cannot replace the current navigation source", () =>
     pending.get(secondId)(accepted({ eventId: secondId }));
     await second;
     assert.equal(acquisition.latestPageEventId(), secondId);
+    assert.deepEqual(acquisition.latestPageReceipt(), { siteId, eventId: secondId,
+      recordId: `record-${secondId}` });
     pending.get(firstId)(accepted({ eventId: firstId }));
     await first;
     assert.equal(acquisition.latestPageEventId(), secondId);
     acquisition.setPolicy(null);
     assert.equal(acquisition.latestPageEventId(), null);
+    assert.equal(acquisition.latestPageReceipt(), null);
     acquisition.destroy();
   }, { reply(body) {
     if (body.eventType !== "page_view") return { httpStatus: 200, receipt: accepted(body) };

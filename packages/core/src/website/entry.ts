@@ -103,6 +103,7 @@ export function installWebsite(
         .catch(() => {});
     },
     getFormCounts: () => forms.counts(),
+    getAcceptedPageReceipt: () => acquisition.latestPageReceipt(),
   });
   // Startup is deferred by the foundation; this handoff precedes validation.
   if (external) runtime.setConsent(consent);

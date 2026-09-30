@@ -40,6 +40,8 @@ export interface WebsiteStatus {
 }
 export interface WebsiteRuntime {
   getStatus(): WebsiteStatus;
+  /** Latest durably accepted page on this site; null when measurement is unavailable. */
+  getAcceptedPageReceipt(): Readonly<{ siteId: string; eventId: string; recordId: string }> | null;
   setConsent(status: "granted" | "denied" | "unknown"): void;
   refresh(): Promise<void>;
   destroy(): void;
