@@ -156,6 +156,7 @@ export function createWebsiteHttp(options: {
         const body = JSON.stringify({
           requestId: intent.requestId,
           publishedRevision: intent.publishedRevision,
+          ...(intent.sourceEventId ? { sourceEventId: intent.sourceEventId } : {}),
           values: {
             email: intent.values.email,
             ...(intent.values.firstName === undefined
