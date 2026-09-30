@@ -24,6 +24,7 @@ interface WebsiteRuntimeOptions {
   onNavigation?: (occurrence: WebsiteOccurrence) => void;
   onCollectionPolicy?: (policy: CollectionPolicy | null) => void;
   getFormCounts?: () => { mounted: number; unavailable: number };
+  getAcceptedPageReceipt?: () => Readonly<{ siteId: string; eventId: string; recordId: string }> | null;
 }
 const singleton = Symbol.for("fonte.website.v1");
 type Slot = { siteId: string; runtime: WebsiteRuntime };
@@ -52,6 +53,7 @@ function inert(
       forms: { mounted: 0, unavailable: 0 },
     }),
     setConsent() {},
+    getAcceptedPageReceipt: () => null,
     refresh: async () => {},
     destroy() {},
   };
@@ -82,6 +84,7 @@ function validateOptions(options: WebsiteRuntimeOptions): void {
     "onNavigation",
     "onCollectionPolicy",
     "getFormCounts",
+    "getAcceptedPageReceipt",
   ] as const)
     if (options[key] !== undefined && typeof options[key] !== "function")
       throw new WebsiteConfigurationError(key);
@@ -154,6 +157,7 @@ export function startWebsiteRuntime(
   let onNavigation = options.onNavigation;
   let onCollectionPolicy = options.onCollectionPolicy;
   let getFormCounts = options.getFormCounts;
+  let getAcceptedPageReceipt = options.getAcceptedPageReceipt;
   let active = true;
   let state: WebsiteStatus["state"] = "loading";
   let collection: WebsiteStatus["collection"] = "unavailable";
@@ -328,6 +332,10 @@ export function startWebsiteRuntime(
       void refresh();
   };
   const runtime: WebsiteRuntime = {
+    getAcceptedPageReceipt() {
+      if (!active || state !== "ready" || effectivePolicy() === null) return null;
+      try { return getAcceptedPageReceipt?.() ?? null; } catch { return null; }
+    },
     getStatus() {
       let forms = { mounted: 0, unavailable: 0 };
       if (active)
@@ -389,6 +397,7 @@ export function startWebsiteRuntime(
       onSettings = undefined;
       onNavigation = undefined;
       getFormCounts = undefined;
+      getAcceptedPageReceipt = undefined;
       fetchImpl = undefined;
       etag = null;
       lastSuccess = null;

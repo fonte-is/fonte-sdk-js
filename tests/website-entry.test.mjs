@@ -593,6 +593,9 @@ test("accepted page evidence is fixed on the first Form attempt and retained on 
   await p.waitForTimeout(50);
   const pageEventId = observed().findLast((call) => call.body.eventType === "page_view")?.body.eventId;
   assert.ok(pageEventId);
+  assert.deepEqual(await p.evaluate(() => window.fonte.getAcceptedPageReceipt()), {
+    siteId, eventId: pageEventId, recordId: "protocol-fixture",
+  });
   lostAck = true;
   await submit(p);
   await p.getByText("Your request could not be confirmed. You can retry.", { exact: true }).waitFor();
