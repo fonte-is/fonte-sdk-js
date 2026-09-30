@@ -14,6 +14,7 @@ export function createWebsiteAcquisition(options: {
   setPolicy(policy: CollectionPolicy | null): void;
   page(options?: { navigation?: boolean }): Promise<CapturePageResult>;
   retry(): Promise<CapturePageResult>;
+  latestPageEventId(): string | null;
   destroy(): void;
 } {
   if (!validSiteId(options.siteId))
@@ -23,10 +24,23 @@ export function createWebsiteAcquisition(options: {
   let active = true;
   let current: CollectionPolicy | null = null;
   let policyKey: string | null = null;
+  let latestPageEventId: string | null = null;
+  let currentPageEventId: string | null = null;
   const engine = createCaptureEngine(
     {
       storage: `website:${options.siteId}`,
       collectionPolicy: () => (active ? current : null),
+      onObservation: (body) => {
+        if (body.eventType === "page_view") {
+          currentPageEventId = body.eventId;
+          latestPageEventId = null;
+        }
+      },
+      onDelivery: (delivery) => {
+        if (active && current && delivery.eventId === currentPageEventId && delivery.eventType === "page_view" &&
+          delivery.status === "delivered" && delivery.receipt?.eventId === delivery.eventId)
+          latestPageEventId = delivery.eventId;
+      },
     },
     options.transport,
   );
@@ -59,21 +73,25 @@ export function createWebsiteAcquisition(options: {
       const changed = policyKey !== nextKey;
       current = next;
       policyKey = nextKey;
-      if (changed) engine.resetContext();
+      if (changed) { latestPageEventId = null; currentPageEventId = null; engine.resetContext(); }
     },
     page(pageOptions) {
       checkPolicy();
+      if (pageOptions?.navigation) { latestPageEventId = null; currentPageEventId = null; }
       return engine.page(pageOptions);
     },
     retry() {
       checkPolicy();
       return engine.retry();
     },
+    latestPageEventId() { return active && permitted(current) ? latestPageEventId : null; },
     destroy() {
       if (!active) return;
       active = false;
       current = null;
       policyKey = null;
+      latestPageEventId = null;
+      currentPageEventId = null;
       engine.resetContext();
     },
   };

@@ -4,6 +4,8 @@ export type WebsiteSubmissionIntent = {
   requestId: string;
   publicId: string;
   publishedRevision: number;
+  /** Accepted page observation presented as browser evidence, not identity proof. */
+  sourceEventId?: string;
   values: { email: string; firstName?: string };
 };
 export type WebsiteSubmissionResult =
