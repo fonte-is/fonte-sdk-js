@@ -6,6 +6,7 @@ import { WebsiteConfigurationError } from "./contract.js";
 import { validSiteId } from "./settings.js";
 
 export type WebsiteObservationTransport = BrowserObservationTransport;
+export type AcceptedWebsitePage = Readonly<{ siteId: string; eventId: string; recordId: string }>;
 
 export function createWebsiteAcquisition(options: {
   siteId: string;
@@ -14,6 +15,8 @@ export function createWebsiteAcquisition(options: {
   setPolicy(policy: CollectionPolicy | null): void;
   page(options?: { navigation?: boolean }): Promise<CapturePageResult>;
   retry(): Promise<CapturePageResult>;
+  latestPageEventId(): string | null;
+  latestPageReceipt(): AcceptedWebsitePage | null;
   destroy(): void;
 } {
   if (!validSiteId(options.siteId))
@@ -23,10 +26,30 @@ export function createWebsiteAcquisition(options: {
   let active = true;
   let current: CollectionPolicy | null = null;
   let policyKey: string | null = null;
+  let latestPageEventId: string | null = null;
+  let latestPageReceipt: AcceptedWebsitePage | null = null;
+  let currentPageEventId: string | null = null;
   const engine = createCaptureEngine(
     {
       storage: `website:${options.siteId}`,
       collectionPolicy: () => (active ? current : null),
+      onObservation: (body) => {
+        if (body.eventType === "page_view") {
+          currentPageEventId = body.eventId;
+          latestPageEventId = null;
+          latestPageReceipt = null;
+        }
+      },
+      onDelivery: (delivery) => {
+        if (active && current && delivery.eventId === currentPageEventId && delivery.eventType === "page_view" &&
+          delivery.status === "delivered" && delivery.receipt?.eventId === delivery.eventId)
+          {
+            latestPageEventId = delivery.eventId;
+            latestPageReceipt = delivery.receipt.recordId
+              ? Object.freeze({ siteId: options.siteId, eventId: delivery.eventId, recordId: delivery.receipt.recordId })
+              : null;
+          }
+      },
     },
     options.transport,
   );
@@ -59,21 +82,27 @@ export function createWebsiteAcquisition(options: {
       const changed = policyKey !== nextKey;
       current = next;
       policyKey = nextKey;
-      if (changed) engine.resetContext();
+      if (changed) { latestPageEventId = null; latestPageReceipt = null; currentPageEventId = null; engine.resetContext(); }
     },
     page(pageOptions) {
       checkPolicy();
+      if (pageOptions?.navigation) { latestPageEventId = null; latestPageReceipt = null; currentPageEventId = null; }
       return engine.page(pageOptions);
     },
     retry() {
       checkPolicy();
       return engine.retry();
     },
+    latestPageEventId() { return active && permitted(current) ? latestPageEventId : null; },
+    latestPageReceipt() { return active && permitted(current) ? latestPageReceipt : null; },
     destroy() {
       if (!active) return;
       active = false;
       current = null;
       policyKey = null;
+      latestPageEventId = null;
+      latestPageReceipt = null;
+      currentPageEventId = null;
       engine.resetContext();
     },
   };

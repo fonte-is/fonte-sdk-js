@@ -340,6 +340,39 @@ test("identical policy keeps dedup; changed policy clears context and pending ob
     },
   ));
 
+const pending = new Map();
+test("a late page receipt cannot replace the current navigation source", () =>
+  host(async ({ make, requests }) => {
+    const acquisition = make();
+    acquisition.setPolicy(policy());
+    const first = acquisition.page();
+    await new Promise(setImmediate);
+    const firstId = requests.find((body) => body.eventType === "page_view")?.eventId;
+    assert.ok(firstId);
+    window.location = "https://website.example/second";
+    const second = acquisition.page({ navigation: true });
+    await new Promise(setImmediate);
+    const secondId = requests.findLast((body) => body.eventType === "page_view")?.eventId;
+    assert.ok(secondId);
+    assert.notEqual(secondId, firstId);
+    assert.equal(acquisition.latestPageEventId(), null);
+    pending.get(secondId)(accepted({ eventId: secondId }));
+    await second;
+    assert.equal(acquisition.latestPageEventId(), secondId);
+    assert.deepEqual(acquisition.latestPageReceipt(), { siteId, eventId: secondId,
+      recordId: `record-${secondId}` });
+    pending.get(firstId)(accepted({ eventId: firstId }));
+    await first;
+    assert.equal(acquisition.latestPageEventId(), secondId);
+    acquisition.setPolicy(null);
+    assert.equal(acquisition.latestPageEventId(), null);
+    assert.equal(acquisition.latestPageReceipt(), null);
+    acquisition.destroy();
+  }, { reply(body) {
+    if (body.eventType !== "page_view") return { httpStatus: 200, receipt: accepted(body) };
+    return new Promise((resolve) => pending.set(body.eventId, (receipt) => resolve({ httpStatus: 200, receipt })));
+  } }));
+
 test("grant after denied arrival does not capture until caller supplies a new occurrence", () =>
   host(async ({ make, requests }) => {
     const acquisition = make();

@@ -583,6 +583,28 @@ test("lost HTTP acknowledgement retries the same browser intent", async (t) => {
   assert.equal(submitted().length, 2);
   assert.deepEqual(submitted()[0].body, submitted()[1].body);
 });
+test("accepted page evidence is fixed on the first Form attempt and retained on retry", async (t) => {
+  const p = await page(t, "?utm_source=fixture");
+  await ready(p);
+  const deliveredPage = p.waitForResponse((response) => response.url().endsWith("/observations") &&
+    response.request().postDataJSON()?.eventType === "page_view");
+  await p.evaluate(() => history.pushState({}, "", "/source?utm_source=fixture"));
+  await deliveredPage;
+  await p.waitForTimeout(50);
+  const pageEventId = observed().findLast((call) => call.body.eventType === "page_view")?.body.eventId;
+  assert.ok(pageEventId);
+  assert.deepEqual(await p.evaluate(() => window.fonte.getAcceptedPageReceipt()), {
+    siteId, eventId: pageEventId, recordId: "protocol-fixture",
+  });
+  lostAck = true;
+  await submit(p);
+  await p.getByText("Your request could not be confirmed. You can retry.", { exact: true }).waitFor();
+  await p.locator('button[type="submit"]').click();
+  await p.getByText("Your request has been received.", { exact: true }).waitFor();
+  assert.equal(submitted().length, 2);
+  assert.equal(submitted()[0].body.sourceEventId, pageEventId);
+  assert.deepEqual(submitted()[0].body, submitted()[1].body);
+});
 test("duplicate/conflicting tags, missing ID and unrelated global are contained; destroy/reinit reapplies hold", async (t) => {
   const p = await page(t, "?external");
   await ready(p);

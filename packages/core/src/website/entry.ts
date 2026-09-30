@@ -6,6 +6,7 @@ import {
   websiteStylesheetUrl,
 } from "./endpoints.js";
 import { createWebsiteForms } from "./forms.js";
+import type { WebsiteSubmissionIntent } from "./form-submit.js";
 import { createWebsiteHttp } from "./http.js";
 import { startWebsiteRuntime } from "./runtime.js";
 import { validSiteId } from "./settings.js";
@@ -76,8 +77,17 @@ export function installWebsite(
     siteId,
     transport: http.transport,
   });
+  const submissionPayloads = new WeakMap<WebsiteSubmissionIntent, WebsiteSubmissionIntent>();
   const forms = createWebsiteForms({
-    submit: http.submit,
+    submit: (intent) => {
+      let payload = submissionPayloads.get(intent);
+      if (!payload) {
+        const sourceEventId = acquisition.latestPageEventId();
+        payload = sourceEventId ? Object.freeze({ ...intent, sourceEventId }) : intent;
+        submissionPayloads.set(intent, payload);
+      }
+      return http.submit(payload);
+    },
     stylesheetUrl: websiteStylesheetUrl,
   });
   const runtime = startWebsiteRuntime({
@@ -93,6 +103,7 @@ export function installWebsite(
         .catch(() => {});
     },
     getFormCounts: () => forms.counts(),
+    getAcceptedPageReceipt: () => acquisition.latestPageReceipt(),
   });
   // Startup is deferred by the foundation; this handoff precedes validation.
   if (external) runtime.setConsent(consent);
