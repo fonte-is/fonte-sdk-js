@@ -75,6 +75,7 @@ export function createScopeReader(config: {
       ...measurementQueryKeys,
       ...adStorageQueryKeys,
       "fonte",
+      "fonte_click",
     ]) {
       const value = url.searchParams.get(key);
       if (value) scope[key] = value;
