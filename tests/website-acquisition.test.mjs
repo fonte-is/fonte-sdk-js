@@ -154,6 +154,26 @@ async function host(
 const normalized = (requests) =>
   requests.map(({ occurredAt, ...body }) => body);
 
+test("a Fonte redirect click survives Website collection only with source tokens enabled", async () => {
+  const click = "a9c148f6-3010-4e21-8f2c-95129e6682d0";
+  const href = `https://website.example/join?fonte=fl_ABCDEFGHIJKL&fonte_click=${click}&private=discarded`;
+  for (const enabled of [true, false]) {
+    const requests = await host(async ({ make, requests }) => {
+      const acquisition = make();
+      acquisition.setPolicy(policy({ sourceTokens: enabled }));
+      await acquisition.page();
+      acquisition.destroy();
+      return requests;
+    }, { href });
+    assert.equal(requests.length, 2);
+    for (const request of requests) {
+      assert.equal(request.scope.fonte_click, enabled ? click : undefined);
+      assert.equal(request.scope.fonte, enabled ? "fl_ABCDEFGHIJKL" : undefined);
+      assert(!JSON.stringify(request).includes("private"));
+    }
+  }
+});
+
 for (const fixture of [
   {
     name: "X source with inherited Meta cookies",
