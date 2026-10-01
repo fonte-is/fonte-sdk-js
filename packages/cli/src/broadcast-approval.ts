@@ -64,3 +64,26 @@ export function approvedBroadcastSendInput(
     request: approvedBroadcastSendRequest(review, requestId, resume),
   });
 }
+
+/** The caller presents and obtains approval for this exact maximum charge.
+ * Core owns the current message, route, approval-time population, and later
+ * preparation; the client cannot choose any recipient from this command.
+ */
+export function boundedDirectBroadcastSendInput(
+  scope: BroadcastScope & { readonly workspaceId: string },
+  coreApiBaseUrl: string,
+  requestId: string,
+  expectedDraftVersion: number,
+  maximumGrossChargeMicros: string,
+): SavedBroadcastRequest {
+  const coreOrigin = new URL(validateCoreRequestUrl("/", coreApiBaseUrl)).origin;
+  return parseSavedBroadcastRequest({
+    ...scope,
+    schema: "fonte_broadcast_request.v1",
+    coreOrigin,
+    request: parseBroadcastSendRequest({
+      schema: "broadcast_send_request.v2", requestId, expectedDraftVersion,
+      maximumGrossChargeMicros, timing: { mode: "now" },
+    }),
+  });
+}

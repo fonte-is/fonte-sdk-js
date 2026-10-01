@@ -179,7 +179,7 @@ export function createBroadcastClient(
     const instruction = parseBroadcastSendRequest(durable.request);
     if (
       (receipt.outcome === "executable" &&
-        receipt.reviewId !== instruction.reviewId) ||
+        receipt.reviewId !== (instruction.reviewId ?? null)) ||
       (instruction.resume &&
         receipt.operationId !== instruction.resume.operationId)
     )
