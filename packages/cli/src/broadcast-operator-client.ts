@@ -8,5 +8,5 @@ export type {
   BroadcastWaitOptions,
   BroadcastWaitResult,
 } from "./broadcast-client.js";
-export { approvedBroadcastSendInput } from "./broadcast-approval.js";
+export { approvedBroadcastSendInput, boundedDirectBroadcastSendInput } from "./broadcast-approval.js";
 export type * from "./broadcast-contracts.js";

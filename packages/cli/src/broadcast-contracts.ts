@@ -18,8 +18,9 @@ export interface BroadcastReviewRequest {
 export interface BroadcastSendRequest {
   readonly schema: "broadcast_send_request.v2";
   readonly requestId: string;
-  readonly reviewId: string;
-  readonly reviewDigest: string;
+  readonly reviewId?: string;
+  readonly reviewDigest?: string;
+  readonly maximumGrossChargeMicros?: string;
   readonly expectedDraftVersion: number;
   readonly timing: { readonly mode: "now" };
   readonly resume?: {
@@ -87,6 +88,7 @@ export interface BroadcastOperation {
   readonly reviewId: string | null;
   readonly operationUri: string;
   readonly observedAt: string;
+  readonly selectedRecipientCount?: number;
   readonly blocker?: BroadcastBlocker;
 }
 export type BroadcastReviewReceipt = BroadcastOperation & {

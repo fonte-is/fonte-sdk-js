@@ -54,8 +54,9 @@ export const broadcastReviewRequestSchema = z.strictObject({
 export const broadcastSendRequestSchema = z.strictObject({
   schema: z.literal("broadcast_send_request.v2"),
   requestId: broadcastUuid,
-  reviewId: broadcastIdentity(300),
-  reviewDigest: broadcastDigest,
+  reviewId: broadcastIdentity(300).optional(),
+  reviewDigest: broadcastDigest.optional(),
+  maximumGrossChargeMicros: z.string().regex(/^(0|[1-9][0-9]{0,17})$/u).optional(),
   expectedDraftVersion: broadcastPositive,
   timing: z.strictObject({ mode: z.literal("now") }),
   resume: z
@@ -64,7 +65,11 @@ export const broadcastSendRequestSchema = z.strictObject({
       expectedOperationVersion: broadcastPositive,
     })
     .optional(),
-});
+}).refine(value => (value.reviewId !== undefined && value.reviewDigest !== undefined
+  && value.maximumGrossChargeMicros === undefined)
+  || (value.reviewId === undefined && value.reviewDigest === undefined
+    && value.maximumGrossChargeMicros !== undefined),
+{ message: "review identity or spending cap required" });
 export const savedBroadcastRequestSchema = broadcastScopeSchema.extend({
   schema: z.literal("fonte_broadcast_request.v1"),
   coreOrigin: broadcastText,

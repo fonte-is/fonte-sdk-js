@@ -8,6 +8,8 @@ import {
   waitForBroadcastOperation,
 } from "../packages/cli/dist/broadcast-client.js";
 import { createBroadcastFileStore } from "../packages/cli/dist/broadcast-file-store.js";
+import { boundedDirectBroadcastSendInput } from "../packages/cli/dist/broadcast-approval.js";
+import { parseBroadcastSendRequest } from "../packages/cli/dist/broadcast-validation.js";
 import {
   parseBroadcastReviewReceipt,
   parseBroadcastSendReceipt,
@@ -102,6 +104,52 @@ test("fixed FON-807 compact receipts preserve execution authority and immutable 
       coreOrigin,
     ),
   );
+});
+
+test("bounded direct Send is durable without a recipient review", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fon845-direct-send-"));
+  try {
+    const input = boundedDirectBroadcastSendInput(resolved, coreOrigin, requestId, 1, "1000000");
+    assert.equal(input.request.reviewId, undefined);
+    assert.equal(input.request.maximumGrossChargeMicros, "1000000");
+    for (const invalid of [
+      { ...input.request, maximumGrossChargeMicros: undefined },
+      { ...input.request, maximumGrossChargeMicros: "-1" },
+      { ...input.request, reviewId: review.reviewId },
+      { ...input.request, reviewId: review.reviewId, reviewDigest: review.reviewDigest },
+    ]) assert.throws(() => parseBroadcastSendRequest(invalid));
+    const store = createBroadcastFileStore(directory);
+    const receipt = { ...processing, reviewId: null };
+    const client = createBroadcastClient({ ...dependencies(store),
+      fetch: async (_url, init) => {
+        assert.deepEqual(JSON.parse(init.body), input.request);
+        return json(receipt);
+      },
+    });
+    assert.deepEqual(await client.send(scope, input.request), receipt);
+    assert.deepEqual((await store.read(requestId)).request, input.request);
+    assert.deepEqual(parseBroadcastSendReceipt({ ...executable, reviewId: null,
+      selectedRecipientCount: 2048 }, coreOrigin).selectedRecipientCount, 2048);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("lost direct Send acknowledgement replays the same capped command", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fon845-direct-recovery-"));
+  try {
+    const input = boundedDirectBroadcastSendInput(resolved, coreOrigin, requestId, 1, "1000000");
+    const receipt = { ...processing, reviewId: null };
+    let attempts = 0;
+    const client = createBroadcastClient({ ...dependencies(createBroadcastFileStore(directory)),
+      fetch: async (_url, init) => {
+        assert.deepEqual(JSON.parse(init.body), input.request);
+        if (++attempts === 1) throw new Error("synthetic lost response");
+        return json(receipt);
+      },
+    });
+    await assert.rejects(client.send(scope, input.request));
+    assert.deepEqual(await client.recover(requestId), receipt);
+    assert.equal(attempts, 2);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("canonical saved input rejects legacy arrays and same-key changes before any POST", async () => {

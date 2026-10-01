@@ -91,6 +91,7 @@ const operation = z.strictObject({
   reviewId: broadcastIdentity(300).nullable(),
   operationUri: broadcastIdentity(2048),
   observedAt: broadcastInstant,
+  selectedRecipientCount: broadcastCount.optional(),
   blocker: blocker.optional(),
 });
 const reviewReceipt = operation.extend({
@@ -175,8 +176,7 @@ export function parseBroadcastSendReceipt(
     if (parsed.outcome === "executable") {
       if (
         parsed.executionAuthorized !== true ||
-        parsed.jobId === null ||
-        parsed.reviewId === null
+        parsed.jobId === null
       )
         throw new TypeError("authority");
     } else if (parsed.executionAuthorized !== false || parsed.jobId !== null)
