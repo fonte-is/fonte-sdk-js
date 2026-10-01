@@ -81,7 +81,7 @@ const blocker = z.strictObject({
     .optional(),
   reason: z
     .string()
-    .regex(/^[a-z][a-z0-9_:.\-]{0,127}$/u)
+    .regex(/^[a-z][a-z0-9_:.=\-]{0,127}$/u)
     .optional(),
 });
 const operation = z.strictObject({
