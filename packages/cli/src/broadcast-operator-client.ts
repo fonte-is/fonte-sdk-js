@@ -10,3 +10,5 @@ export type {
 } from "./broadcast-client.js";
 export { approvedBroadcastSendInput, boundedDirectBroadcastSendInput } from "./broadcast-approval.js";
 export type * from "./broadcast-contracts.js";
+export { countBroadcastAudience } from "./broadcast-audience-count-client.js";
+export type { AudienceCountRequestV1, AudienceCountResultV1 } from "./broadcast-audience-count-client.js";
