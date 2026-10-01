@@ -81,7 +81,7 @@ const blocker = z.strictObject({
     .optional(),
   reason: z
     .string()
-    .regex(/^[a-z][a-z0-9_:.\-]{0,127}$/u)
+    .regex(/^[a-z][a-z0-9_:.=\-]{0,127}$/u)
     .optional(),
 });
 const operation = z.strictObject({
@@ -147,7 +147,9 @@ export function parseBroadcastReviewReceipt(
         !parsed.summary ||
         r.reviewId !== parsed.reviewId ||
         r.draftId !== parsed.draftId ||
-        r.audienceRef.recipientCount !== parsed.summary.recipientCount ||
+        // Current opt-outs may reduce the display count without rewriting the
+        // sealed audience, immutable Review or its maximum commercial charge.
+        parsed.summary.recipientCount > r.audienceRef.recipientCount ||
         r.routeRef.workspaceId !== r.workspaceId ||
         r.routeRef.environment !== r.environment ||
         (scope &&
