@@ -4,6 +4,9 @@ import { parseBroadcastReviewReceipt } from "../packages/cli/dist/broadcast-rece
 import { coreOrigin, scope, workspaceId, review, ready } from "./fixtures/broadcast-bg1.mjs";
 
 const resolved = { ...scope, workspaceId };
+const sourceChangedReason = "source_generation_changed:latest_source_event=provider_feedback_events";
+const failedSource = { ...ready, state: "failed", reviewId: null, review: null, summary: null,
+  blocker: { code: "broadcast_audience_unavailable", stage: "review", reason: sourceChangedReason } };
 const reduced = (recipientCount) => ({ ...ready,
   summary: { recipientCount, excludedCount: review.audienceRef.recipientCount - recipientCount } });
 
@@ -40,4 +43,21 @@ test("a smaller current count preserves tenant, draft, version, identity and dig
     { ...review, commercialReviewRef: { ...review.commercialReviewRef, digest: "invalid-digest" } },
   ]) assert.throws(() => parseBroadcastReviewReceipt({ ...value, review: changed }, coreOrigin, resolved, "none", 1),
     error => error.reason === "core_operator_receipt_invalid" && error.coreEffect === "none");
+});
+
+test("a source generation invalidation remains a readable failed Review without sending authority", () => {
+  assert.deepEqual(parseBroadcastReviewReceipt(failedSource, coreOrigin, resolved, "unknown", 1), failedSource);
+});
+
+test("Core diagnostic reasons retain bounded safe characters and the existing stage grammar", () => {
+  const withReason = reason => ({ ...failedSource, blocker: { ...failedSource.blocker, reason } });
+  const maximumReason = `a${"=".repeat(127)}`;
+  assert.deepEqual(parseBroadcastReviewReceipt(withReason(maximumReason), coreOrigin, resolved), withReason(maximumReason));
+  for (const reason of ["", `a${"=".repeat(128)}`, `${sourceChangedReason}\n`, `${sourceChangedReason} other`,
+    `${sourceChangedReason};other`, `${sourceChangedReason}<script>`, "=provider_feedback_events", "source%3Devent", "source/event"])
+    assert.throws(() => parseBroadcastReviewReceipt(withReason(reason), coreOrigin, resolved),
+      error => error.reason === "core_operator_receipt_invalid");
+  assert.throws(() => parseBroadcastReviewReceipt({ ...failedSource,
+    blocker: { ...failedSource.blocker, stage: "review=source" } }, coreOrigin, resolved),
+  error => error.reason === "core_operator_receipt_invalid");
 });
