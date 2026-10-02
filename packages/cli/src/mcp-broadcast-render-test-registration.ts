@@ -2,6 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/server";
 
 import {
   createBroadcastRenderToolHandler,
+  createBroadcastPersonalizationSchemaToolHandler,
+  MCP_BROADCAST_PERSONALIZATION_SCHEMA_TOOL,
   createBroadcastTestReadToolHandler,
   createBroadcastTestRequestToolHandler,
   MCP_BROADCAST_RENDER_TOOL,
@@ -19,6 +21,8 @@ import {
   requestBroadcastTestInputSchema,
   requestBroadcastTestOutputSchema,
 } from "./mcp-broadcast-test-types.js";
+import { readBroadcastPersonalizationSchemaInputSchema,
+  readBroadcastPersonalizationSchemaOutputSchema } from "./mcp-broadcast-personalization-types.js";
 
 const readOnly = {
   readOnlyHint: true,
@@ -32,6 +36,13 @@ export function registerMcpBroadcastRenderTestTools(
   server: McpServer,
   provider: BroadcastRenderTestClientProvider,
 ): void {
+  const schema = createBroadcastPersonalizationSchemaToolHandler(provider);
+  server.registerTool(MCP_BROADCAST_PERSONALIZATION_SCHEMA_TOOL, {
+    title: "Read Broadcast personalization schema",
+    description: "Reads the authenticated workspace's Core schema, active/deleted Contact definitions, grammar, versions and diagnostic codes. No audience preparation or send.",
+    inputSchema: readBroadcastPersonalizationSchemaInputSchema,
+    outputSchema: readBroadcastPersonalizationSchemaOutputSchema, annotations: readOnly,
+  }, async input => result(await schema(input)));
   const render = createBroadcastRenderToolHandler(provider);
   const requestTest = createBroadcastTestRequestToolHandler(provider);
   const readTest = createBroadcastTestReadToolHandler(provider);
@@ -40,7 +51,7 @@ export function registerMcpBroadcastRenderTestTools(
     {
       title: "Render Broadcast draft",
       description:
-        "Reads Core's canonical render and same-finalizer inspection sample for one exact saved revision.",
+        "Reads Core's canonical render for one exact saved revision. To validate native personalization and discover references/diagnostics, pass the discovered personalization_schema_version and an explicit selected_contact or synthetic_missing sample. No send or audience preparation.",
       inputSchema: renderBroadcastDraftInputSchema,
       outputSchema: renderBroadcastDraftOutputSchema,
       annotations: readOnly,

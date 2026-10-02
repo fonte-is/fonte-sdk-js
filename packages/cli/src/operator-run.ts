@@ -223,6 +223,13 @@ async function execute(
     ReturnType<typeof loadProviderPlacementApplication>
   > | null,
 ): Promise<OperatorResult> {
+  if (command.kind === "broadcast_personalization_schema") {
+    return client.readBroadcastPersonalizationSchema({ workspace: command.workspace, environment: command.environment });
+  }
+  if (command.kind === "broadcast_personalization_preview") {
+    return client.previewBroadcastPersonalization({ workspace: command.workspace, environment: command.environment,
+      draftId: command.draftId, revision: command.revision, schemaVersion: command.schemaVersion, sample: command.sample });
+  }
   const marketingSettings = executeWorkspaceMarketingSettingsCommand(
     command,
     client,
@@ -320,6 +327,12 @@ function successReceipt(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   result: OperatorResult,
 ): OperatorReceipt {
+  if (result.kind === "broadcast_personalization_schema" || result.kind === "broadcast_personalization_preview") {
+    const invalid = result.kind === "broadcast_personalization_preview" && result.status === "invalid";
+    return currentReceipt(command, result, invalid ? "blocked" : "completed",
+      invalid ? result.diagnostics.find(item => item.severity === "error")?.code ?? "personalization_invalid" : "personalization_read",
+      "none");
+  }
   if (result.kind === "broadcast_send_operation") {
     const send = broadcastSendInstructionReceiptDescriptor(command, result);
     if (!send) throw new TypeError("operator_receipt_unmappable");
@@ -497,6 +510,8 @@ function currentAuthority(
     contract_id: command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
       || command.kind === "broadcast_canonical_control"
       ? "fonte.core.broadcast_send"
+      : command.kind.startsWith("broadcast_personalization_")
+      ? "fonte.core.broadcast_personalization"
       : command.kind.startsWith("campaign_")
       ? "fonte.core.campaign_configuration.v1"
       : command.kind.startsWith("segment_")

@@ -4,6 +4,7 @@ import {
   type CoreRequester,
 } from "./operator-core-request.js";
 import { broadcastRender } from "./operator-broadcast-render-json.js";
+import { createBroadcastPersonalizationClient, type BroadcastPersonalizationClient } from "./operator-broadcast-personalization-client.js";
 import {
   requireProofInput,
   sameProof,
@@ -21,7 +22,7 @@ import type {
   BroadcastTestResult,
 } from "./operator-broadcast-render-test-types.js";
 
-export interface BroadcastRenderTestClient {
+export interface BroadcastRenderTestClient extends BroadcastPersonalizationClient {
   renderBroadcastDraft(
     input: BroadcastDraftRenderInput,
   ): Promise<BroadcastDraftRenderResult>;
@@ -37,6 +38,7 @@ export function createBroadcastRenderTestClient(
   request: CoreRequester,
 ): BroadcastRenderTestClient {
   return {
+    ...createBroadcastPersonalizationClient(request),
     async renderBroadcastDraft(input) {
       const result = parseCoreReceipt(
         broadcastRender,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { broadcastPersonalizationPreviewResultSchema, personalizationSampleSchema } from "./operator-broadcast-personalization-types.js";
 
 export const mcpWorkspaceSchema = z
   .string()
@@ -39,8 +40,11 @@ export const renderBroadcastDraftInputSchema = z
     workspace: mcpWorkspaceSchema,
     draft_id: z.string().uuid(),
     revision: mcpRevisionSchema,
+    personalization_schema_version: z.string().min(1).optional(),
+    sample: personalizationSampleSchema.optional(),
   })
-  .strict();
+  .strict().refine(value => (value.personalization_schema_version === undefined) === (value.sample === undefined),
+    "Explicit schema and sample must be supplied together");
 
 export const broadcastDraftRenderResultSchema = z
   .object({
@@ -76,6 +80,6 @@ export const renderBroadcastDraftOutputSchema = z
     reason: z.string().min(1).max(100).nullable(),
     status_code: z.number().int().min(100).max(599).nullable(),
     core_effect: z.enum(["none", "unknown"]),
-    render: broadcastDraftRenderResultSchema.nullable(),
+    render: z.union([broadcastDraftRenderResultSchema, broadcastPersonalizationPreviewResultSchema]).nullable(),
   })
   .strict();

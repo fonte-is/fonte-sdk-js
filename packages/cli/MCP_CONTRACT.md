@@ -103,3 +103,29 @@ npx --package @fonte-is/cli fonte-mcp
 The process opens the system browser only when a tool first needs a Core
 session. It does not issue email, prepare recipients, or create an unattended
 worker.
+# Personalization discovery (FON-858)
+
+`fonte_read_broadcast_personalization_schema({workspace, environment?})` reads
+the Core-owned workspace schema through the same authenticated requester.
+The `schema` result contains the exact Core envelope, including versions,
+built-ins, active/deleted custom definitions, scalar types, grammar, locations
+and diagnostic metadata. No audience preparation or Send is performed.
+
+Use the existing `fonte_render_broadcast_draft` with `workspace`, `draft_id`,
+`revision`, `personalization_schema_version` from discovery, and explicit
+`sample` together. Samples are `{kind:"synthetic_missing"}` or
+`{kind:"selected_contact",contactId,recipientEmail}`. The selected Contact and
+preview email are independent. Caller definitions and scalar values are rejected.
+
+For v1, `render` is the exact Core `broadcast_personalization_preview` envelope:
+`status:"valid"` supplies canonical `preview`; `status:"invalid"` supplies
+`preview:null` and blocking diagnostics. An MCP `outcome:"completed"` means the
+inspection completed, not that the content is send-ready. Core's missing-fallback
+warning remains non-blocking. References, authored fallbacks, source spans,
+diagnostics, schema and proof versions pass through unchanged. No SDK parser,
+substitution or fallback generation occurs.
+
+Calls without schema/sample retain historical render behavior. Saved revisions
+can be read/revised through the existing draft tools and then re-inspected.
+`fonte_prepare_broadcast` and `fonte_send_broadcast` retain their paved ownership;
+sample responses cannot be used as a Send preparation reference.

@@ -4,6 +4,11 @@ import {
   resendBridgePreview,
   sandboxTest,
 } from "./operator-json.js";
+import { createBroadcastPersonalizationClient, type BroadcastPersonalizationClient } from "./operator-broadcast-personalization-client.js";
+export { createBroadcastPersonalizationClient } from "./operator-broadcast-personalization-client.js";
+export type { BroadcastPersonalizationSchemaResult, BroadcastPersonalizationPreviewResult,
+  BroadcastPersonalizationSchemaInput, BroadcastPersonalizationPreviewInput,
+  BroadcastPersonalizationSample } from "./operator-broadcast-personalization-types.js";
 import {
   createCoreRequester,
   CoreOperatorError,
@@ -218,7 +223,7 @@ export interface CoreOperatorClient
     WorkspaceInvitationClient,
     WorkspaceMarketingSettingsClient,
     SequenceAuthoringClient,
-    BroadcastSendInstructionClient {
+    BroadcastSendInstructionClient, BroadcastPersonalizationClient {
   readonly campaignMetadata: CampaignMetadataClient;
   readonly segmentMetadata: SegmentMetadataClient;
   sendSandboxTest(input: SandboxTestSendInput): Promise<SandboxTestResult>;
@@ -272,6 +277,7 @@ export function createCoreOperatorClientWithRequester(
   request: CoreRequester,
 ): CoreOperatorClient {
   return {
+    ...createBroadcastPersonalizationClient(request),
     ...createProductionOperatorClient(request),
     ...createProviderAudienceClient(request),
     ...createProviderConnectionClient(request),
