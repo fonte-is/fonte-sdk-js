@@ -113,7 +113,7 @@ test("MCP handlers distinguish conflicts from unknown mutation effect", async ()
   });
 });
 
-test("registration exposes only render, safe test request, and test readback", async () => {
+test("registration exposes schema, render, safe test request, and test readback", async () => {
   const registrations = [];
   const server = {
     registerTool: (...args) => { registrations.push(args); },
@@ -125,14 +125,16 @@ test("registration exposes only render, safe test request, and test readback", a
   }));
 
   assert.deepEqual(registrations.map(([name]) => name), [
+    "fonte_read_broadcast_personalization_schema",
     "fonte_render_broadcast_draft",
     "fonte_request_broadcast_test",
     "fonte_read_broadcast_test",
   ]);
   assert.equal(registrations[0][1].annotations.readOnlyHint, true);
-  assert.equal(registrations[1][1].annotations.readOnlyHint, false);
-  assert.equal(registrations[1][1].annotations.idempotentHint, true);
-  const response = await registrations[1][2](testInput());
+  assert.equal(registrations[1][1].annotations.readOnlyHint, true);
+  assert.equal(registrations[2][1].annotations.readOnlyHint, false);
+  assert.equal(registrations[2][1].annotations.idempotentHint, true);
+  const response = await registrations[2][2](testInput());
   assert.equal(response.structuredContent.test_request.test_id, testId);
   assert.equal(response.content[0].text,
     JSON.stringify(response.structuredContent));

@@ -1,0 +1,162 @@
+{
+  "kind": "broadcast_personalization_schema",
+  "tenantId": "workspace_synthetic",
+  "environment": "production",
+  "schema": {
+    "schemaVersion": "fonte-core-personalization-v1",
+    "templateRevision": "fonte-core-render-v3",
+    "rendererVersion": "fonte-core-email-renderer-v3",
+    "finalizerVersion": "fonte-core-recipient-finalizer-v3",
+    "builtIns": [
+      {
+        "path": "email",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "path": "first_name",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "path": "last_name",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "path": "phone",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "path": "company_name",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "path": "job_title",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "path": "locale",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "path": "timezone",
+        "type": "string",
+        "nullable": true
+      }
+    ],
+    "customFields": [],
+    "publicScalarTypes": [
+      "string",
+      "number",
+      "boolean",
+      "date",
+      "datetime"
+    ],
+    "customKeyPattern": "^[a-z][a-z0-9_]{0,99}$",
+    "customFieldStates": [
+      "active",
+      "deleted"
+    ],
+    "deletedStateTerminal": true,
+    "inactiveStateSupported": false,
+    "filters": [
+      "default"
+    ],
+    "locations": [
+      "html",
+      "text",
+      "subject",
+      "preheader"
+    ],
+    "htmlLocation": "text_nodes_only",
+    "unsupportedLocations": [
+      "url",
+      "html_attribute",
+      "css",
+      "style",
+      "script",
+      "comment",
+      "template"
+    ],
+    "grammar": {
+      "reference": "{{ <path> }}",
+      "default": "{{ <path> | default: \"<JSON string contents>\" }}",
+      "path": "built-in | custom.<key>",
+      "fallbackEncoding": "double_quoted_json_string",
+      "insignificantWhitespace": true,
+      "missingValues": [
+        "absent",
+        "null",
+        "empty_string",
+        "whitespace_string"
+      ],
+      "missingWithoutFallback": "empty_output",
+      "zeroAndFalseArePresent": true,
+      "recursiveEvaluation": false
+    },
+    "diagnostics": [
+      {
+        "code": "personalization_unknown_field",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_unknown_custom_field",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_malformed_expression",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_unsupported_filter",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_unsupported_path",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_unsupported_location",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_custom_type_invalid",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_value_invalid",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_binding_mismatch",
+        "severity": "error",
+        "blocking": true
+      },
+      {
+        "code": "personalization_missing_fallback",
+        "severity": "warning",
+        "blocking": false
+      }
+    ],
+    "sourceSpans": {
+      "unit": "utf16_code_unit",
+      "start": "zero_based",
+      "end": "exclusive"
+    },
+    "historicalCompatibility": "explicit_schema_selection; historical_bindings_are_not_reinterpreted"
+  },
+  "effect": "none"
+}

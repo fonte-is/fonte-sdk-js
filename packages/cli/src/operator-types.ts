@@ -1,4 +1,6 @@
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
+import type { BroadcastPersonalizationCommand, BroadcastPersonalizationSchemaResult,
+  BroadcastPersonalizationPreviewResult } from "./operator-broadcast-personalization-types.js";
 import type {
   BroadcastSendInstructionOperatorCommand,
   BroadcastSendOperationResult,
@@ -61,6 +63,7 @@ import type {
 } from "./operator-segment-types.js";
 
 export type OperatorCommand =
+  | BroadcastPersonalizationCommand
   | { readonly kind: "broadcast_canonical_send"; readonly workspace: string;
       readonly sendInput: BroadcastPavedSendInput }
   | { readonly kind: "broadcast_canonical_status"; readonly workspace: string;
@@ -258,6 +261,8 @@ export interface ResendBridgeCopyResult extends Omit<
 }
 
 export type OperatorResult =
+  | BroadcastPersonalizationSchemaResult
+  | BroadcastPersonalizationPreviewResult
   | WorkspaceMarketingSettingsResult
   | SequenceOperatorResult
   | BroadcastSendOperationResult
@@ -306,6 +311,7 @@ export interface OperatorReceipt {
       | "fonte.core.production_broadcast.v1"
       | "fonte.core.broadcast_send_instruction.v3"
       | "fonte.core.broadcast_send"
+      | "fonte.core.broadcast_personalization"
       | "fonte.core.production_broadcast_audience_append.v1"
       | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"

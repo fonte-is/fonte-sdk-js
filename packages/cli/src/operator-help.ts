@@ -15,6 +15,13 @@ export interface HelpEntry {
  * either parsed today or explicitly reports unsupported authority before I/O.
  */
 const entries: readonly HelpEntry[] = [
+  { command: ["broadcast", "personalization", "schema"],
+    usage: [["--workspace <slug> --environment <sandbox|production>"]], json: true,
+    detail: "Reads Core's workspace-scoped personalization contract and active/deleted custom definitions." },
+  { command: ["broadcast", "personalization", "preview"],
+    usage: [["--workspace <slug> --environment <sandbox|production> --draft-id <uuid> --revision <number>",
+      "--schema-version <discovered-version> --sample <missing|selected> [--contact-id <id> --recipient-email <email>]"]], json: true,
+    detail: "Validates one saved revision and renders an explicit sample through Core. No audience preparation, Test Send or Send." },
   {
     command: ["init"],
     usage: [["[--yes]"]],

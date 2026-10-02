@@ -1,4 +1,5 @@
 import { CliUsageError } from "./errors.js";
+import { parseBroadcastPersonalizationArguments } from "./operator-broadcast-personalization-arguments.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
 import { parseBroadcastSendInstructionArguments } from "./operator-broadcast-send-instruction-arguments.js";
 import { parseWorkspaceMarketingSettingsArguments } from "./operator-marketing-settings-arguments.js";
@@ -29,6 +30,8 @@ const bridgeDeclarations = new Set([
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const personalization = parseBroadcastPersonalizationArguments(argv);
+  if (personalization) return personalization;
   const campaign = parseCampaignOperatorArguments(argv);
   if (campaign) return campaign;
   const segment = parseSegmentOperatorArguments(argv);

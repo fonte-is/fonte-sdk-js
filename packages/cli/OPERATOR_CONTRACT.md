@@ -430,3 +430,23 @@ MCP layer.
 The fixed Sequence and Broadcast MCP allowlist is defined in
 `MCP_CONTRACT.md`; it has no Bridge, recipient preparation, enrollment,
 provider dispatch, delivery mutation, or generic runtime authority.
+# Personalization inspection (FON-858)
+
+The exported `@fonte-is/cli/operator-client` now includes
+`readBroadcastPersonalizationSchema({workspace,environment?})` and
+`previewBroadcastPersonalization({workspace,environment?,draftId,revision,schemaVersion,sample})`.
+Both preserve the exact machine-readable Core envelope and use the existing
+authenticated requester. `sample` names a selected Contact/independent preview
+email or the explicit synthetic missing case. It never supplies field values
+or definitions. No language parsing or rendering is implemented in the SDK.
+
+```sh
+fonte broadcast personalization schema --workspace synthetic-workspace --environment production --json
+fonte broadcast personalization preview --workspace synthetic-workspace --environment production --draft-id 00000000-0000-4000-8000-000000000858 --revision 4 --schema-version fonte-core-personalization-v1 --sample missing --json
+```
+
+Use the discovered version, not a remembered version. A selected sample uses
+`--sample selected --contact-id <Contact identity> --recipient-email <preview email>`.
+These commands create no artifact, audience, authorization, reservation or Send.
+Invalid content yields a blocked operator receipt containing the original Core
+diagnostics; missing-fallback warnings alone remain successful inspection.

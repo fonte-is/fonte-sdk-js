@@ -1,4 +1,7 @@
 import { HostedTestBlockedError } from "./hosted-errors.js";
+import { readBroadcastPersonalizationSchemaInputSchema } from "./mcp-broadcast-personalization-types.js";
+import type { BroadcastPersonalizationPreviewResult } from "./operator-broadcast-personalization-types.js";
+export const MCP_BROADCAST_PERSONALIZATION_SCHEMA_TOOL = "fonte_read_broadcast_personalization_schema" as const;
 import { sequenceMcpFailure } from "./mcp-sequence-failure.js";
 import { CoreOperatorError } from "./operator-core-request.js";
 import { renderBroadcastDraftInputSchema } from
@@ -36,7 +39,7 @@ export type BroadcastRenderToolResult = ToolFailure & { readonly render: null }
       readonly reason: null;
       readonly status_code: null;
       readonly core_effect: "none";
-      readonly render: BroadcastDraftRenderResult;
+      readonly render: BroadcastDraftRenderResult | BroadcastPersonalizationPreviewResult;
     };
 
 export type BroadcastTestRequestToolResult = ToolFailure & {
@@ -66,6 +69,11 @@ export function createBroadcastRenderToolHandler(
     const value = renderBroadcastDraftInputSchema.parse(input);
     try {
       const client = await provider();
+      if (value.personalization_schema_version !== undefined && value.sample !== undefined) {
+        return success("render", await client.previewBroadcastPersonalization({ workspace: value.workspace,
+          draftId: value.draft_id, revision: value.revision,
+          schemaVersion: value.personalization_schema_version, sample: value.sample }));
+      }
       return success("render", await client.renderBroadcastDraft({
         workspace: value.workspace,
         draftId: value.draft_id,
@@ -73,6 +81,17 @@ export function createBroadcastRenderToolHandler(
       }));
     } catch (error) {
       return { ...failure(error, false), render: null };
+    }
+  };
+}
+
+export function createBroadcastPersonalizationSchemaToolHandler(provider: BroadcastRenderTestClientProvider) {
+  return async (input: unknown) => {
+    const value = readBroadcastPersonalizationSchemaInputSchema.parse(input);
+    try {
+      return success("schema", await (await provider()).readBroadcastPersonalizationSchema(value));
+    } catch (error) {
+      return { ...failure(error, false), core_effect: "none" as const, schema: null };
     }
   };
 }

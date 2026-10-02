@@ -16,6 +16,9 @@ export function renderOperatorJson(receipt: OperatorReceipt): string {
 }
 
 export function renderOperatorHuman(receipt: OperatorReceipt): string {
+  if (receipt.result?.kind === "broadcast_personalization_schema" || receipt.result?.kind === "broadcast_personalization_preview") {
+    return JSON.stringify(receipt, null, 2);
+  }
   if (receipt.outcome === "unsupported_authority") {
     return "Fonte operation unavailable: unsupported_authority.\nCore effect: none.\n";
   }
