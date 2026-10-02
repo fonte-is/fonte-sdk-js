@@ -10,17 +10,13 @@ import {
   type BroadcastLocalFileReader,
 } from "./operator-broadcast-html-file.js";
 import {
+  BROADCAST_HTML_SUPPORTED_SLOTS,
   broadcastHtmlWarnings,
   inspectBroadcastHtml,
   type BroadcastHtmlInspection,
 } from "./operator-broadcast-html-inspection.js";
 
-const SLOT_SCHEMA = "fonte-core-recipient-slots-v1";
-const SUPPORTED_SLOTS = [
-  "{{{contact.email}}}",
-  "{{{unsubscribe_url}}}",
-  "{{{postal_address}}}",
-] as const;
+const SLOT_SCHEMA = "fonte-core-personalization-v1";
 
 export interface BroadcastHtmlSourceInput {
   readonly sourceFile: string;
@@ -100,7 +96,7 @@ export async function prepareBroadcastHtmlSource(
       prepared_bytes: preparedBytes.byteLength,
       prepared_sha256: digest(preparedBytes),
       recipient_slot_schema_version: SLOT_SCHEMA,
-      supported_slots: SUPPORTED_SLOTS.map((token) => ({
+      supported_slots: BROADCAST_HTML_SUPPORTED_SLOTS.map((token) => ({
         token,
         occurrences: occurrences(converted.html, token),
       })),

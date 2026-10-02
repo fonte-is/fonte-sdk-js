@@ -5,10 +5,17 @@ export interface BroadcastHtmlInspection {
   readonly assets: readonly string[];
 }
 
-const SUPPORTED_SLOTS = [
+export const BROADCAST_HTML_FIRST_NAME = "{{ first_name }}";
+export const BROADCAST_HTML_FIRST_NAME_DEFAULT =
+  '{{ first_name | default: "there" }}';
+
+// Bounded import spellings only; Core owns v1 parsing and finalization.
+export const BROADCAST_HTML_SUPPORTED_SLOTS = [
   "{{{contact.email}}}",
   "{{{unsubscribe_url}}}",
   "{{{postal_address}}}",
+  BROADCAST_HTML_FIRST_NAME,
+  BROADCAST_HTML_FIRST_NAME_DEFAULT,
 ] as const;
 
 export function inspectBroadcastHtml(html: string): BroadcastHtmlInspection {
@@ -17,11 +24,13 @@ export function inspectBroadcastHtml(html: string): BroadcastHtmlInspection {
     ...new Set(
       slots.filter(
         (slot) =>
-          !SUPPORTED_SLOTS.includes(slot as (typeof SUPPORTED_SLOTS)[number]),
+          !BROADCAST_HTML_SUPPORTED_SLOTS.includes(
+            slot as (typeof BROADCAST_HTML_SUPPORTED_SLOTS)[number],
+          ),
       ),
     ),
   ].sort();
-  const withoutAllowed = SUPPORTED_SLOTS.reduce(
+  const withoutAllowed = BROADCAST_HTML_SUPPORTED_SLOTS.reduce(
     (value, slot) => value.replaceAll(slot, ""),
     html,
   );

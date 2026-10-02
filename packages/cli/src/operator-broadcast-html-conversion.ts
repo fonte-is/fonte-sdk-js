@@ -1,4 +1,8 @@
-import { inspectBroadcastHtml } from "./operator-broadcast-html-inspection.js";
+import {
+  BROADCAST_HTML_FIRST_NAME,
+  BROADCAST_HTML_FIRST_NAME_DEFAULT,
+  inspectBroadcastHtml,
+} from "./operator-broadcast-html-inspection.js";
 
 const RESEND_UNSUBSCRIBE = "{{{RESEND_UNSUBSCRIBE_URL}}}";
 
@@ -35,6 +39,12 @@ export function convertBroadcastHtml(
     "provider_token",
     conversions,
   );
+  for (const [source, replacement] of [
+    ["{{{FIRST_NAME}}}", BROADCAST_HTML_FIRST_NAME],
+    ["{{{FIRST_NAME|there}}}", BROADCAST_HTML_FIRST_NAME_DEFAULT],
+  ]) {
+    html = replace(html, source, replacement, "provider_token", conversions);
+  }
   if (input.postalAddressLiteral) {
     html = replace(
       html,

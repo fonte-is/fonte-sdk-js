@@ -92,7 +92,7 @@ export const broadcastHtmlSourceReportSchema = z
     source_sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     prepared_bytes: z.number().int().nonnegative().safe(),
     prepared_sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/),
-    recipient_slot_schema_version: z.literal("fonte-core-recipient-slots-v1"),
+    recipient_slot_schema_version: z.literal("fonte-core-personalization-v1"),
     supported_slots: z
       .array(
         z
@@ -102,7 +102,7 @@ export const broadcastHtmlSourceReportSchema = z
           })
           .strict(),
       )
-      .length(3),
+      .length(5),
     unsupported_tokens: z.array(z.string()).max(100),
     conversions: z.array(conversionSchema).max(100),
     asset_dependencies: z.array(z.string()).max(100),
