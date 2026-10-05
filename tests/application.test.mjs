@@ -48,6 +48,86 @@ function client(t, extra = {}) {
 }
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+test("SDK relationship wire states exclude internal unresolved", async (t) => {
+  const requests = [];
+  const value = client(t, {
+    fetch: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      requests.push(body);
+      return Response.json(receipt(body));
+    },
+  });
+  const relationship = {
+    userId: "user_1",
+    contactId: "contact_1",
+    accountId: null,
+    sourcePartyId: null,
+    validFrom: at,
+    validUntil: null,
+  };
+  assert.equal(
+    value.recordRelationship(
+      { ...relationship, eventId: eventId(700), state: "unresolved" },
+      granted,
+    ),
+    false,
+  );
+  assert.equal(
+    value.enqueue(
+      {
+        ...relationship,
+        kind: "relationship",
+        eventId: eventId(701),
+        state: "unresolved",
+      },
+      granted,
+    ),
+    false,
+  );
+  const rejected = await value.flush();
+  assert.equal(rejected.queued, 0);
+  assert.equal(rejected.rejected, 2);
+  assert.equal(rejected.lastReason, "record_invalid");
+  assert.equal(rejected.requests, 0);
+  assert.equal(requests.length, 0);
+
+  let sequence = 702;
+  for (const state of ["verified", "revoked", "conflicting"]) {
+    assert.equal(
+      value.recordRelationship(
+        { ...relationship, eventId: eventId(sequence++), state },
+        granted,
+      ),
+      true,
+    );
+    assert.equal(
+      value.enqueue(
+        {
+          ...relationship,
+          kind: "relationship",
+          eventId: eventId(sequence++),
+          state,
+        },
+        granted,
+      ),
+      true,
+    );
+  }
+  assert.equal((await value.flush()).acknowledged, 6);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(
+    requests[0].records.map(({ state }) => state),
+    [
+      "verified",
+      "verified",
+      "revoked",
+      "revoked",
+      "conflicting",
+      "conflicting",
+    ],
+  );
+});
+
 test("business hooks return before any Fonte request, including during an outage", async (t) => {
   let calls = 0;
   const value = client(t, {
