@@ -1,6 +1,6 @@
 {
   "name": "@fonte-is/nextjs",
-  "version": "0.2.0-fon571.1",
+  "version": "0.2.0-fon909.1",
   "description": "Next.js App Router integration over @fonte-is/core and @fonte-is/react",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
@@ -19,6 +19,9 @@
     "*": {
       "server": [
         "./dist/server.d.ts"
+      ],
+      "application": [
+        "./dist/application.d.ts"
       ],
       "installation-verification": [
         "./dist/installation-verification.d.ts"
@@ -39,6 +42,10 @@
       "types": "./dist/server.d.ts",
       "node": "./dist/server.js"
     },
+    "./application": {
+      "types": "./dist/application.d.ts",
+      "node": "./dist/application.js"
+    },
     "./installation-verification": {
       "types": "./dist/installation-verification.d.ts",
       "import": "./dist/installation-verification.js",
@@ -46,8 +53,8 @@
     }
   },
   "dependencies": {
-    "@fonte-is/core": "0.2.0-fon571.1",
-    "@fonte-is/react": "0.2.0-fon571.1"
+    "@fonte-is/core": "0.2.0-fon909.1",
+    "@fonte-is/react": "0.2.0-fon909.1"
   },
   "peerDependencies": {
     "next": ">=15 <17",
