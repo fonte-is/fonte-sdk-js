@@ -110,8 +110,10 @@ test("same create identity replays and lost create stays ambiguous", async () =>
 test("MCP lifecycle stays bounded and preserves recovery truth", async () => {
   assert.equal(createBroadcastDraftInputSchema.safeParse(mcpCreateInput()).success,
     true);
+  assert.equal(createBroadcastDraftInputSchema.safeParse({ ...mcpCreateInput(),
+    sender_profile_id: "sender_synthetic" }).success, true);
   for (const foreign of [
-    { sender_profile_id: "sender_synthetic" },
+    { sender_profile_id: " sender_synthetic" },
     { audience: { kind: "all_contacts" } },
     { recipient: "other@example.test" },
   ]) {
