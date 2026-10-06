@@ -90,12 +90,14 @@ export function createCoreFonteMcpServer(request: CoreRequester, coreApiBaseUrl:
     }));
   register(extraTools[1]!, z.strictObject({ ...scope, set_id: z.string().uuid(), request_id: z.string().uuid(),
     expected_draft_version: z.number().int().positive(), csv_text: z.string().min(1).max(65_536),
+    permission_confirmed: z.literal(true),
     source_file_name: z.string().regex(/^[A-Za-z0-9._-]{1,100}\.csv$/).default("recipients.csv") }),
-    "Create one broadcast-only recipient set from bounded inline CSV. Start with an empty selected audience. Core validates, imports and authorizes the exact rows; this never adds them to Everyone or sends.", true,
+    "Create one broadcast-only recipient set from bounded inline CSV after the caller confirms permission for the exact recipients. Start with an empty selected audience. Core validates, imports and authorizes the exact rows; this never adds them to Everyone or sends.", true,
     input => request(`${draftPath(input)}/recipient-sets?environment=production`, {
       body: { setId: input.set_id, clientRequestKey: input.request_id,
         expectedDraftVersion: input.expected_draft_version, csvText: input.csv_text,
-        sourceFileName: input.source_file_name, usage: "include" }, lostResponseEffect: "unknown" }));
+        sourceFileName: input.source_file_name, usage: "include",
+        intake: { permissionConfirmed: input.permission_confirmed } }, lostResponseEffect: "unknown" }));
   register(extraTools[2]!, z.strictObject({ ...scope, set_id: z.string().uuid() }),
     "Read the exact Core-owned broadcast-only recipient-set operation without recipient rows.", false,
     input => request(`${draftPath(input)}/recipient-sets/${input.set_id}?environment=production`));

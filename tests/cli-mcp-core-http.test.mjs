@@ -46,3 +46,23 @@ test("invalid remote input never reaches Core", async () => {
   assert.equal(effects, 0);
   assert.ok(value.error || value.result.isError);
 });
+test("recipient-set intake requires explicit permission before any Core effect", async () => {
+  const input = { workspace: "northstar", draft_id: "99999999-9999-4999-8999-999999999999",
+    set_id: "88888888-8888-4888-8888-888888888888", request_id: "77777777-7777-4777-8777-777777777777",
+    expected_draft_version: 1, csv_text: "email\nrecipient@example.invalid\n" };
+  let effects = 0;
+  const requester = async (_path, options) => {
+    effects++;
+    assert.equal(options.body.intake.permissionConfirmed, true);
+    return { result: { status: "pending", populationEffect: "broadcast_only_not_everyone" } };
+  };
+  for (const arguments_ of [input, { ...input, permission_confirmed: false }]) {
+    const { value } = await call("tools/call", { name: "fonte_create_broadcast_recipient_set", arguments: arguments_ }, requester);
+    assert.ok(value.error || value.result.isError);
+  }
+  assert.equal(effects, 0);
+  const { value } = await call("tools/call", { name: "fonte_create_broadcast_recipient_set",
+    arguments: { ...input, permission_confirmed: true } }, requester);
+  assert.equal(value.result.structuredContent.outcome, "completed");
+  assert.equal(effects, 1);
+});
