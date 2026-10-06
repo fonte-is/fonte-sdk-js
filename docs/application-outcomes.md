@@ -1,5 +1,10 @@
 # Application observations
 
+**Historical v1 API:** this page documents the retained Website/application
+adapter for existing integrations. New CSV → named actions → Broadcast Results
+installations use the [native Results guide](./results.md). The v1 API reference
+below is preserved for compatibility.
+
 This server-only adapter extends an existing Fonte Website installation. Configure
 one application source there, select a successful action and its plan ordering,
 then keep the returned source credential in your application's server environment.
