@@ -182,7 +182,8 @@ export function createBroadcastClient(
     );
     const instruction = parseBroadcastSendRequest(durable.request);
     if (
-      (receipt.outcome === "executable" &&
+      ((receipt.outcome === "executable" ||
+        ("schema" in receipt && receipt.businessAccepted && instruction.reviewId !== undefined)) &&
         receipt.reviewId !== (instruction.reviewId ?? null)) ||
       (instruction.resume &&
         receipt.operationId !== instruction.resume.operationId)
@@ -342,6 +343,9 @@ export async function waitForBroadcastOperation(
   return { pending: false, receipt };
 }
 function isPending(receipt: BroadcastReceipt): boolean {
+  if ("schema" in receipt && receipt.schema === "broadcast_send_receipt.v3")
+    return receipt.outcome === "processing" &&
+      receipt.executionState !== "ready" && receipt.executionState !== "stopped";
   return "state" in receipt
     ? receipt.state === "queued" || receipt.state === "running"
     : receipt.outcome === "processing";

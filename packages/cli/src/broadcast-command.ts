@@ -228,9 +228,11 @@ export function renderBroadcastCommand(
   const state =
     "state" in receipt
       ? `Review ${receipt.state}`
-      : receipt.outcome === "executable"
-        ? `Executable job ${receipt.jobId}`
-        : receipt.outcome;
+      : "schema" in receipt && receipt.businessAccepted
+        ? `Accepted; execution ${receipt.executionState}`
+        : receipt.outcome === "executable"
+          ? `Executable job ${receipt.jobId}`
+          : receipt.outcome;
   const progress =
     "execution" in receipt && receipt.execution
       ? `; execution ${receipt.execution.state}`
@@ -245,7 +247,9 @@ function operationReason(receipt: BroadcastReceipt): string {
     receipt.blocker?.code ??
     ("state" in receipt
       ? `broadcast_review_${receipt.state}`
-      : `broadcast_send_${receipt.outcome}`)
+      : "schema" in receipt && receipt.businessAccepted
+        ? `broadcast_send_${receipt.executionState}`
+        : `broadcast_send_${receipt.outcome}`)
   );
 }
 interface Options {

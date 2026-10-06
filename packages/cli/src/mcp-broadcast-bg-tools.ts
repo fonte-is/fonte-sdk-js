@@ -180,8 +180,8 @@ export function registerMcpBroadcastBgTools(
       inputSchema: broadcastBgSendToolInput,
       description:
         options.callerCustody
-          ? "Submits the caller's complete immutable approved Send input. Retain and replay exactly this input after response loss; Core enforces durable idempotency. Processing is not executable."
-          : "Durably saves and submits the exact approved review references. Processing is not executable.",
+          ? "Submits the caller's complete immutable approved Send input. Retain and replay exactly this input after response loss; Core enforces durable idempotency. Core reports business acceptance and execution readiness separately."
+          : "Durably saves and submits the exact approved review references. Core reports business acceptance and execution readiness separately.",
       annotations: sendMutation,
     },
     async (input) => result(await handlers.send(input)),
