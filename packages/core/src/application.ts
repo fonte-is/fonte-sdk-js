@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Buffer } from "node:buffer";
+import { createApplicationDelivery } from "./application-delivery.js";
 import type {
-  ApplicationDeliveryReason,
-  ApplicationDeliveryStatus,
   ApplicationPermission,
   ApplicationRecord,
   FonteApplicationSource,
@@ -11,22 +9,13 @@ import type {
 
 export type * from "./application-types.js";
 
-const schema = "fonte.application.v1";
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idPattern = /^[a-zA-Z0-9_.:-]{1,200}$/;
 const instantPattern = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/;
-const maxBytes = 65_536;
 const recoveryAgeMs = 30 * 86_400_000;
 const futureSkewMs = 300_000;
-const maxRetryDelayMs = 2_000;
-const maxRetryAfterMs = 86_400_000;
 type ObjectValue = Record<string, unknown>;
-type Queued = { eventId: string; body: string; bytes: number };
-type RequestResult =
-  | { kind: "ack"; outcomes: ("stored" | "replayed" | "erased")[] }
-  | { kind: "permanent"; reason: ApplicationDeliveryReason }
-  | { kind: "retry"; reason: ApplicationDeliveryReason; delay?: number };
 
 function object(value: unknown): ObjectValue {
   if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -166,41 +155,6 @@ function normalizeRecord(value: unknown, now: number): ApplicationRecord {
   }
   throw 0;
 }
-function configurationInvalid(): never {
-  throw new Error("fonte_application_configuration_invalid");
-}
-function origin(value: unknown, local: boolean): string {
-  try {
-    if (typeof value !== "string") return configurationInvalid();
-    const url = new URL(value);
-    if (
-      value !== url.origin ||
-      url.username ||
-      url.password ||
-      !(
-        url.protocol === "https:" ||
-        (local &&
-          url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
-      )
-    )
-      return configurationInvalid();
-    return url.origin;
-  } catch {
-    return configurationInvalid();
-  }
-}
-function bounded(
-  value: number | undefined,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  if (value === undefined) return fallback;
-  if (!Number.isInteger(value) || value < min || value > max)
-    return configurationInvalid();
-  return value;
-}
 function permitted(value: unknown): boolean {
   try {
     const v = object(value);
@@ -209,78 +163,6 @@ function permitted(value: unknown): boolean {
     return false;
   }
 }
-function retryAfter(value: string | null, now: number): number | undefined {
-  if (value === null) return undefined;
-  const milliseconds = /^\d+(?:\.\d+)?$/.test(value)
-    ? Number(value) * 1_000
-    : Date.parse(value) - now;
-  return Number.isFinite(milliseconds) &&
-    milliseconds >= 0 &&
-    milliseconds <= maxRetryAfterMs
-    ? Math.ceil(milliseconds)
-    : undefined;
-}
-async function readReceipt(
-  response: Response,
-  expected: Queued[],
-  sourceId: string,
-  signal: AbortSignal,
-): Promise<RequestResult> {
-  let bytes = 0;
-  const reader = response.body?.getReader();
-  if (!reader) return { kind: "retry", reason: "receipt_unconfirmed" };
-  const chunks: Uint8Array[] = [];
-  const cancel = () => {
-    void reader.cancel().catch(() => undefined);
-  };
-  signal.addEventListener("abort", cancel, { once: true });
-  try {
-    if (signal.aborted) return { kind: "retry", reason: "receipt_unconfirmed" };
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      bytes += next.value.byteLength;
-      if (bytes > maxBytes) {
-        await reader.cancel();
-        return { kind: "retry", reason: "receipt_unconfirmed" };
-      }
-      chunks.push(next.value);
-    }
-    if (signal.aborted) return { kind: "retry", reason: "receipt_unconfirmed" };
-    const v = object(JSON.parse(Buffer.concat(chunks, bytes).toString("utf8")));
-    keys(v, ["schema", "sourceId", "acceptedAt", "records", "delivery"]);
-    if (
-      v.schema !== "fonte.application.receipt.v1" ||
-      v.sourceId !== sourceId ||
-      v.delivery !== "best_effort" ||
-      !Array.isArray(v.records) ||
-      v.records.length !== expected.length
-    )
-      throw 0;
-    instant(v.acceptedAt);
-    const pending = new Set(expected.map((entry) => entry.eventId));
-    const outcomes = v.records.map((value) => {
-      const r = object(value);
-      keys(r, ["eventId", "outcome"]);
-      if (
-        typeof r.eventId !== "string" ||
-        !pending.delete(r.eventId) ||
-        (r.outcome !== "stored" &&
-          r.outcome !== "replayed" &&
-          r.outcome !== "erased")
-      )
-        throw 0;
-      return r.outcome;
-    });
-    return { kind: "ack", outcomes };
-  } catch {
-    return { kind: "retry", reason: "receipt_unconfirmed" };
-  } finally {
-    signal.removeEventListener("abort", cancel);
-    reader.releaseLock();
-  }
-}
-
 /** Server-only adapter. Existing authentication, business state and permissions remain caller-owned. */
 export function createFonteApplicationSource(
   options: FonteApplicationSourceOptions,
@@ -290,333 +172,44 @@ export function createFonteApplicationSource(
   try {
     return applicationSource(options);
   } catch {
-    return configurationInvalid();
+    throw new Error("fonte_application_configuration_invalid");
   }
 }
 function applicationSource(
   options: FonteApplicationSourceOptions,
 ): FonteApplicationSource {
-  const apiOrigin = origin(
-    options.apiOrigin ?? "https://api.fonte.is",
-    options.allowInsecureLocalhost === true,
+  const delivery = createApplicationDelivery(
+    {
+      mode: "application-v1",
+      apiOrigin: options.apiOrigin,
+      siteId: options.siteId,
+      sourceId: options.sourceId,
+      serverKey: options.serverKey,
+      origin: options.origin,
+      policyVersion: options.policyVersion,
+      fetch: options.fetch,
+      now: options.now,
+      queueLimit: options.queueLimit,
+      batchSize: options.batchSize,
+      timeoutMs: options.timeoutMs,
+      flushDelayMs: options.flushDelayMs,
+      retryBaseMs: options.retryBaseMs,
+      maxRetries: options.maxRetries,
+      allowInsecureLocalhost: options.allowInsecureLocalhost,
+    },
+    normalizeRecord,
   );
-  const applicationOrigin = origin(
-    options.origin,
-    options.allowInsecureLocalhost === true,
-  );
-  if (
-    typeof options.siteId !== "string" ||
-    !/^site_[a-zA-Z0-9_-]{32}$/.test(options.siteId) ||
-    typeof options.sourceId !== "string" ||
-    !idPattern.test(options.sourceId) ||
-    typeof options.policyVersion !== "string" ||
-    !idPattern.test(options.policyVersion) ||
-    typeof options.serverKey !== "string" ||
-    !/^[\x21-\x7e]{24,512}$/.test(options.serverKey) ||
-    (options.fetch !== undefined && typeof options.fetch !== "function") ||
-    (options.now !== undefined && typeof options.now !== "function")
-  )
-    configurationInvalid();
-  const transport = options.fetch ?? globalThis.fetch;
-  if (typeof transport !== "function") configurationInvalid();
-  const sourceId = options.sourceId,
-    policyVersion = options.policyVersion,
-    serverKey = options.serverKey;
-  const endpoint = `${apiOrigin}/v1/websites/${options.siteId}/application-observations`;
-  const queueLimit = bounded(options.queueLimit, 1_000, 1, 1_000);
-  const batchSize = bounded(options.batchSize, 100, 1, 100);
-  const timeoutMs = bounded(options.timeoutMs, 750, 1, 750);
-  const flushDelayMs = bounded(options.flushDelayMs, 25, 0, 1_000);
-  const retryBaseMs = bounded(options.retryBaseMs, 100, 1, maxRetryDelayMs);
-  const maxRetries = bounded(options.maxRetries, 3, 0, 3);
-  const now = options.now ?? Date.now;
-  const clock = () => {
-    try {
-      const n = now();
-      return Number.isFinite(n) ? n : Date.now();
-    } catch {
-      return Date.now();
-    }
-  };
-  const prefix =
-    JSON.stringify({
-      schema,
-      sourceId,
-      policy: {
-        version: policyVersion,
-        activity: "granted",
-        identityLink: "granted",
-      },
-    }).slice(0, -1) + ',"records":[';
-  const overhead = Buffer.byteLength(prefix) + 2;
-  const queue: Queued[] = [],
-    pendingIds = new Map<string, string>();
-  const counts = {
-    enqueued: 0,
-    acknowledged: 0,
-    stored: 0,
-    replayed: 0,
-    erased: 0,
-    dropped: 0,
-    denied: 0,
-    rejected: 0,
-    requests: 0,
-    retries: 0,
-  };
-  let state: ApplicationDeliveryStatus["state"] = "ready";
-  let lastReason: ApplicationDeliveryReason | null = null;
-  let retryAt = 0,
-    scheduled: ReturnType<typeof setTimeout> | null = null;
-  let active: Promise<ApplicationDeliveryStatus> | null = null,
-    controller: AbortController | null = null;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null,
-    wakeRetry: (() => void) | null = null;
-  const status = (): ApplicationDeliveryStatus => ({
-    delivery: "best_effort",
-    state,
-    queued: queue.length,
-    ...counts,
-    retryAfterMs: Math.max(0, retryAt - clock()),
-    lastReason,
-  });
-  const stop = () => state === "closed" || state === "blocked";
-  const drop = () => {
-    counts.dropped += queue.length;
-    queue.length = 0;
-    pendingIds.clear();
-  };
-  const reject = (reason: ApplicationDeliveryReason) => {
-    counts.rejected++;
-    lastReason = reason;
-    return false;
-  };
-  const gate = (permission: ApplicationPermission) => {
-    if (!permitted(permission)) {
-      counts.denied++;
-      lastReason = "collection_not_permitted";
-      return false;
-    }
-    if (stop())
-      return reject(
-        state === "closed" ? "closed" : (lastReason ?? "source_rejected"),
-      );
-    return true;
-  };
-  const sleep = (delay: number) =>
-    new Promise<void>((done) => {
-      wakeRetry = done;
-      retryTimer = setTimeout(() => {
-        retryTimer = null;
-        wakeRetry = null;
-        done();
-      }, delay);
-    });
-  const request = async (
-    body: string,
-    batch: Queued[],
-  ): Promise<RequestResult> => {
-    const current = new AbortController();
-    controller = current;
-    let timeout = false,
-      interrupt: (() => void) | null = null;
-    const interrupted = new Promise<RequestResult>((done) => {
-      interrupt = () =>
-        done({ kind: "retry", reason: timeout ? "request_timeout" : "closed" });
-      current.signal.addEventListener("abort", interrupt, { once: true });
-    });
-    const timer = setTimeout(() => {
-      timeout = true;
-      current.abort();
-    }, timeoutMs);
-    const perform = async (): Promise<RequestResult> => {
-      try {
-        const response = await transport(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Origin: applicationOrigin,
-            "x-fonte-installation-id": sourceId,
-            "x-fonte-installation-key": serverKey,
-          },
-          body,
-          signal: current.signal,
-          credentials: "omit",
-          redirect: "error",
-          cache: "no-store",
-        });
-        if (current.signal.aborted) {
-          void response.body?.cancel().catch(() => undefined);
-          return {
-            kind: "retry",
-            reason: timeout ? "request_timeout" : "closed",
-          };
-        }
-        if (!response.ok) void response.body?.cancel().catch(() => undefined);
-        if (response.status === 401 || response.status === 403)
-          return { kind: "permanent", reason: "source_denied" };
-        if (response.status === 409)
-          return { kind: "permanent", reason: "source_conflict" };
-        if (
-          response.status >= 400 &&
-          response.status < 500 &&
-          ![408, 425, 429].includes(response.status)
-        )
-          return { kind: "permanent", reason: "source_rejected" };
-        if (!response.ok)
-          return {
-            kind: "retry",
-            reason: "source_unavailable",
-            delay: retryAfter(response.headers.get("Retry-After"), clock()),
-          };
-        return await readReceipt(response, batch, sourceId, current.signal);
-      } catch {
-        return { kind: "retry", reason: "network_unavailable" };
-      }
-    };
-    try {
-      return await Promise.race([perform(), interrupted]);
-    } finally {
-      clearTimeout(timer);
-      if (interrupt) current.signal.removeEventListener("abort", interrupt);
-      if (controller === current) controller = null;
-    }
-  };
-  const batchFrom = (remaining: number): Queued[] => {
-    const batch: Queued[] = [];
-    let bytes = overhead;
-    for (const item of queue) {
-      const added = item.bytes + (batch.length ? 1 : 0);
-      if (
-        batch.length >= Math.min(batchSize, remaining) ||
-        bytes + added > maxBytes
-      )
-        break;
-      batch.push(item);
-      bytes += added;
-    }
-    return batch;
-  };
-  const drain = async () => {
-    if (stop() || !queue.length) return;
-    if (retryAt > clock()) {
-      state = "disconnected";
-      lastReason = "retry_later";
-      return;
-    }
-    retryAt = 0;
-    state = "delivering";
-    let remaining = queue.length;
-    while (remaining > 0 && queue.length && !stop()) {
-      const batch = batchFrom(remaining),
-        body = prefix + batch.map((item) => item.body).join(",") + "]}";
-      for (let attempt = 0; attempt <= maxRetries && !stop(); attempt++) {
-        counts.requests++;
-        if (attempt > 0) counts.retries++;
-        const result = await request(body, batch);
-        if (stop()) return;
-        if (result.kind === "ack") {
-          for (const outcome of result.outcomes) counts[outcome]++;
-          counts.acknowledged += batch.length;
-          for (const item of batch) pendingIds.delete(item.eventId);
-          queue.splice(0, batch.length);
-          remaining -= batch.length;
-          lastReason = null;
-          break;
-        }
-        lastReason = result.reason;
-        if (result.kind === "permanent") {
-          state = "blocked";
-          drop();
-          return;
-        }
-        if (result.delay !== undefined && result.delay > maxRetryDelayMs) {
-          retryAt = clock() + result.delay;
-          state = "disconnected";
-          lastReason = "retry_later";
-          return;
-        }
-        if (attempt === maxRetries) {
-          state = "disconnected";
-          return;
-        }
-        await sleep(
-          Math.max(
-            result.delay ?? 0,
-            Math.min(retryBaseMs * 2 ** attempt, maxRetryDelayMs),
-          ),
-        );
-      }
-    }
-    if (!stop()) state = "ready";
-  };
-  const schedule = () => {
-    if (
-      scheduled !== null ||
-      active !== null ||
-      stop() ||
-      !queue.length ||
-      retryAt > clock()
-    )
-      return;
-    scheduled = setTimeout(() => {
-      scheduled = null;
-      void flush();
-    }, flushDelayMs);
-    scheduled.unref?.();
-  };
-  const flush = (): Promise<ApplicationDeliveryStatus> => {
-    if (scheduled !== null) {
-      clearTimeout(scheduled);
-      scheduled = null;
-    }
-    if (active) return active;
-    active = Promise.resolve()
-      .then(drain)
-      .catch(() => {
-        if (!stop()) {
-          state = "disconnected";
-          lastReason = "network_unavailable";
-        }
-      })
-      .then(() => status())
-      .finally(() => {
-        active = null;
-        if (state === "ready") schedule();
-      });
-    return active;
-  };
+  const { gate, reject, clock, flush, status, close } = delivery;
   const enqueue = (
     value: ApplicationRecord,
     permission: ApplicationPermission,
-  ): boolean => {
-    if (!gate(permission)) return false;
-    try {
-      const record = normalizeRecord(value, clock()),
-        body = JSON.stringify(record),
-        bytes = Buffer.byteLength(body);
-      if (bytes + overhead > maxBytes) return reject("record_invalid");
-      const pending = pendingIds.get(record.eventId);
-      if (pending !== undefined)
-        return pending === body || reject("record_conflict");
-      if (queue.length >= queueLimit) {
-        counts.dropped++;
-        return reject("queue_full");
-      }
-      queue.push({ eventId: record.eventId, body, bytes });
-      pendingIds.set(record.eventId, body);
-      counts.enqueued++;
-      schedule();
-      return true;
-    } catch {
-      return reject("record_invalid");
-    }
-  };
+  ) => delivery.enqueue(value, permitted(permission));
   const hook = (
     kind: ApplicationRecord["kind"],
     input: unknown,
     permission: ApplicationPermission,
   ): boolean => {
-    if (!gate(permission)) return false;
+    if (!gate(permitted(permission))) return false;
     try {
       const value = object(input),
         record: ObjectValue = {
@@ -649,24 +242,6 @@ function applicationSource(
     retract: (input, permission) => hook("retract", input, permission),
     flush,
     status,
-    close() {
-      if (state === "closed") return status();
-      state = "closed";
-      lastReason = "closed";
-      retryAt = 0;
-      if (scheduled !== null) {
-        clearTimeout(scheduled);
-        scheduled = null;
-      }
-      if (retryTimer !== null) {
-        clearTimeout(retryTimer);
-        retryTimer = null;
-      }
-      wakeRetry?.();
-      wakeRetry = null;
-      controller?.abort();
-      drop();
-      return status();
-    },
+    close,
   };
 }

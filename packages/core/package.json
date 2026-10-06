@@ -23,6 +23,12 @@
       "application": [
         "./dist/application.d.ts"
       ],
+      "results": [
+        "./dist/results.d.ts"
+      ],
+      "results-browser": [
+        "./dist/results-browser.d.ts"
+      ],
       "installation-verification": [
         "./dist/installation-verification.d.ts"
       ]
@@ -45,6 +51,15 @@
     "./application": {
       "types": "./dist/application.d.ts",
       "node": "./dist/application.js"
+    },
+    "./results": {
+      "types": "./dist/results.d.ts",
+      "node": "./dist/results.js"
+    },
+    "./results-browser": {
+      "types": "./dist/results-browser.d.ts",
+      "import": "./dist/results-browser.js",
+      "default": "./dist/results-browser.js"
     },
     "./installation-verification": {
       "types": "./dist/installation-verification.d.ts",

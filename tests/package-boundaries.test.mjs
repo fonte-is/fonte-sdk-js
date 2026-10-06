@@ -84,17 +84,23 @@ test("server entry points are Node-only conditional exports", async () => {
       "node",
       "types",
     ]);
-    assert.deepEqual(Object.keys(manifest.typesVersions["*"]).sort(), [
+    const paths = [
       "application",
       "installation-verification",
       "server",
-    ]);
+      ...(manifest === core ? ["results", "results-browser"] : []),
+    ];
+    assert.deepEqual(Object.keys(manifest.typesVersions["*"]).sort(), paths.sort());
     assert.deepEqual(Object.keys(manifest.exports["./application"]).sort(), ["node", "types"]);
     assert.deepEqual(manifest.typesVersions["*"]["application"], ["./dist/application.d.ts"]);
     assert.deepEqual(manifest.typesVersions["*"]["server"], [
       "./dist/server.d.ts",
     ]);
   }
+  assert.deepEqual(Object.keys(core.exports["./results"]).sort(), ["node", "types"]);
+  assert.deepEqual(core.typesVersions["*"].results, ["./dist/results.d.ts"]);
+  assert.deepEqual(Object.keys(core.exports["./results-browser"]).sort(), ["default", "import", "types"]);
+  assert.deepEqual(core.typesVersions["*"]["results-browser"], ["./dist/results-browser.d.ts"]);
 });
 
 test("Core has no framework or provider dependency or import", async () => {
