@@ -20,7 +20,7 @@ export function registerFonteStatusTool(
     {
       title: "Check Fonte readiness",
       description:
-        "Reads the local Fonte sign-in, selected workspace, and installed tool readiness. Returns one readiness state and one next action. Does not change Fonte state.",
+        "Reads the caller's Fonte authentication, workspace choices and exposed tool readiness. Returns one readiness state and one next action. Does not change Fonte state.",
       inputSchema: fonteStatusInputSchema,
       outputSchema: fonteStatusOutputSchema,
       annotations: {

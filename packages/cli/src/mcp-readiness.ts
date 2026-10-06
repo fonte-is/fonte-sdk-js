@@ -46,6 +46,7 @@ export interface FonteReadiness {
 }
 
 export interface FonteReadinessReader {
+  readonly requiredTools?: readonly string[];
   inspectHost(): Promise<{
     readonly initialized: boolean;
     readonly tools: readonly string[];
@@ -81,7 +82,7 @@ export async function readFonteReadiness(
   if (!host.initialized) return unavailable("mcp_host_unavailable");
 
   const exposed = new Set(host.tools);
-  const missingTools = REQUIRED_PRODUCT_TOOLS.filter(
+  const missingTools = (reader.requiredTools ?? REQUIRED_PRODUCT_TOOLS).filter(
     (name) => !exposed.has(name),
   );
   if (missingTools.length > 0)

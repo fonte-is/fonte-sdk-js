@@ -32,7 +32,7 @@ export function registerMcpBroadcastDraftLifecycleTools(
     {
       title: "Create Broadcast draft",
       description:
-        "Idempotently creates one content-first unsent production draft. Missing sender, targeting and purpose remain explicit nulls.",
+        "Idempotently creates one unsent production draft with optional explicit sender, communication purpose and recipient selection. Use an empty selected audience when preparing a recipient set; missing fields remain null. Never defaults to everyone.",
       inputSchema: createBroadcastDraftInputSchema,
       outputSchema: broadcastDraftLifecycleOutputSchema,
       annotations: create,

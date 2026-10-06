@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { broadcastRecipientSelectionSchema } from "./mcp-broadcast-targeting-types.js";
 
 import { broadcastDraftSnapshotSchema } from "./mcp-broadcast-draft-revision-types.js";
 import {
@@ -35,6 +36,9 @@ export const createBroadcastDraftInputSchema = z
     active_source: z.enum(["composer", "html"]),
     composer_body: nullableBody,
     html_body: nullableBody,
+    sender_profile_id: z.string().uuid().optional(),
+    communication_purpose_id: z.string().uuid().optional(),
+    recipient_selection: broadcastRecipientSelectionSchema.optional(),
   })
   .strict();
 

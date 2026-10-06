@@ -39,7 +39,9 @@ export interface BroadcastClientOptions {
   /** Existing current-custody authenticated requester; configured for <=64KiB responses.
    * Every BG call still explicitly carries the command's transport ceiling. */
   readonly request?: CoreRequester;
-  readonly store: BroadcastRequestStore;
+  readonly store?: BroadcastRequestStore;
+  /** Hosted callers retain the complete immutable input; Core owns durable replay. */
+  readonly requestCustody?: "caller";
   /** Existing authenticated workspace catalog/context resolves the CLI code to the immutable ID. */
   readonly resolveWorkspaceId: (
     workspace: string,
@@ -75,6 +77,8 @@ export interface BroadcastClient {
 export function createBroadcastClient(
   options: BroadcastClientOptions,
 ): BroadcastClient {
+  if (!options.store && options.requestCustody !== "caller")
+    throw new CoreOperatorError("broadcast_request_custody_required", null, "none");
   const coreOrigin = new URL(
     validateCoreRequestUrl("/", options.coreApiBaseUrl),
   ).origin;
@@ -130,11 +134,11 @@ export function createBroadcastClient(
         "none",
       );
     const durable = parseSavedBroadcastRequest(
-      await options.store.persist(checked),
+      options.store ? await options.store.persist(checked) : checked,
     );
     if (!sameBroadcastInput(durable, checked))
       throw new CoreOperatorError("broadcast_request_conflict", null, "none");
-    const retired = await options.store.readSuperseded(
+    const retired = await options.store?.readSuperseded(
       durable.request.requestId,
     );
     if (retired) {
@@ -189,7 +193,7 @@ export function createBroadcastClient(
         "unknown",
       );
     if (receipt.blocker?.code === "request_superseded")
-      await options.store.rememberSuperseded(
+      await options.store?.rememberSuperseded(
         durable.request.requestId,
         receipt,
       );
@@ -220,6 +224,7 @@ export function createBroadcastClient(
     async recover(requestId) {
       // Replaying the exact immutable key works both before and after a lost response.
       // An immediate absent GET never proves that the original POST cannot still commit.
+      if (!options.store) throw new CoreOperatorError("broadcast_saved_input_required", null, "none");
       return submit(await options.store.read(requestId));
     },
     async readReview(scope, operationUri, timeoutMs, expectedDraftVersion) {

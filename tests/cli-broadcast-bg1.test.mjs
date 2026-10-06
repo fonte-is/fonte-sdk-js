@@ -46,6 +46,19 @@ const dependencies = (store) => ({
   resolveWorkspaceId: async () => workspaceId,
 });
 
+test("hosted caller custody replays the complete exact input without a server request file", async () => {
+  const posts = [];
+  const make = () => createBroadcastClient({ coreApiBaseUrl: coreOrigin,
+    requestCustody: "caller", resolveWorkspaceId: async () => workspaceId,
+    request: async (path, options) => { posts.push({ path, body: options.body }); return executable; } });
+  assert.equal((await make().send(scope, sendRequest)).outcome, "executable");
+  assert.equal((await make().send(scope, sendRequest)).outcome, "executable");
+  assert.deepEqual(posts[0], posts[1]);
+  assert.equal(posts[0].body.requestId, requestId);
+  await assert.rejects(make().recover(requestId), error => error.reason === "broadcast_saved_input_required");
+  assert.equal(posts.length, 2);
+});
+
 test("fixed FON-807 compact receipts preserve execution authority and immutable workspace identity", () => {
   assert.notEqual(scope.workspace, workspaceId);
   assert.deepEqual(

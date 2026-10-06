@@ -172,6 +172,7 @@ export async function runBroadcastCommand(
       initial = await client.send(scope, command.input.request);
     } else if (command.kind === "broadcast_bg_recover") {
       scope = command.scope;
+      if (!dependencies.store) throw new CoreOperatorError("broadcast_saved_input_required", null, "none");
       const saved = await dependencies.store.read(command.requestId);
       expectedDraftVersion = saved.request.expectedDraftVersion;
       if (
