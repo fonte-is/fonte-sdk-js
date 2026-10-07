@@ -21,6 +21,27 @@ const workspace = "northstar";
 const draftId = "00000000-0000-4000-8000-000000000161";
 const html = "<!doctype html><html><body>Source A</body></html>";
 
+test("complete create retains purpose and explicit empty selected audience without Everyone", async () => {
+  const sender = "00000000-0000-4000-8000-000000000162";
+  const purpose = "00000000-0000-4000-8000-000000000163";
+  const selection = { to: { kind: "selected", references: [] }, except: [] };
+  const result = receipt("applied");
+  Object.assign(result.draft, { sender, communicationPurposeId: purpose,
+    audienceKind: "recipient_expression", recipientExpression: selection, recipientSelection: selection });
+  let submitted;
+  const client = createBroadcastDraftLifecycleClient(async (_path, options) => {
+    submitted = options.body;
+    return result;
+  });
+  const actual = await client.createBroadcastDraft({ ...createInput(), senderProfileId: sender,
+    communicationPurposeId: purpose, recipientSelection: selection });
+  assert.deepEqual(submitted.recipientSelection, selection);
+  assert.ok(!Object.hasOwn(submitted, "audienceKind"));
+  assert.equal(submitted.communicationPurposeId, purpose);
+  assert.equal(actual.draft.communication_purpose_id, purpose);
+  assert.deepEqual(actual.draft.recipient_selection, selection);
+});
+
 test("content-first create and read use one exact incomplete draft", async () => {
   const requests = [];
   const responses = [receipt("applied"), receipt(null)];
@@ -89,8 +110,10 @@ test("same create identity replays and lost create stays ambiguous", async () =>
 test("MCP lifecycle stays bounded and preserves recovery truth", async () => {
   assert.equal(createBroadcastDraftInputSchema.safeParse(mcpCreateInput()).success,
     true);
+  assert.equal(createBroadcastDraftInputSchema.safeParse({ ...mcpCreateInput(),
+    sender_profile_id: "sender_synthetic" }).success, true);
   for (const foreign of [
-    { sender_profile_id: "sender_synthetic" },
+    { sender_profile_id: " sender_synthetic" },
     { audience: { kind: "all_contacts" } },
     { recipient: "other@example.test" },
   ]) {

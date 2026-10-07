@@ -151,6 +151,7 @@ async function resolveScope(
 export function registerMcpBroadcastBgTools(
   server: McpServer,
   provider: BroadcastMcpProvider,
+  options: { readonly callerCustody?: boolean } = {},
 ): void {
   const handlers = createBroadcastBgToolHandlers(provider);
   const mutation = {
@@ -178,12 +179,14 @@ export function registerMcpBroadcastBgTools(
       title: "Send approved Broadcast",
       inputSchema: broadcastBgSendToolInput,
       description:
-        "Durably saves and submits the exact approved review references. Processing is not executable.",
+        options.callerCustody
+          ? "Submits the caller's complete immutable approved Send input. Retain and replay exactly this input after response loss; Core enforces durable idempotency. Core reports business acceptance and execution readiness separately."
+          : "Durably saves and submits the exact approved review references. Core reports business acceptance and execution readiness separately.",
       annotations: sendMutation,
     },
     async (input) => result(await handlers.send(input)),
   );
-  server.registerTool(
+  if (!options.callerCustody) server.registerTool(
     MCP_BROADCAST_BG_TOOLS.recover,
     {
       title: "Recover saved Broadcast request",

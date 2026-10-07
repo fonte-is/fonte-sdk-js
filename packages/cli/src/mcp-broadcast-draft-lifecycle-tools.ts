@@ -52,6 +52,9 @@ export function createBroadcastDraftCreateToolHandler(
         activeSource: value.active_source,
         composerBody: value.composer_body,
         htmlBody: value.html_body,
+        ...(value.sender_profile_id ? { senderProfileId: value.sender_profile_id } : {}),
+        ...(value.communication_purpose_id ? { communicationPurposeId: value.communication_purpose_id } : {}),
+        ...(value.recipient_selection ? { recipientSelection: value.recipient_selection } : {}),
       }));
     } catch (error) {
       return failure(error, true);

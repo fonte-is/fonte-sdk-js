@@ -172,6 +172,7 @@ export async function runBroadcastCommand(
       initial = await client.send(scope, command.input.request);
     } else if (command.kind === "broadcast_bg_recover") {
       scope = command.scope;
+      if (!dependencies.store) throw new CoreOperatorError("broadcast_saved_input_required", null, "none");
       const saved = await dependencies.store.read(command.requestId);
       expectedDraftVersion = saved.request.expectedDraftVersion;
       if (
@@ -227,9 +228,11 @@ export function renderBroadcastCommand(
   const state =
     "state" in receipt
       ? `Review ${receipt.state}`
-      : receipt.outcome === "executable"
-        ? `Executable job ${receipt.jobId}`
-        : receipt.outcome;
+      : "schema" in receipt && receipt.businessAccepted
+        ? `Accepted; execution ${receipt.executionState}`
+        : receipt.outcome === "executable"
+          ? `Executable job ${receipt.jobId}`
+          : receipt.outcome;
   const progress =
     "execution" in receipt && receipt.execution
       ? `; execution ${receipt.execution.state}`
@@ -244,7 +247,9 @@ function operationReason(receipt: BroadcastReceipt): string {
     receipt.blocker?.code ??
     ("state" in receipt
       ? `broadcast_review_${receipt.state}`
-      : `broadcast_send_${receipt.outcome}`)
+      : "schema" in receipt && receipt.businessAccepted
+        ? `broadcast_send_${receipt.executionState}`
+        : `broadcast_send_${receipt.outcome}`)
   );
 }
 interface Options {

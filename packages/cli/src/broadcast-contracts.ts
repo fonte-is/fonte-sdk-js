@@ -108,7 +108,7 @@ export type BroadcastReviewReceipt = BroadcastOperation & {
         readonly summary: null;
       }
   );
-export type BroadcastSendReceipt = BroadcastOperation &
+export type BroadcastLegacySendReceipt = BroadcastOperation &
   (
     | {
         readonly outcome: "executable";
@@ -121,6 +121,18 @@ export type BroadcastSendReceipt = BroadcastOperation &
         readonly jobId: null;
       }
   );
+/** Core's current isolated execution receipt keeps acceptance, import and
+ * effective execution authority separate, including completed/stopped jobs. */
+export type BroadcastSendReceiptV3 = BroadcastOperation & {
+  readonly schema: "broadcast_send_receipt.v3";
+  readonly outcome: "processing" | "action_required" | "executable" | "rejected";
+  readonly businessAccepted: boolean;
+  readonly controlGeneration: number;
+  readonly executionState: "handoff_pending" | "unconfirmed" | "ready" | "stopped";
+  readonly executionAuthorized: boolean | null;
+  readonly jobId: string | null;
+};
+export type BroadcastSendReceipt = BroadcastLegacySendReceipt | BroadcastSendReceiptV3;
 export interface BroadcastExecutionProgress {
   readonly state: "sending" | "paused" | "ended" | "completed";
   readonly stateVersion: number;
@@ -138,9 +150,9 @@ export interface BroadcastExecutionProgress {
   readonly attemptCount: number;
   readonly coverage: "complete" | "partial" | "unavailable";
 }
-export type BroadcastSendStatus = BroadcastSendReceipt & {
+export type BroadcastSendStatus = BroadcastSendReceiptV3 | (BroadcastLegacySendReceipt & {
   readonly execution: BroadcastExecutionProgress | null;
-};
+});
 export type BroadcastReceipt =
   BroadcastReviewReceipt | BroadcastSendReceipt | BroadcastSendStatus;
 export interface SavedBroadcastRequest extends ResolvedBroadcastScope {

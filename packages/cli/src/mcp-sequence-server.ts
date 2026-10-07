@@ -190,13 +190,14 @@ export function createFonteSequenceMcpServer(
 export function createFonteMcpServer(
   providers: FonteMcpClientProviders,
   readinessReader: FonteReadinessReader,
+  options: { readonly hosted?: boolean } = {},
 ): McpServer {
   const server = mcpServer(fonteInstructions);
   registerFonteStatusTool(server, readinessReader);
   registerMcpBroadcastBgTools(server, async () => ({
     ...(await providers.broadcastBg()),
     readSelectedWorkspace: () => readinessReader.readSelectedWorkspace(),
-  }));
+  }), { callerCustody: options.hosted });
   registerMcpWorkspaceCatalogTool(server, providers.workspaceCatalog);
   registerMcpSequenceTools(server, providers.sequence);
   registerMcpBroadcastDraftLifecycleTools(
@@ -210,12 +211,12 @@ export function createFonteMcpServer(
   registerMcpBroadcastSenderTools(server, providers.broadcastSender);
   registerMcpBroadcastTargetingTool(server, providers.broadcastTargeting);
   registerMcpBroadcastRenderTestTools(server, providers.broadcastRenderTest);
-  registerMcpBroadcastSendInstructionTools(
+  if (!options.hosted) registerMcpBroadcastSendInstructionTools(
     server,
     providers.broadcastSendInstruction,
     { readToolName: MCP_BROADCAST_LEGACY_SEND_READ_TOOL },
   );
-  registerMcpBroadcastHtmlPreparationTools(
+  if (!options.hosted) registerMcpBroadcastHtmlPreparationTools(
     server,
     providers.broadcastHtmlPreparation,
   );

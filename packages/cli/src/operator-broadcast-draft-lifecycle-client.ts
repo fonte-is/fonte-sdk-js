@@ -8,6 +8,8 @@ import {
   record,
   type BroadcastDraftSnapshot,
 } from "./operator-broadcast-draft-snapshot.js";
+import type { z } from "zod";
+import type { broadcastRecipientSelectionSchema } from "./mcp-broadcast-targeting-types.js";
 
 export interface BroadcastDraftCreateInput {
   readonly workspace: string;
@@ -18,6 +20,9 @@ export interface BroadcastDraftCreateInput {
   readonly activeSource: "composer" | "html";
   readonly composerBody: string | null;
   readonly htmlBody: string | null;
+  readonly senderProfileId?: string;
+  readonly communicationPurposeId?: string;
+  readonly recipientSelection?: z.infer<typeof broadcastRecipientSelectionSchema>;
 }
 
 export interface BroadcastDraftReadInput {
@@ -59,12 +64,12 @@ export function createBroadcastDraftLifecycleClient(
             lostResponseEffect: "unknown",
             body: {
               title: input.title,
-              sender: null,
+              sender: input.senderProfileId ?? null,
               replyTo: null,
-              audienceKind: null,
-              audienceContactImportBatchId: null,
-              recipientExpression: null,
-              communicationPurposeId: null,
+              ...(input.recipientSelection ? { recipientSelection: input.recipientSelection } : {
+                audienceKind: null, audienceContactImportBatchId: null, recipientExpression: null,
+              }),
+              communicationPurposeId: input.communicationPurposeId ?? null,
               subscriptionName: null,
               subject: input.subject,
               preheader: input.preheader,
@@ -86,6 +91,9 @@ export function createBroadcastDraftLifecycleClient(
         || result.draft.composer_body !== input.composerBody
         || result.draft.html_body !== input.htmlBody
         || result.draft.text_body !== activeBody
+        || result.draft.sender_profile_id !== (input.senderProfileId ?? null)
+        || result.draft.communication_purpose_id !== (input.communicationPurposeId ?? null)
+        || input.recipientSelection && JSON.stringify(result.draft.recipient_selection) !== JSON.stringify(input.recipientSelection)
       ) invalid("unknown");
       return result;
     },
