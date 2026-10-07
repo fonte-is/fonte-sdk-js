@@ -118,11 +118,15 @@ export function createCoreFonteMcpServer(request: CoreRequester, coreApiBaseUrl:
     "Read the workspace's sender domains, permanent DNS instructions and current migration readiness.", false,
     input => request(domainPath(input)));
   register(extraTools[6]!, z.strictObject({ ...domainScope,
-    expected_revision: z.number().int().positive(), phase: z.enum(["begin", "cutover"]) }),
+    expected_revision: z.number().int().positive(), phase: z.enum(["begin", "cutover"]),
+    tracking_subdomain: z.string().min(1).max(253)
+      .regex(/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/).optional(),
+  }).refine(input => input.phase === "begin" || input.tracking_subdomain === undefined),
     "Stage permanent Fonte DNS for an existing domain, or cut over after Core verifies DNS and readiness. Requires a workspace owner or admin and the current revision. This never sends mail.", true,
     input => request(domainPath(input), { method: "PUT", body: {
       operation: input.phase === "begin" ? "begin_existing_domain_migration" : "cutover_existing_domain_migration",
       emailDomainId: input.email_domain_id, expectedRevision: input.expected_revision,
+      ...(input.tracking_subdomain === undefined ? {} : { trackingSubdomain: input.tracking_subdomain }),
     }, lostResponseEffect: "unknown" }));
   register(extraTools[7]!, z.strictObject(domainScope),
     "Recheck the exact workspace domain's DNS and sender readiness through Core's existing domain owner. Requires a workspace owner or admin. This never sends mail.", true,

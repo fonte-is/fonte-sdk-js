@@ -83,4 +83,13 @@ test("domain MCP tools use the ordinary workspace owner and refuse malformed mig
     workspace, email_domain_id: id, expected_revision: 0, phase: "force",
   } }, requester);
   assert.ok(value.error || value.result.isError); assert.equal(calls.length, 2);
+  const staged = await call("tools/call", { name: "fonte_migrate_sender_domain", arguments: {
+    workspace, email_domain_id: id, expected_revision: 2, phase: "begin", tracking_subdomain: "links",
+  } }, requester);
+  assert.equal(staged.value.result.structuredContent.outcome, "completed");
+  assert.equal(calls.at(-1).options.body.trackingSubdomain, "links");
+  const wrongPhase = await call("tools/call", { name: "fonte_migrate_sender_domain", arguments: {
+    workspace, email_domain_id: id, expected_revision: 2, phase: "cutover", tracking_subdomain: "links",
+  } }, requester);
+  assert.ok(wrongPhase.value.error || wrongPhase.value.result.isError); assert.equal(calls.length, 3);
 });
