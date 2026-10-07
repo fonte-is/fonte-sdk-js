@@ -90,7 +90,10 @@ async function host(
     },
     configurable: true,
   });
-  globalThis.document = {};
+  const listeners = new Map();
+  globalThis.document = { visibilityState: "visible",
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type, listener) { if (listeners.get(type) === listener) listeners.delete(type); } };
   Object.defineProperty(document, "referrer", {
     get() {
       sourceReads++;
@@ -140,6 +143,10 @@ async function host(
       transport,
       metrics,
       savedValues,
+      async interact(type = "pointerdown", isTrusted = true) {
+        listeners.get(type)?.({ type, isTrusted });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      },
       advance(ms) {
         now += ms;
       },
@@ -153,6 +160,35 @@ async function host(
 }
 const normalized = (requests) =>
   requests.map(({ occurredAt, ...body }) => body);
+
+test("browser confirmation requires a visible trusted interaction, is per page, and stops on denial", async () => {
+  await host(async ({ make, requests, interact }) => {
+    const acquisition = make();
+    acquisition.setPolicy(policy());
+    await acquisition.page();
+    assert.equal(requests.filter(body => body.eventType === "browser_landing").length, 0);
+    await interact("pointerdown", false);
+    document.visibilityState = "hidden";
+    await interact();
+    assert.equal(requests.filter(body => body.eventType === "browser_landing").length, 0);
+    document.visibilityState = "visible";
+    await interact();
+    await interact("keydown");
+    const landing = requests.filter(body => body.eventType === "browser_landing");
+    const page = requests.find(body => body.eventType === "page_view");
+    assert.equal(landing.length, 1);
+    assert.equal(landing[0].pageEventId, page.eventId);
+    assert.equal(landing[0].occurrenceId, page.occurrenceId);
+    assert.deepEqual(landing[0].scope, page.scope);
+    assert.deepEqual(landing[0].browserEvidence,
+      { version: "interaction.v1", visibility: "visible", interaction: "pointerdown" });
+    acquisition.setPolicy(null);
+    await interact();
+    assert.equal(requests.filter(body => body.eventType === "browser_landing").length, 1);
+    acquisition.destroy();
+    await interact();
+  });
+});
 
 test("a Fonte redirect click survives Website collection only with source tokens enabled", async () => {
   const click = "a9c148f6-3010-4e21-8f2c-95129e6682d0";

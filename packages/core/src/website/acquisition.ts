@@ -1,6 +1,7 @@
 import { createCaptureEngine } from "../browser.js";
 import type { BrowserObservationTransport } from "../browser-delivery.js";
 import type { CapturePageResult } from "../browser-types.js";
+import type { BrowserLandingEvidence } from "../collect-types.js";
 import { permitted, type CollectionPolicy } from "../collection-policy.js";
 import { WebsiteConfigurationError } from "./contract.js";
 import { validSiteId } from "./settings.js";
@@ -29,6 +30,7 @@ export function createWebsiteAcquisition(options: {
   let latestPageEventId: string | null = null;
   let latestPageReceipt: AcceptedWebsitePage | null = null;
   let currentPageEventId: string | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
   const engine = createCaptureEngine(
     {
       storage: `website:${options.siteId}`,
@@ -41,6 +43,12 @@ export function createWebsiteAcquisition(options: {
         }
       },
       onDelivery: (delivery) => {
+        if (active && permitted(current) && delivery.status === "failed" &&
+          ["network_error", "http_error", "receipt_unavailable"].includes(delivery.reason ?? "") &&
+          retryTimer === undefined) retryTimer = setTimeout(() => {
+            retryTimer = undefined;
+            if (active && permitted(current)) void engine.retry().catch(() => {});
+          }, 1000);
         if (active && current && delivery.eventId === currentPageEventId && delivery.eventType === "page_view" &&
           delivery.status === "delivered" && delivery.receipt?.eventId === delivery.eventId)
           {
@@ -53,11 +61,23 @@ export function createWebsiteAcquisition(options: {
     },
     options.transport,
   );
+  const interactions = ["pointerdown", "keydown", "touchstart"] as const;
+  const interaction = (event: Event) => {
+    if (!active || !permitted(current) || !event.isTrusted ||
+      document.visibilityState !== "visible") return;
+    const evidence: BrowserLandingEvidence = { version: "interaction.v1", visibility: "visible",
+      interaction: event.type as BrowserLandingEvidence["interaction"] };
+    void engine.landing(evidence).catch(() => {});
+  };
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") for (const type of interactions)
+    document.addEventListener(type, interaction, { capture: true, passive: true });
   const checkPolicy = () => {
     if (!permitted(current)) {
       current = null;
       policyKey = null;
       engine.resetContext();
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
+      retryTimer = undefined;
     }
   };
   return {
@@ -98,6 +118,10 @@ export function createWebsiteAcquisition(options: {
     destroy() {
       if (!active) return;
       active = false;
+      if (typeof document !== "undefined" && typeof document.removeEventListener === "function") for (const type of interactions)
+        document.removeEventListener(type, interaction, true);
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
+      retryTimer = undefined;
       current = null;
       policyKey = null;
       latestPageEventId = null;

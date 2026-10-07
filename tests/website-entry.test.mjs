@@ -450,6 +450,27 @@ async function submit(page) {
   await page.locator('button[type="submit"]').click();
 }
 
+test("built script confirms a browser only after a trusted interaction with its accepted page", async (t) => {
+  const p = await page(t, "?fonte=fl_0123456789abcdefghijklmnopqrstuv");
+  await ready(p);
+  await p.waitForFunction(() => window.fonte.getAcceptedPageReceipt() !== null);
+  assert.equal(observed().filter(call => call.body.eventType === "browser_landing").length, 0);
+  await p.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+  assert.equal(observed().filter(call => call.body.eventType === "browser_landing").length, 0);
+  const confirmation = p.waitForResponse(response => response.url().endsWith("/observations") &&
+    response.request().postDataJSON().eventType === "browser_landing");
+  await p.locator('input[type="email"]').click();
+  await confirmation;
+  const landing = observed().find(call => call.body.eventType === "browser_landing").body;
+  const arrival = observed().find(call => call.body.eventType === "page_view").body;
+  assert.equal(landing.pageEventId, arrival.eventId);
+  assert.equal(landing.occurrenceId, arrival.occurrenceId);
+  assert.deepEqual(landing.scope, arrival.scope);
+  assert.equal(landing.browserEvidence.visibility, "visible");
+  await p.locator('input[type="email"]').click();
+  assert.equal(observed().filter(call => call.body.eventType === "browser_landing").length, 1);
+});
+
 test("built async script: external hold, strict CSP, zero identity; Forms use real CORS without acquisition", async (t) => {
   const p = await page(t, "?external");
   await ready(p);
