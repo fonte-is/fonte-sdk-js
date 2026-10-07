@@ -66,3 +66,21 @@ test("recipient-set intake requires explicit permission before any Core effect",
   assert.equal(value.result.structuredContent.outcome, "completed");
   assert.equal(effects, 1);
 });
+
+test("domain MCP tools use the ordinary workspace owner and refuse malformed migrations", async () => {
+  const calls = [], requester = async (path, options) => { calls.push({ path, options }); return { verified: true }; };
+  const id = "66666666-6666-4666-8666-666666666666", workspace = "northstar";
+  for (const phase of ["begin", "cutover"]) {
+    const { value } = await call("tools/call", { name: "fonte_migrate_sender_domain", arguments: {
+      workspace, email_domain_id: id, expected_revision: 2, phase,
+    } }, requester);
+    assert.equal(value.result.structuredContent.outcome, "completed");
+    assert.deepEqual(calls.at(-1), { path: "/v1/workspaces/northstar/delivery/sender-domains?environment=production",
+      options: { method: "PUT", body: { operation: phase === "begin" ? "begin_existing_domain_migration" : "cutover_existing_domain_migration",
+        emailDomainId: id, expectedRevision: 2 }, lostResponseEffect: "unknown" } });
+  }
+  const { value } = await call("tools/call", { name: "fonte_migrate_sender_domain", arguments: {
+    workspace, email_domain_id: id, expected_revision: 0, phase: "force",
+  } }, requester);
+  assert.ok(value.error || value.result.isError); assert.equal(calls.length, 2);
+});

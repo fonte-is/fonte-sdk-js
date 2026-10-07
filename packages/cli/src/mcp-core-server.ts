@@ -21,7 +21,8 @@ const unhosted = new Set([
   "fonte_read_legacy_broadcast_send_operation",
 ]);
 const extraTools = ["fonte_list_broadcast_options", "fonte_create_broadcast_recipient_set",
-  "fonte_read_broadcast_recipient_set", "fonte_read_broadcast_results", "fonte_read_broadcast_recipients"];
+  "fonte_read_broadcast_recipient_set", "fonte_read_broadcast_results", "fonte_read_broadcast_recipients",
+  "fonte_read_sender_domains", "fonte_migrate_sender_domain", "fonte_reconcile_sender_domain"];
 export const MCP_HOSTED_TOOLS = [...MCP_FONTE_TOOLS.filter(name => !unhosted.has(name)), ...extraTools];
 
 /** Core mounts this registry in its own API runtime. No upstream credential,
@@ -110,6 +111,24 @@ export function createCoreFonteMcpServer(request: CoreRequester, coreApiBaseUrl:
     "Read one bounded Core-authorized recipient outcome page, including recorded destinations for Clicked.", false,
     input => request(`${draftPath(input)}/send/recipient-activity?environment=production&outcome=${input.outcome}`
       + (input.cursor === null ? "" : `&cursor=${input.cursor}`)));
+  const domainScope = { workspace: scope.workspace, email_domain_id: z.string().uuid() };
+  const domainPath = (input: { workspace: string }) =>
+    `/v1/workspaces/${encodeURIComponent(input.workspace)}/delivery/sender-domains?environment=production`;
+  register(extraTools[5]!, z.strictObject({ workspace: scope.workspace }),
+    "Read the workspace's sender domains, permanent DNS instructions and current migration readiness.", false,
+    input => request(domainPath(input)));
+  register(extraTools[6]!, z.strictObject({ ...domainScope,
+    expected_revision: z.number().int().positive(), phase: z.enum(["begin", "cutover"]) }),
+    "Stage permanent Fonte DNS for an existing domain, or cut over after Core verifies DNS and readiness. Requires a workspace owner or admin and the current revision. This never sends mail.", true,
+    input => request(domainPath(input), { method: "PUT", body: {
+      operation: input.phase === "begin" ? "begin_existing_domain_migration" : "cutover_existing_domain_migration",
+      emailDomainId: input.email_domain_id, expectedRevision: input.expected_revision,
+    }, lostResponseEffect: "unknown" }));
+  register(extraTools[7]!, z.strictObject(domainScope),
+    "Recheck the exact workspace domain's DNS and sender readiness through Core's existing domain owner. Requires a workspace owner or admin. This never sends mail.", true,
+    input => request(domainPath(input), { method: "PUT", body: {
+      operation: "reconcile_email_domain", emailDomainId: input.email_domain_id,
+    }, lostResponseEffect: "unknown" }));
   return server;
 }
 function draftPath(input: { workspace: string; draft_id: string }) {
