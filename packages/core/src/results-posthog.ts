@@ -15,15 +15,16 @@ export function postHogCapture(
   key: string,
   options: FontePostHogTriggerOptions,
   now: number,
+  sourceRevision: number,
 ): FontePostHogCapture {
   const v = nativeObject(options, [
     "projectId", "event", "sourceRevision", "eventId", "occurredAt",
-  ]);
+  ], ["projectId", "event", "eventId", "occurredAt"]);
   if (typeof v.projectId !== "string" || !/^[1-9][0-9]{0,18}$/.test(v.projectId)
     || typeof v.event !== "string" || !v.event.length || v.event.length > 120
     || v.event.trim() !== v.event || /[\u0000-\u001f\u007f]/.test(v.event)
-    || typeof v.sourceRevision !== "number" || !Number.isSafeInteger(v.sourceRevision)
-    || v.sourceRevision < 1) throw 0;
+    || !Number.isSafeInteger(sourceRevision) || sourceRevision < 1
+    || Object.hasOwn(v, "sourceRevision") && v.sourceRevision !== sourceRevision) throw 0;
   const record = normalizeNativeRecord({
     kind: "trigger", eventId: v.eventId, occurredAt: v.occurredAt,
     userId: identity.user.id, identityEventId: identity.eventId,
@@ -33,7 +34,7 @@ export function postHogCapture(
   if (at < Date.parse(identity.occurredAt) || at >= Date.parse(identity.validUntil)) throw 0;
   const encoded = Buffer.from(JSON.stringify({
     schema: "fonte.posthog.commit.v1", sourceId: installationId,
-    sourceRevision: v.sourceRevision, projectId: v.projectId, event: v.event, record,
+    sourceRevision, projectId: v.projectId, event: v.event, record,
   }), "utf8").toString("base64url");
   const proof = `${encoded}.${createHmac("sha256", signingKey).update(encoded, "utf8").digest("base64url")}`;
   if (Buffer.byteLength(proof, "utf8") > 4096) throw 0;

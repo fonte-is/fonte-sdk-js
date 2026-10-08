@@ -19,11 +19,12 @@ explicit measurement permission, and its existing verified email. Keep the
 installation key on the server.
 
 ```ts
-// After the application's real save succeeds, using its original operation ID/time:
+// In the existing measurement lifecycle callback, outside the successful response:
+// The application's real save has already committed with its original operation ID/time.
+await fonte.flush();
 const capture = identity?.postHogTrigger("report_saved", {
   projectId: "123",                  // Selected PostHog project, from setup
   event: "Report saved",             // Existing selected backend event name
-  sourceRevision: installationRevision,
   eventId: committedOperation.eventId,
   occurredAt: committedOperation.occurredAt,
 });
@@ -38,12 +39,14 @@ no email or installation key. Adding existing safe PostHog properties does not
 make those properties part of Fonte's admitted payload.
 
 This method is synchronous and returns `null` for invalid input, denied or
-closed measurement, or an expired identity handle. It never throws into the
+closed measurement, an expired identity handle, or an identity without its exact
+stored/replayed native acknowledgement. It never throws into the
 successful application operation. Capture the native identity early in the
 request; use the ordinary SDK lifecycle drain outside the successful business
-transaction. Fonte requires that exact native identity to reach durable custody
-before the provider action can qualify. A provider delivery arriving first is
-denied and needs the provider's bounded retry or replay after the identity ACK.
+transaction. The helper uses the Source revision from that identity's validated
+native ACK; missing, malformed, erased or failed ACKs produce no proof. The
+ordinary strict receipt JSON is unchanged; revision is nonsecret HTTP metadata.
+Only the exact source and identity event's successful ACK can update its handle.
 Do not await measurement in a successful business transaction.
 
 Preserve the complete original capture input for retries. Reuse the operation's
@@ -54,8 +57,12 @@ existing thirty-day recovery bound; they retain their original action time.
 
 Fonte verifies the current installation credential, selected project, exact
 event mapping and Source revision. Rotation, disconnect, withdrawn permission
-or configuration changes fence stale delivery. After configuration changes,
-use the new revision for subsequent actions. Previously accepted native and
+or configuration changes fence stale delivery. The next native identity ACK
+automatically supplies the current revision after settings change, including a
+label-only edit. No application revision setting needs redeploying. The optional
+`sourceRevision` input is only a compatibility assertion; a value different from
+that identity's ACK is rejected. Previously captured old proofs stay fenced.
+Previously accepted native and
 PostHog copies of the same operation use the same existing deduplication key.
 
 The destination forwards only the closed payload

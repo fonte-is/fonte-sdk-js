@@ -63,7 +63,8 @@ export interface FonteObservationOptions {
 export interface FontePostHogTriggerOptions {
   readonly projectId: string;
   readonly event: string;
-  readonly sourceRevision: number;
+  /** Optional compatibility assertion. Must match this identity's acknowledged Source revision. */
+  readonly sourceRevision?: number;
   /** Original committed operation UUID and time; retain both for provider retries. */
   readonly eventId: string;
   readonly occurredAt: string;
@@ -96,7 +97,7 @@ export interface FonteOptions extends Omit<
 export interface FonteIdentityHandle {
   /** Call only after the authoritative operation commits successfully. Replays reuse its UUID and time. */
   trigger(key: string, options?: FonteObservationOptions): boolean;
-  /** Proof for an existing selected backend PostHog event, after commit. Does not enqueue a native trigger. */
+  /** After commit and this identity's durable ACK. Uses its acknowledged Source revision; no native trigger enqueue. */
   postHogTrigger(key: string, options: FontePostHogTriggerOptions): FontePostHogCapture | null;
   /** Current authenticated foreground activity. */
   returned(options?: FonteObservationOptions): boolean;

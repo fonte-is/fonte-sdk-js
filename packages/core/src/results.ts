@@ -159,6 +159,8 @@ function fonte(options: FonteOptions): Fonte {
         return null;
       }
       if (!delivery.enqueue(record, true)) return null;
+      const acknowledgement = delivery.acknowledgement(record.eventId);
+      if (!acknowledgement) return null;
       const browserIdentity: FonteBrowserIdentity = Object.freeze({
         installationId,
         identityToken,
@@ -208,8 +210,10 @@ function fonte(options: FonteOptions): Fonte {
           if (!delivery.gate(true)) return null;
           try {
             const now = delivery.clock();
-            if (!valid(now)) throw 0;
-            return postHogCapture(installationId, signingKey, record, key, input, now);
+            if (!valid(now) || acknowledgement.sourceRevision === null
+              || !["stored", "replayed"].includes(acknowledgement.outcome ?? "")) throw 0;
+            return postHogCapture(installationId, signingKey, record, key, input, now,
+              acknowledgement.sourceRevision);
           } catch {
             delivery.reject("record_invalid");
             return null;

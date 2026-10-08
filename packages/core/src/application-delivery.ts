@@ -38,9 +38,14 @@ const maxRetryAfterMs = 86_400_000;
 const byteLength = (value: string) =>
   new TextEncoder().encode(value).byteLength;
 type ObjectValue = Record<string, unknown>;
-type Queued = { eventId: string; body: string; bytes: number };
+type AcknowledgedRecord = { eventId: string; outcome: "stored" | "replayed" | "erased" };
+type Acknowledgement = {
+  outcome: AcknowledgedRecord["outcome"] | null;
+  sourceRevision: number | null;
+};
+type Queued = { eventId: string; body: string; bytes: number; acknowledgement: Acknowledgement };
 type RequestResult =
-  | { kind: "ack"; outcomes: ("stored" | "replayed" | "erased")[] }
+  | { kind: "ack"; records: AcknowledgedRecord[]; sourceRevision: number | null }
   | { kind: "permanent"; reason: ApplicationDeliveryReason }
   | { kind: "retry"; reason: ApplicationDeliveryReason; delay?: number };
 
@@ -166,7 +171,7 @@ async function readReceipt(
       throw 0;
     instant(v.acceptedAt);
     const pending = new Set(expected.map((entry) => entry.eventId));
-    const outcomes = v.records.map((value) => {
+    const records = v.records.map<AcknowledgedRecord>((value) => {
       const r = object(value);
       keys(r, ["eventId", "outcome"]);
       if (
@@ -177,9 +182,13 @@ async function readReceipt(
           r.outcome !== "erased")
       )
         throw 0;
-      return r.outcome;
+      return { eventId: r.eventId, outcome: r.outcome };
     });
-    return { kind: "ack", outcomes };
+    const revision = response.headers.get("x-fonte-source-revision");
+    const sourceRevision = receiptSchema === "fonte.application.receipt.v2" && revision !== null
+      && /^[1-9][0-9]{0,15}$/.test(revision) && Number.isSafeInteger(Number(revision))
+      ? Number(revision) : null;
+    return { kind: "ack", records, sourceRevision };
   } catch {
     return { kind: "retry", reason: "receipt_unconfirmed" };
   } finally {
@@ -324,7 +333,7 @@ function applicationDelivery<RecordType extends { eventId: string }>(
   const overhead =
     byteLength(browserPrefix ?? prefix) + (browserPrefix === null ? 2 : 1);
   const queue: Queued[] = [],
-    pendingIds = new Map<string, string>();
+    pendingIds = new Map<string, Queued>();
   const counts = {
     enqueued: 0,
     acknowledged: 0,
@@ -493,7 +502,12 @@ function applicationDelivery<RecordType extends { eventId: string }>(
         const result = await request(body, batch);
         if (stop()) return;
         if (result.kind === "ack") {
-          for (const outcome of result.outcomes) counts[outcome]++;
+          for (const record of result.records) {
+            counts[record.outcome]++;
+            const item = pendingIds.get(record.eventId)!;
+            item.acknowledgement.outcome = record.outcome;
+            item.acknowledgement.sourceRevision = record.outcome === "erased" ? null : result.sourceRevision;
+          }
           counts.acknowledged += batch.length;
           for (const item of batch) pendingIds.delete(item.eventId);
           queue.splice(0, batch.length);
@@ -572,13 +586,15 @@ function applicationDelivery<RecordType extends { eventId: string }>(
       if (bytes + overhead > maxBytes) return reject("record_invalid");
       const pending = pendingIds.get(record.eventId);
       if (pending !== undefined)
-        return pending === body || reject("record_conflict");
+        return pending.body === body || reject("record_conflict");
       if (queue.length >= queueLimit) {
         counts.dropped++;
         return reject("queue_full");
       }
-      queue.push({ eventId: record.eventId, body, bytes });
-      pendingIds.set(record.eventId, body);
+      const item: Queued = { eventId: record.eventId, body, bytes,
+        acknowledgement: { outcome: null, sourceRevision: null } };
+      queue.push(item);
+      pendingIds.set(record.eventId, item);
       counts.enqueued++;
       schedule();
       return true;
@@ -588,6 +604,9 @@ function applicationDelivery<RecordType extends { eventId: string }>(
   };
   return {
     enqueue,
+    // A handle retains only its own queued record's cell. No revision cache or extra request.
+    acknowledgement: (eventId: string): Readonly<Acknowledgement> | null =>
+      pendingIds.get(eventId)?.acknowledgement ?? null,
     gate,
     reject,
     clock,
