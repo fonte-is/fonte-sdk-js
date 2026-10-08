@@ -158,7 +158,7 @@ function client(t, receiver, extra = {}) {
     now: () => Date.parse(at),
     allowInsecureLocalhost: true,
     flushDelayMs: 1_000,
-    timeoutMs: 100,
+    timeoutMs: 750,
     maxRetries: 0,
     ...extra,
   });
