@@ -7,7 +7,14 @@ export interface Evidence {
   userAgent?: string | null;
 }
 
-export type CollectEventType = "page_view" | "source_touch";
+export type CollectEventType = "page_view" | "source_touch" | "browser_landing";
+
+/** Reported browser evidence; it establishes neither a person nor inbox delivery. */
+export type BrowserLandingEvidence = Readonly<{
+  version: "interaction.v1";
+  visibility: "visible";
+  interaction: "pointerdown" | "keydown" | "touchstart";
+}>;
 
 export interface CollectBody {
   schemaVersion: "fonte.acquisition.v1";
@@ -19,6 +26,8 @@ export interface CollectBody {
   eventType: CollectEventType;
   journeyId: string;
   verification?: InstallationVerificationMetadata;
+  pageEventId?: string;
+  browserEvidence?: BrowserLandingEvidence;
   scope: Scope;
 }
 

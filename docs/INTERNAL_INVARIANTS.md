@@ -39,6 +39,13 @@ declaration snapshot must remain the source of truth.
    results. Expired snapshots cannot be renewed by changing current policy.
 5. `browser.ts` allocates occurrence identity and distinct page/source IDs.
    Rerender/effect replay does not allocate another occurrence.
+6. The normal Website installation reports `browser_landing` once per page,
+   after a visible document receives a trusted pointer, touch, or keyboard
+   interaction. It names the original page event and retains its minimized
+   scope, journey, and occurrence. A redirect GET or page receipt alone does
+   not confirm a browser landing. This evidence does not authenticate a person.
+   Failed deliveries use the existing immutable snapshot and bounded retry
+   budget; denial or destruction stops retries and interaction capture.
 
 The browser reports evidence. Runtime owners decide acceptance and linkage.
 Reported X clicks/referrers and presented source tokens establish no personal,

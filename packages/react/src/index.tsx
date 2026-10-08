@@ -1,5 +1,8 @@
 "use client";
 
+export { Fonte } from "./website.js";
+export type { FonteProps } from "./website.js";
+
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import type { Capture } from "@fonte-is/core";
 

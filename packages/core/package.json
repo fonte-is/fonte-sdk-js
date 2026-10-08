@@ -1,6 +1,6 @@
 {
   "name": "@fonte-is/core",
-  "version": "0.2.0-fon571.1",
+  "version": "0.2.0",
   "description": "Framework-neutral browser and server primitives for Fonte",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
@@ -20,6 +20,15 @@
       "server": [
         "./dist/server.d.ts"
       ],
+      "application": [
+        "./dist/application.d.ts"
+      ],
+      "results": [
+        "./dist/results.d.ts"
+      ],
+      "results-browser": [
+        "./dist/results-browser.d.ts"
+      ],
       "installation-verification": [
         "./dist/installation-verification.d.ts"
       ]
@@ -38,6 +47,19 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "node": "./dist/server.js"
+    },
+    "./application": {
+      "types": "./dist/application.d.ts",
+      "node": "./dist/application.js"
+    },
+    "./results": {
+      "types": "./dist/results.d.ts",
+      "node": "./dist/results.js"
+    },
+    "./results-browser": {
+      "types": "./dist/results-browser.d.ts",
+      "import": "./dist/results-browser.js",
+      "default": "./dist/results-browser.js"
     },
     "./installation-verification": {
       "types": "./dist/installation-verification.d.ts",

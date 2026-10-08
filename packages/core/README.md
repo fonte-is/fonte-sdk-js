@@ -1,5 +1,47 @@
 # `@fonte-is/core`
 
+Native Broadcast Results uses `@fonte-is/core/results` on the server and
+`@fonte-is/core/results-browser` on a visible authenticated page. The native
+`0.2.0-fon909.1` package is a private qualification candidate; use the supplied
+private artifact. Public npm availability has not been established.
+
+Upload CSV → install Fonte once → identify the current authenticated user →
+select up to five named successful actions → optionally add verified Stripe
+money → Send → Broadcast Results.
+
+```ts
+import { createFonte, type AuthenticatedAppUser } from "@fonte-is/core/results";
+
+const fonte = createFonte({
+  installationId: process.env.FONTE_APPLICATION_SOURCE_ID!,
+  serverKey: process.env.FONTE_APPLICATION_SERVER_KEY!,
+});
+
+export function identifyAuthenticatedRequest(
+  user: AuthenticatedAppUser,
+  existingServerPermission: boolean | null | undefined,
+) {
+  if (existingServerPermission !== true || user.emailVerified !== true) return null;
+  return fonte.identify(
+    { id: user.id, email: user.email, emailVerified: user.emailVerified },
+    { measurementAllowed: true },
+  );
+}
+```
+
+The user comes from your existing server authentication. Their verified email
+must match a CSV Contact. Unknown permission withholds measurement. Keep the
+returned handle in the current request; keep the server key out of browser code.
+Call `handle.trigger()` after the original committed success with its UUID and
+UTC time. Examples are `project_created`, `report_saved`, and `invite_accepted`.
+Calls enqueue synchronously and delivery is best effort, with no disk outbox.
+
+Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/fon909-outcomes-sdk/docs/results.md) for the 15-minute handle,
+foreground returns, retry limits and optional upgrade/money behavior. The
+PostHog shortcut is prepared optional work with no released connection path.
+
+## Existing Website/acquisition API
+
 Framework-neutral evidence collection. This candidate uses the versioned
 `fonte.acquisition.v1` observation contract. It is not a production release.
 
@@ -60,3 +102,7 @@ service, decide attribution, create contacts, bill, or export conversions.
 `campaignValues: true` retains presented campaign fields without a predeclared
 value list. Operators may instead supply an allowlist or omit the category.
 These are installation choices, not a universal visitor-consent requirement.
+
+The retained [application v1 adapter](https://github.com/fonte-is/fonte-sdk-js/blob/codex/fon909-outcomes-sdk/docs/application-outcomes.md) has its
+own historical API documentation. New native Results installations start with
+the guide above.
