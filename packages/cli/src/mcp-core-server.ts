@@ -22,7 +22,8 @@ const unhosted = new Set([
 ]);
 const extraTools = ["fonte_list_broadcast_options", "fonte_create_broadcast_recipient_set",
   "fonte_read_broadcast_recipient_set", "fonte_read_broadcast_results", "fonte_read_broadcast_recipients",
-  "fonte_read_sender_domains", "fonte_migrate_sender_domain", "fonte_reconcile_sender_domain"];
+  "fonte_read_sender_domains", "fonte_migrate_sender_domain", "fonte_reconcile_sender_domain",
+  "fonte_read_broadcast_control", "fonte_cancel_broadcast"];
 export const MCP_HOSTED_TOOLS = [...MCP_FONTE_TOOLS.filter(name => !unhosted.has(name)), ...extraTools];
 
 /** Core mounts this registry in its own API runtime. No upstream credential,
@@ -133,6 +134,16 @@ export function createCoreFonteMcpServer(request: CoreRequester, coreApiBaseUrl:
     input => request(domainPath(input), { method: "PUT", body: {
       operation: "reconcile_email_domain", emailDomainId: input.email_domain_id,
     }, lostResponseEffect: "unknown" }));
+  register(extraTools[8]!, z.strictObject(scope),
+    "Read the stored broadcast's current execution and control generation through Core. This never prepares, sends or advances work.", false,
+    input => request(`${draftPath(input)}/send-intent?environment=production`));
+  register(extraTools[9]!, z.strictObject({ ...scope, command_id: z.string().uuid(),
+    expected_generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - 1) }),
+    "End remaining work for this exact broadcast using its observed control generation and a stable command ID. Core checks current send permission and the stored execution contract. Historical delivery and UNKNOWN evidence are retained; this never sends or retries.", true,
+    input => request(`${draftPath(input)}/send-intent/control?environment=production`, {
+      body: { commandId: input.command_id, expectedGeneration: input.expected_generation, action: "cancel" },
+      lostResponseEffect: "unknown",
+    }));
   return server;
 }
 function draftPath(input: { workspace: string; draft_id: string }) {

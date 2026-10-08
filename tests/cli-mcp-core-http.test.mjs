@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CoreOperatorError } from "../packages/cli/dist/operator-core-request.js";
 import { handleCoreMcpRequest, MCP_HOSTED_TOOLS } from "../packages/cli/dist/mcp-core-handler.js";
 
 async function call(method, params, requester = async () => { throw Error("unexpected Core call"); }) {
@@ -92,4 +93,38 @@ test("domain MCP tools use the ordinary workspace owner and refuse malformed mig
     workspace, email_domain_id: id, expected_revision: 2, phase: "cutover", tracking_subdomain: "links",
   } }, requester);
   assert.ok(wrongPhase.value.error || wrongPhase.value.result.isError); assert.equal(calls.length, 3);
+});
+
+test("hosted cancellation uses the existing stored-contract owner and retains ambiguous effects", async () => {
+  const input = { workspace: "northstar", draft_id: "99999999-9999-4999-8999-999999999999" };
+  const command = { ...input, command_id: "88888888-8888-4888-8888-888888888888", expected_generation: 7 };
+  const calls = [];
+  const requester = async (path, options) => {
+    calls.push({ path, options });
+    return { status: "accepted", operation: { controlGeneration: options ? 8 : 7, state: options ? "canceling" : "waiting" } };
+  };
+  const observed = await call("tools/call", { name: "fonte_read_broadcast_control", arguments: input }, requester);
+  assert.equal(observed.value.result.structuredContent.receipt.operation.controlGeneration, 7);
+  assert.deepEqual(calls[0], { path: "/v1/workspaces/northstar/broadcast-drafts/" + input.draft_id
+    + "/send-intent?environment=production", options: undefined });
+  const ended = await call("tools/call", { name: "fonte_cancel_broadcast", arguments: command }, requester);
+  assert.equal(ended.value.result.structuredContent.receipt.operation.state, "canceling");
+  assert.deepEqual(calls[1], { path: calls[0].path.replace("?environment", "/control?environment"),
+    options: { body: { commandId: command.command_id, expectedGeneration: 7, action: "cancel" }, lostResponseEffect: "unknown" } });
+  for (const invalid of [{ ...command, expected_generation: -1 }, { ...command, command_id: "invalid" },
+    { ...command, action: "resume" }, { ...command, environment: "sandbox" }]) {
+    const result = await call("tools/call", { name: "fonte_cancel_broadcast", arguments: invalid }, requester);
+    assert.ok(result.value.error || result.value.result.isError);
+  }
+  assert.equal(calls.length, 2);
+  for (const [status, effect, expectedOutcome] of [[403, "none", "denied"], [409, "none", "conflict"], [null, "unknown", "ambiguous"]]) {
+    let attempts = 0;
+    const result = await call("tools/call", { name: "fonte_cancel_broadcast", arguments: command }, async () => {
+      attempts++; throw new CoreOperatorError("synthetic_control_failure", status, effect);
+    });
+    assert.equal(attempts, 1);
+    assert.equal(result.value.result.isError, true);
+    assert.equal(result.value.result.structuredContent.outcome, expectedOutcome);
+    assert.equal(result.value.result.structuredContent.core_effect, effect);
+  }
 });

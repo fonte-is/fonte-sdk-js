@@ -20,6 +20,16 @@ operation status, approval generations, and execution.
 
 ## Admitted tools
 
+The public HTTP server mounted at `https://fonte.is/mcp` uses the caller's
+normal registered OAuth session and Core's workspace authorization. Its hosted
+registry additionally exposes `fonte_read_broadcast_control` to observe a stored
+broadcast and `fonte_cancel_broadcast` to end remaining work. Cancellation
+requires the observed control generation and a stable command UUID. Core's
+existing owner chooses the stored execution contract and checks current Send
+permission; it retains delivery and UNKNOWN history. Neither tool prepares,
+resumes, retries or sends. A lost mutation response remains ambiguous and must
+be followed by a read before any further decision.
+
 The server exposes exactly these tools:
 
 - `fonte_list_sequences`
