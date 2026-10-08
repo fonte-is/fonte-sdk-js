@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { createApplicationDelivery } from "./application-delivery.js";
+import { postHogCapture } from "./results-posthog.js";
 import {
   nativeId,
   nativeInstant,
@@ -17,6 +18,7 @@ import type {
   FonteMeasurementPermission,
   FonteObservationOptions,
   FonteOptions,
+  FontePostHogTriggerOptions,
   FonteRetractInput,
   IdentityRecord,
 } from "./results-types.js";
@@ -31,6 +33,8 @@ export type {
   FonteIdentityClaims,
   FonteBrowserIdentity,
   FonteObservationOptions,
+  FontePostHogTriggerOptions,
+  FontePostHogCapture,
   FonteIdentifyOptions,
   FonteMeasurementPermission,
   FonteRetractInput,
@@ -200,6 +204,17 @@ function fonte(options: FonteOptions): Fonte {
       return Object.freeze({
         trigger: (key: string, input?: FonteObservationOptions) =>
           activity("trigger", key, input),
+        postHogTrigger: (key: string, input: FontePostHogTriggerOptions) => {
+          if (!delivery.gate(true)) return null;
+          try {
+            const now = delivery.clock();
+            if (!valid(now)) throw 0;
+            return postHogCapture(installationId, signingKey, record, key, input, now);
+          } catch {
+            delivery.reject("record_invalid");
+            return null;
+          }
+        },
         returned: (input?: FonteObservationOptions) =>
           activity("return", undefined, input),
         get browserIdentity() {

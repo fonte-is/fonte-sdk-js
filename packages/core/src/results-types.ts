@@ -60,6 +60,22 @@ export interface FonteObservationOptions {
   readonly eventId?: string;
   readonly occurredAt?: string;
 }
+export interface FontePostHogTriggerOptions {
+  readonly projectId: string;
+  readonly event: string;
+  readonly sourceRevision: number;
+  /** Original committed operation UUID and time; retain both for provider retries. */
+  readonly eventId: string;
+  readonly occurredAt: string;
+}
+/** Server capture input. No Source key, email, person profile or browser authority. */
+export interface FontePostHogCapture {
+  readonly event: string;
+  readonly uuid: string;
+  readonly distinctId: string;
+  readonly timestamp: Date;
+  readonly properties: { readonly fonte_commit: string };
+}
 export interface FonteIdentifyOptions extends FonteObservationOptions {
   readonly measurementAllowed: boolean;
   readonly validUntil?: string;
@@ -80,6 +96,8 @@ export interface FonteOptions extends Omit<
 export interface FonteIdentityHandle {
   /** Call only after the authoritative operation commits successfully. Replays reuse its UUID and time. */
   trigger(key: string, options?: FonteObservationOptions): boolean;
+  /** Proof for an existing selected backend PostHog event, after commit. Does not enqueue a native trigger. */
+  postHogTrigger(key: string, options: FontePostHogTriggerOptions): FontePostHogCapture | null;
   /** Current authenticated foreground activity. */
   returned(options?: FonteObservationOptions): boolean;
   readonly browserIdentity: FonteBrowserIdentity | null;
