@@ -33,9 +33,9 @@ test("the public graph keeps package-specific release versions", async () => {
   assert.deepEqual(
     Object.fromEntries(manifests.map(({ name, version }) => [name, version])),
     {
-      "@fonte-is/core": "0.2.0-fon571.1",
-      "@fonte-is/react": "0.2.0-fon571.1",
-      "@fonte-is/nextjs": "0.2.0-fon571.1",
+      "@fonte-is/core": "0.2.0-fon909.1",
+      "@fonte-is/react": "0.2.0-fon909.1",
+      "@fonte-is/nextjs": "0.2.0-fon909.1",
       "@fonte-is/cli": "0.3.5",
     },
   );
@@ -48,10 +48,10 @@ test("dependency edges point only from framework bindings to Core", async () => 
   const cli = await readJson("packages/cli/package.json");
   assert.deepEqual(core.dependencies ?? {}, {});
   assert.deepEqual(core.peerDependencies ?? {}, {});
-  assert.deepEqual(react.dependencies, { "@fonte-is/core": "0.2.0-fon571.1" });
+  assert.deepEqual(react.dependencies, { "@fonte-is/core": "0.2.0-fon909.1" });
   assert.deepEqual(nextjs.dependencies, {
-    "@fonte-is/core": "0.2.0-fon571.1",
-    "@fonte-is/react": "0.2.0-fon571.1",
+    "@fonte-is/core": "0.2.0-fon909.1",
+    "@fonte-is/react": "0.2.0-fon909.1",
   });
   assert.deepEqual(cli.dependencies, {
     "@modelcontextprotocol/server": "2.0.0",
@@ -84,14 +84,23 @@ test("server entry points are Node-only conditional exports", async () => {
       "node",
       "types",
     ]);
-    assert.deepEqual(Object.keys(manifest.typesVersions["*"]).sort(), [
+    const paths = [
+      "application",
       "installation-verification",
       "server",
-    ]);
+      ...(manifest === core ? ["results", "results-browser"] : []),
+    ];
+    assert.deepEqual(Object.keys(manifest.typesVersions["*"]).sort(), paths.sort());
+    assert.deepEqual(Object.keys(manifest.exports["./application"]).sort(), ["node", "types"]);
+    assert.deepEqual(manifest.typesVersions["*"]["application"], ["./dist/application.d.ts"]);
     assert.deepEqual(manifest.typesVersions["*"]["server"], [
       "./dist/server.d.ts",
     ]);
   }
+  assert.deepEqual(Object.keys(core.exports["./results"]).sort(), ["node", "types"]);
+  assert.deepEqual(core.typesVersions["*"].results, ["./dist/results.d.ts"]);
+  assert.deepEqual(Object.keys(core.exports["./results-browser"]).sort(), ["default", "import", "types"]);
+  assert.deepEqual(core.typesVersions["*"]["results-browser"], ["./dist/results-browser.d.ts"]);
 });
 
 test("Core has no framework or provider dependency or import", async () => {
