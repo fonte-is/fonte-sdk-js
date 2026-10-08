@@ -12,6 +12,74 @@ async function call(method, params, requester = async () => { throw Error("unexp
   assert.equal(response.headers.get("mcp-session-id"), null);
   return { status: response.status, value: await response.json() };
 }
+
+test("Fonte Link writes require valid HTTPS, stable mutation IDs and issued-touch context", async () => {
+  let calls = 0;
+  const requester = async () => { calls++; return { linkId: "synthetic-link" }; };
+  const link = { workspace: "northstar", client_mutation_id: "77777777-7777-4777-8777-777777777777",
+    name: "Broadcast placement", destination_url: "https://example.test/landing" };
+  for (const invalid of [{ ...link, destination_url: "http://example.test/landing" },
+    { ...link, destination_url: "https://user:password@example.test/landing" },
+    { ...link, client_mutation_id: "unstable" }, { ...link, environment: "sandbox" }]) {
+    const result = await call("tools/call", { name: "fonte_create_link", arguments: invalid }, requester);
+    assert.ok(result.value.error || result.value.result.isError);
+  }
+  const copy = { workspace: "northstar", link_id: "66666666-6666-4666-8666-666666666666",
+    client_mutation_id: link.client_mutation_id, kind: "share", label: "Email", source_context: { channel: "email" } };
+  for (const invalid of [{ ...copy, source_context: { viewerEmail: "recipient@example.invalid" } },
+    { ...copy, kind: "default" }, { ...copy, link_id: "another/path" }]) {
+    const result = await call("tools/call", { name: "fonte_create_link_copy", arguments: invalid }, requester);
+    assert.ok(result.value.error || result.value.result.isError);
+  }
+  assert.equal(calls, 0);
+  assert.equal((await call("tools/call", { name: "fonte_create_link", arguments: link }, requester))
+    .value.result.structuredContent.outcome, "completed");
+  assert.equal((await call("tools/call", { name: "fonte_create_link_copy", arguments: copy }, requester))
+    .value.result.structuredContent.outcome, "completed");
+  assert.equal(calls, 2);
+});
+
+test("Fonte Link denials and lost write responses remain distinct and never retry", async () => {
+  const input = { workspace: "northstar", client_mutation_id: "77777777-7777-4777-8777-777777777777",
+    name: "Placement", destination_url: "https://example.test/landing" };
+  for (const [status, effect, outcome] of [[403, "none", "denied"], [409, "none", "conflict"], [null, "unknown", "ambiguous"]]) {
+    let attempts = 0;
+    const result = await call("tools/call", { name: "fonte_create_link", arguments: input }, async () => {
+      attempts++; throw new CoreOperatorError("synthetic_link_failure", status, effect);
+    });
+    assert.equal(attempts, 1);
+    assert.equal(result.value.result.structuredContent.outcome, outcome);
+    assert.equal(result.value.result.structuredContent.core_effect, effect);
+  }
+});
+
+test("concurrent Fonte Link reads retain their own workspace and Core evidence", async () => {
+  const input = { link_id: "66666666-6666-4666-8666-666666666666" };
+  const requester = workspace => async path => {
+    assert.ok(path.startsWith(`/v1/workspaces/${workspace}/links/`));
+    return { linkId: input.link_id, workspace, copies: [{ rawRequests: 3, confirmedVisits: 1 }],
+      coverage: { browserIdentity: "browser_evidence_not_authenticated_person" } };
+  };
+  const [a, b] = await Promise.all([call("tools/call", { name: "fonte_read_link_metrics",
+    arguments: { ...input, workspace: "northstar" } }, requester("northstar")),
+  call("tools/call", { name: "fonte_read_link_metrics", arguments: { ...input, workspace: "southstar" } }, requester("southstar"))]);
+  assert.equal(a.value.result.structuredContent.receipt.workspace, "northstar");
+  assert.equal(b.value.result.structuredContent.receipt.workspace, "southstar");
+  assert.deepEqual(a.value.result.structuredContent.receipt.copies, [{ rawRequests: 3, confirmedVisits: 1 }]);
+  assert.equal(a.value.result.structuredContent.receipt.coverage.browserIdentity, "browser_evidence_not_authenticated_person");
+});
+
+test("canonical broadcast status preserves completion and refuses another draft's receipt", async () => {
+  const input = { workspace: "northstar", draft_id: "99999999-9999-4999-8999-999999999999" };
+  const canonicalSend = { phase: "completed", counts: { accepted: 1, unknown: 0, notSent: 0 } };
+  const response = id => ({ environment: "production", draft: { broadcastDraftId: id, canonicalSend } });
+  const result = await call("tools/call", { name: "fonte_read_broadcast_status", arguments: input }, async () => response(input.draft_id));
+  assert.deepEqual(result.value.result.structuredContent.receipt.canonicalSend, canonicalSend);
+  const wrong = await call("tools/call", { name: "fonte_read_broadcast_status", arguments: input }, async () => response("88888888-8888-4888-8888-888888888888"));
+  assert.equal(wrong.value.result.isError, true);
+  const unsent = await call("tools/call", { name: "fonte_read_broadcast_status", arguments: input }, async () => ({ environment: "production", draft: { broadcastDraftId: input.draft_id } }));
+  assert.equal(unsent.value.result.structuredContent.receipt.canonicalSend, null);
+});
 test("hosted HTTP has one exact registry, no local-file or legacy Send path", async () => {
   const initialized = await call("initialize", { protocolVersion: "2025-11-25", capabilities: {},
     clientInfo: { name: "synthetic-public-client", version: "1" } });
