@@ -36,7 +36,7 @@ test("the public graph keeps package-specific release versions", async () => {
       "@fonte-is/core": "0.2.0-fon571.1",
       "@fonte-is/react": "0.2.0-fon571.1",
       "@fonte-is/nextjs": "0.2.0-fon571.1",
-      "@fonte-is/cli": "0.3.4",
+      "@fonte-is/cli": "0.3.5",
     },
   );
 });
@@ -157,8 +157,8 @@ test("runtime exports stay intentionally narrow", async () => {
       ],
     ],
     ["@fonte-is/core/server", ["FonteApiError", "collect", "createClient"]],
-    ["@fonte-is/react", ["FonteProvider", "useFonte"]],
-    ["@fonte-is/nextjs", ["FonteProvider", "useFonte"]],
+    ["@fonte-is/react", ["Fonte", "FonteProvider", "useFonte"]],
+    ["@fonte-is/nextjs", ["Fonte", "FonteProvider", "useFonte"]],
     ["@fonte-is/nextjs/server", ["collect"]],
     [
       "@fonte-is/nextjs/installation-verification",

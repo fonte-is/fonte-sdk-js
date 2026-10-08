@@ -33,6 +33,7 @@ export const scopeKeys = new Set([
   "referrer",
   "client_user_agent",
   "fonte",
+  "fonte_click",
   ...measurementQueryKeys,
   ...adStorageQueryKeys,
   "fbc",
@@ -56,6 +57,9 @@ export function canonicalizeCurrentUrl(scope: Scope): Scope {
     const accepted = new URL(`${source.origin}${source.pathname}`);
     if (scope.fonte && source.searchParams.get("fonte") === scope.fonte) {
       accepted.searchParams.set("fonte", scope.fonte);
+    }
+    if (scope.fonte_click && source.searchParams.get("fonte_click") === scope.fonte_click) {
+      accepted.searchParams.set("fonte_click", scope.fonte_click);
     }
     for (const key of measurementQueryKeys) {
       if (scope[key] && source.searchParams.get(key) === scope[key]) {

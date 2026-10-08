@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Website runtime lifecycle fixture</title>
+<p>Host website fixture</p>
+<script type="module">
+  import { startWebsiteRuntime } from "/dist/website/runtime.js";
+  import { settings, siteId, otherSiteId } from "/fixtures/settings.mjs";
+  window.foundation = { startWebsiteRuntime, settings, siteId, otherSiteId };
+  window.log = [];
+  window.requests = [];
+  window.replies = [];
+  window.storageCalls = 0;
+  for (const name of ["getItem", "setItem", "removeItem"])
+    Object.defineProperty(Storage.prototype, name, {
+      value() {
+        window.storageCalls++;
+        throw Error("blocked storage");
+      },
+    });
+  Object.defineProperty(document, "cookie", {
+    get() {
+      window.storageCalls++;
+      throw Error("blocked cookies");
+    },
+    set() {
+      window.storageCalls++;
+      throw Error("blocked cookies");
+    },
+  });
+  window.fakeFetch = async (url, options) => {
+    window.requests.push({
+      url,
+      credentials: options.credentials,
+      referrerPolicy: options.referrerPolicy,
+      headers: options.headers,
+    });
+    const reply = window.replies.shift();
+    if (typeof reply === "function") return reply(url, options);
+    if (reply === "outage") throw Error("settings unavailable");
+    if (reply === "304") return new Response(null, { status: 304 });
+    return new Response(JSON.stringify(reply ?? settings(location.origin)), {
+      headers: { etag: `"rev-${reply?.revision ?? 1}"` },
+    });
+  };
+  window.options = () => ({
+    siteId,
+    runtimeVersion: "test-v1",
+    settingsUrl: `${location.origin}/settings`,
+    fetchImpl: window.fakeFetch,
+    onCollectionPolicy: (policy) =>
+      window.log.push(["policy", policy ? policy.version : null]),
+    onSettings: (value) =>
+      window.log.push(["settings", value ? value.revision : null]),
+    onNavigation: (occurrence) =>
+      window.log.push(["navigation", occurrence.href, occurrence.navigation]),
+    getFormCounts: () => ({ mounted: 2, unavailable: 1 }),
+  });
+  window.start = (overrides = {}) =>
+    (window.runtime = startWebsiteRuntime({
+      ...window.options(),
+      ...overrides,
+    }));
+  window.snapshot = () => ({
+    status: window.runtime.getStatus(),
+    log: window.log,
+    requests: window.requests,
+    storageCalls: window.storageCalls,
+  });
+</script>

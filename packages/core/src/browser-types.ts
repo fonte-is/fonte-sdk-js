@@ -1,7 +1,7 @@
 import type { InstallationVerificationMetadata } from "./installation-verification.js";
 import type { CollectionPolicy } from "./collection-policy.js";
 import type { CollectBody, CollectionReceipt } from "./collect-types.js";
-export type CaptureEventType = "page_view" | "source_touch";
+export type CaptureEventType = "page_view" | "source_touch" | "browser_landing";
 export type CaptureDeliveryReason =
   | "browser_unavailable"
   | "missing_journey_id"

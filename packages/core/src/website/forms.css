@@ -1,0 +1,94 @@
+:host {
+  display: block;
+  color-scheme: light;
+  color: #152229;
+  font:
+    16px/1.5 system-ui,
+    sans-serif;
+  text-align: left;
+}
+.panel,
+.panel * {
+  box-sizing: border-box;
+}
+.panel {
+  font:
+    16px/1.5 system-ui,
+    sans-serif;
+  text-align: left;
+  position: relative;
+  width: min(100%, 28rem);
+  padding: 1.5rem;
+  border: 1px solid #ccd5d9;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #152229;
+}
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+p {
+  margin: 0.75rem 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.scope {
+  font-weight: 600;
+}
+label {
+  display: block;
+  margin: 1rem 0;
+}
+input,
+button {
+  font: inherit;
+}
+input {
+  display: block;
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #677781;
+  border-radius: 0.3rem;
+  background: #fff;
+  color: #152229;
+}
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid #164b5d;
+  border-radius: 0.3rem;
+  background: #164b5d;
+  color: #fff;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+:focus-visible {
+  outline: 3px solid #c75a10;
+  outline-offset: 3px;
+}
+[hidden] {
+  display: none;
+}
+.close {
+  display: block;
+  margin: 0 0 1rem auto;
+}
+dialog {
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  overflow: auto;
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+dialog.slide_in {
+  margin: auto 1rem 1rem auto;
+}
