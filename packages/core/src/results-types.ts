@@ -95,7 +95,7 @@ export interface FonteOptions extends Omit<
   installationId: string;
 }
 export interface FonteIdentityHandle {
-  /** Call only after the authoritative operation commits successfully. Replays reuse its UUID and time. */
+  /** After commit. Late server replay requires the original UUID/time and this original identity's durable ACK. */
   trigger(key: string, options?: FonteObservationOptions): boolean;
   /** After commit and this identity's durable ACK. Uses its acknowledged Source revision; no native trigger enqueue. */
   postHogTrigger(key: string, options: FontePostHogTriggerOptions): FontePostHogCapture | null;

@@ -44,8 +44,9 @@ server authorities. Pass `true` only for a real affirmative measurement grant;
 denied or unknown permission withholds the observation. Authentication alone
 does not grant measurement permission.
 
-The returned handle belongs only to this authenticated user and lasts at most
-15 minutes. Keep it local to the request or its supported response lifecycle.
+The returned handle belongs only to this authenticated user. Its original
+authentication witness covers at most 15 minutes of actions. Keep the handle
+local to the request or its supported response lifecycle.
 Discard it when the user changes, logs out or withdraws permission. Never keep
 a shared mutable current-user handle.
 
@@ -156,13 +157,22 @@ bounded in-memory queue and bounded retries. Process exit, redeploy, overflow,
 explicit close or denied authorization can lose unacknowledged observations.
 The SDK adds no persistent outbox and makes no cross-restart delivery guarantee.
 
-SDK transport retries preserve the exact queued identity and action IDs,
-payloads and original clocks. An application retry must preserve that original
-identity handle and the original committed action UUID/time while they remain
-valid. A new `identify()` call normally creates a new identity ID; repeating a
-trigger under its old UUID with that different identity is a conflicting
-record. Do not refresh timestamps or create replacement IDs to force a count.
-Expired 15-minute handles cannot be used for later actions or rewritten history.
+SDK transport retries preserve exact identity and action IDs, payloads and
+original clocks. An application can retain its original verified authentication
+witness with the existing durable business receipt and retry that same committed
+fact after restart. Reverify the current actor and measurement permission, then
+use `identify()` with the original identity UUID, observed time and validity
+interval. After that exact identity's stored/replayed ACK, server `trigger()`
+can replay an explicitly supplied original action UUID/time within the existing
+30-day intake bound. The action must have occurred inside the original witness
+interval. No new login, ID or clock can retroactively prove an older action.
+
+A default `identify()` normally creates a new identity ID; reusing an action
+UUID under that different witness is a conflicting record. The SDK adds no
+persistent store or automatic restart recovery. The application must already
+own the original facts; missing or erased evidence must withhold the conversion.
+Current actions, browser Return authority and new PostHog proof generation still
+expire after 15 minutes. A late native replay grants none of those capabilities.
 
 `fonte.status()` reports bounded delivery state without private payloads. A
 disconnected or incomplete source means coverage is incomplete; a missing

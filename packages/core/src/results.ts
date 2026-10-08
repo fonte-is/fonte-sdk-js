@@ -178,7 +178,15 @@ function fonte(options: FonteOptions): Fonte {
         if (!delivery.gate(true)) return false;
         try {
           const now = delivery.clock();
-          if (!valid(now)) return delivery.reject("record_invalid");
+          // A trusted server can redeliver an original committed action after restart.
+          // Its original UUID/time and exact durable identity ACK are mandatory;
+          // current actions and browser/foreground authority still expire normally.
+          const replay = kind === "trigger" && !stopped()
+            && Object.hasOwn(input, "eventId") && input.eventId !== undefined
+            && Object.hasOwn(input, "occurredAt") && input.occurredAt !== undefined
+            && acknowledgement.sourceRevision !== null
+            && ["stored", "replayed"].includes(acknowledgement.outcome ?? "");
+          if (!valid(now) && !replay) return delivery.reject("record_invalid");
           const original = observation(input, now);
           const activity = normalizeNativeRecord(
             {
