@@ -22,18 +22,29 @@ installation key on the server.
 // In the existing measurement lifecycle callback, outside the successful response:
 // The application's real save has already committed with its original operation ID/time.
 await fonte.flush();
-const capture = identity?.postHogTrigger("report_saved", {
+const witness = identity?.postHogWitness("report_saved", {
   projectId: "123",                  // Selected PostHog project, from setup
-  event: "Report saved",             // Existing selected backend event name
-  eventId: committedOperation.eventId,
-  occurredAt: committedOperation.occurredAt,
+  event: originalPostHogCapture.event,
+  eventId: originalPostHogCapture.uuid,
+  occurredAt: originalPostHogCapture.timestamp.toISOString(),
 });
-if (capture) existingPostHog.capture(capture);
+existingPostHog.capture({
+  ...originalPostHogCapture,
+  properties: { ...originalPostHogCapture.properties, ...(witness ?? {}) },
+});
 ```
 
-`capture` contains the existing provider capture fields `event`, `uuid`,
-`distinctId`, `timestamp` (a `Date`) and a `properties.fonte_commit` proof.
-The provider's original UUID and distinct ID must match that proof. It contains
+The original capture must already describe the genuine committed operation,
+use the authenticated user's same `id` as its `distinctId`, and retain the
+durable operation UUID/time. Failed operations must not call this helper.
+`postHogWitness` returns only frozen `{fonte_commit}` metadata. It changes no
+existing event name, UUID, distinct ID, timestamp or properties, and enqueues no
+native Action. If Fonte is unavailable, the existing PostHog capture can proceed
+without the proof; Fonte withholds conversion rather than fabricating success.
+The older `postHogTrigger` method still returns the full compatible capture
+input when that is convenient.
+
+The provider's original UUID and distinct ID must match the proof. It contains
 the native action, original identity witness and original occurrence time, with
 no email or installation key. Adding existing safe PostHog properties does not
 make those properties part of Fonte's admitted payload.
@@ -67,18 +78,27 @@ PostHog copies of the same operation use the same existing deduplication key.
 
 The destination forwards only the closed payload
 `{schema,sourceId,projectId,eventId,event,userId,commitProof}` to
-`POST /v1/application-posthog-observations`, using the existing installation
-headers. Store the key in a provider input marked secret and disable debug
-logging. Do not export person profiles or arbitrary event properties.
+`POST /v1/application-posthog-observations`. The existing signed proof
+authenticates the exact action with the private Source verifier; the destination
+needs no copy of the application key or installation headers. Legacy headers
+remain supported when both are valid. Disable debug logging and do not export
+person profiles or arbitrary event properties.
 
 Realtime destination coverage is best effort. Missing deliveries, provider
 quarantine and disconnected periods do not establish zero activity. This adapter
 does not poll `/query` or promise a provider history cursor.
 
 The Core adapter and this SDK helper require deployment/publication before
-customer use. A real project grant, destination secret custody, first-time setup
+customer use. A real project grant, destination setup, first-time installation
 and the complete ordinary customer PostHog journey remain separate qualification
 steps. Official provider references:
 [webhook destinations](https://posthog.com/docs/cdp/destinations/webhook),
 [capture authentication](https://posthog.com/docs/api),
 [destination delivery caveats](https://posthog.com/docs/cdp/destinations).
+
+The ordinary PostHog connection must distinguish authorization, event selection
+and backend action verification. Selecting an existing identified event is not
+enough to establish a successful action: this small server installation step is
+required. Old captured records must not be retroactively signed. Qualify with a
+new genuine committed action, its actual provider capture/delivery and the
+independently expected Results, then repeat the adverse cases.

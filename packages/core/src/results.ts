@@ -35,6 +35,7 @@ export type {
   FonteObservationOptions,
   FontePostHogTriggerOptions,
   FontePostHogCapture,
+  FontePostHogWitness,
   FonteIdentifyOptions,
   FonteMeasurementPermission,
   FonteRetractInput,
@@ -211,10 +212,7 @@ function fonte(options: FonteOptions): Fonte {
           return delivery.reject("record_invalid");
         }
       };
-      return Object.freeze({
-        trigger: (key: string, input?: FonteObservationOptions) =>
-          activity("trigger", key, input),
-        postHogTrigger: (key: string, input: FontePostHogTriggerOptions) => {
+      const postHogTrigger = (key: string, input: FontePostHogTriggerOptions) => {
           if (!delivery.gate(true)) return null;
           try {
             const now = delivery.clock();
@@ -226,7 +224,13 @@ function fonte(options: FonteOptions): Fonte {
             delivery.reject("record_invalid");
             return null;
           }
-        },
+      };
+      return Object.freeze({
+        trigger: (key: string, input?: FonteObservationOptions) =>
+          activity("trigger", key, input),
+        postHogTrigger,
+        postHogWitness: (key: string, input: FontePostHogTriggerOptions) =>
+          postHogTrigger(key, input)?.properties ?? null,
         returned: (input?: FonteObservationOptions) =>
           activity("return", undefined, input),
         get browserIdentity() {
