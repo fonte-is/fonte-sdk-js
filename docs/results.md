@@ -141,6 +141,10 @@ what verified money was collected or refunded when available. Repeated events
 do not turn one Contact into several people. Actions are observed after Send;
 this does not assert that the Broadcast caused them.
 
+Use the [repeatable customer journey](./results-journey.md) to compare real
+sign-in and committed actions with independently frozen Results, then repeat
+direct returns, wrong users, failed actions and delivery/restart cases.
+
 The optional PostHog shortcut is being prepared. There is no released Connect
 PostHog path in this candidate, and existing identified events are not already
 qualified by this SDK guide.
