@@ -1,9 +1,16 @@
 # `@fonte-is/core`
 
 Native Broadcast Results uses `@fonte-is/core/results` on the server and
-`@fonte-is/core/results-browser` on a visible authenticated page. The native
-`0.2.0-fon909.1` package is a private qualification candidate; use the supplied
-private artifact. Public npm availability has not been established.
+`@fonte-is/core/results-browser` on a visible authenticated page. Install the
+versioned package through the ordinary npm registry:
+
+```sh
+npm install @fonte-is/core@0.2.0
+```
+
+This guide targets version `0.2.0`. Package qualification alone does not prove
+public registry availability, deployed Fonte setup, or a successful customer
+journey; verify those separately.
 
 Upload CSV → install Fonte once → identify the current authenticated user →
 select up to five named successful actions → optionally add verified Stripe
@@ -36,9 +43,12 @@ Call `handle.trigger()` after the original committed success with its UUID and
 UTC time. Examples are `project_created`, `report_saved`, and `invite_accepted`.
 Calls enqueue synchronously and delivery is best effort, with no disk outbox.
 
-Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/fon909-outcomes-sdk/docs/results.md) for the 15-minute handle,
+Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/results.md) for the 15-minute handle,
 foreground returns, retry limits and optional upgrade/money behavior. The
-PostHog shortcut is prepared optional work with no released connection path.
+optional [PostHog setup](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/posthog-selected-actions.md)
+adds a witness after the successful business commit to the application's
+existing capture. Its deployed consent, destination delivery and real Results
+journey require separate qualification; SDK tests do not establish them.
 
 ## Existing Website/acquisition API
 

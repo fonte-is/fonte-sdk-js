@@ -3,9 +3,16 @@
 Upload CSV → install Fonte once → identify the current authenticated user → add
 up to five successful actions → optionally add money → Send → trustworthy Results.
 
-The native API is a private qualification candidate, `0.2.0-fon909.1`. Install
-the supplied private `@fonte-is/core` artifact. Public npm availability has not
-been established for this candidate. Server code requires Node.js 20.9 or later.
+The native API uses `@fonte-is/core` version `0.2.0`. Install that version through
+the ordinary npm registry:
+
+```sh
+npm install @fonte-is/core@0.2.0
+```
+
+Server code requires Node.js 20.9 or later. Package qualification alone does not
+prove public registry availability, a deployed application connection, or a
+successful customer journey. Verify those separately using the steps below.
 
 ## Set up once
 
