@@ -1,9 +1,16 @@
 # `@fonte-is/core`
 
 Native Broadcast Results uses `@fonte-is/core/results` on the server and
-`@fonte-is/core/results-browser` on a visible authenticated page. The native
-`0.2.0-fon909.1` package is a private qualification candidate; use the supplied
-private artifact. Public npm availability has not been established.
+`@fonte-is/core/results-browser` on a visible authenticated page. Install the
+versioned package through the ordinary npm registry:
+
+```sh
+npm install @fonte-is/core@0.2.0
+```
+
+Open **Fonte → Settings → Application** to connect your app and configure its
+successful actions. Save the installation ID and one-time key in your server
+environment, then verify a signed-in visit and a committed action in Results.
 
 Upload CSV → install Fonte once → identify the current authenticated user →
 select up to five named successful actions → optionally add verified Stripe
@@ -36,14 +43,18 @@ Call `handle.trigger()` after the original committed success with its UUID and
 UTC time. Examples are `project_created`, `report_saved`, and `invite_accepted`.
 Calls enqueue synchronously and delivery is best effort, with no disk outbox.
 
-Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/fon909-outcomes-sdk/docs/results.md) for the 15-minute handle,
+Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/results.md) for the 15-minute handle,
 foreground returns, retry limits and optional upgrade/money behavior. The
-PostHog shortcut is prepared optional work with no released connection path.
+optional [PostHog setup](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/posthog-selected-actions.md)
+adds a witness after the successful business commit to the application's
+existing capture. Connect the project in **Fonte → Settings → Plugins →
+PostHog**, select existing events, and add the witness to your backend capture
+using that guide. A public capture key alone does not prove a successful action.
 
 ## Existing Website/acquisition API
 
-Framework-neutral evidence collection. This candidate uses the versioned
-`fonte.acquisition.v1` observation contract. It is not a production release.
+Framework-neutral evidence collection uses the versioned
+`fonte.acquisition.v1` observation contract.
 
 ```js
 import { createCapture } from "@fonte-is/core";
@@ -86,8 +97,8 @@ attribution caches are not reused as history.
 with the matching event ID, durable record ID, and durable receipt time.
 Ignored, rejected, unavailable, and bare HTTP 2xx responses do not establish
 custody. The server must enforce installation/environment-scoped idempotency
-and reject conflicting observations. SDK tests alone cannot prove that server
-property. Browser occurrence time remains reported, not trusted ordering.
+and reject conflicting observations. Browser occurrence time remains reported,
+not trusted ordering.
 
 Referrers retain only their origin; current URLs retain only an allowed route.
 UTM values require an explicit value allowlist. Cookie history does not create

@@ -70,12 +70,15 @@ export interface FontePostHogTriggerOptions {
   readonly occurredAt: string;
 }
 /** Server capture input. No Source key, email, person profile or browser authority. */
+export interface FontePostHogWitness {
+  readonly fonte_commit: string;
+}
 export interface FontePostHogCapture {
   readonly event: string;
   readonly uuid: string;
   readonly distinctId: string;
   readonly timestamp: Date;
-  readonly properties: { readonly fonte_commit: string };
+  readonly properties: FontePostHogWitness;
 }
 export interface FonteIdentifyOptions extends FonteObservationOptions {
   readonly measurementAllowed: boolean;
@@ -99,6 +102,8 @@ export interface FonteIdentityHandle {
   trigger(key: string, options?: FonteObservationOptions): boolean;
   /** After commit and this identity's durable ACK. Uses its acknowledged Source revision; no native trigger enqueue. */
   postHogTrigger(key: string, options: FontePostHogTriggerOptions): FontePostHogCapture | null;
+  /** Add proof to an existing backend capture without changing its name, UUID, time or distinct ID. No native Action enqueue. */
+  postHogWitness(key: string, options: FontePostHogTriggerOptions): FontePostHogWitness | null;
   /** Current authenticated foreground activity. */
   returned(options?: FonteObservationOptions): boolean;
   readonly browserIdentity: FonteBrowserIdentity | null;

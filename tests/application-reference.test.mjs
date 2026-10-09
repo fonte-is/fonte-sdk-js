@@ -452,7 +452,7 @@ test("business replay reuses immutable observation UUIDs and receives replay ACK
 test("HTTP outage preserves business success before the separate lifecycle drain", async (t) => {
   const receiver = await sink(t);
   receiver.fail(503);
-  const source = client(t, receiver, { timeoutMs: 50 });
+  const source = client(t, receiver);
   const committed = saved(),
     app = journey(ports({ saveReport: async () => committed }), source);
   const started = performance.now();
