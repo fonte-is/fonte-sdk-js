@@ -88,11 +88,32 @@ render references. It does not enroll a subscriber or send a message.
 Campaign and Segment tools manage the existing product metadata and return
 Core's revision and command receipts.
 
-Broadcast preparation retains the exact customer request and review references.
-`fonte_send_broadcast` requires the approved `send_input` returned by that
-journey; it never constructs approval from a count or local estimate. Core owns
-sender readiness, eligibility, billing, scheduling and dispatch. Operation
-readback observes the same durable request without advancing delivery.
+`fonte_prepare_broadcast` requests a review of an exact saved draft version.
+Its request carries a UUID, expected draft version and audience mode. Reusing
+a compatible audience is the default; refreshing it is explicit. Preparation
+returns a review operation, not a completed `send_input`, and never authorizes
+execution. Read a queued or running review through its returned operation URI.
+
+After the customer approves the ready review, create the complete saved input
+with `approvedBroadcastSendInput` from `@fonte-is/cli/broadcast-client` and
+submit it through `fonte_send_broadcast`. The helper binds the review ID,
+digest, draft version, workspace, environment, Core origin and a new Send
+request UUID. It does not obtain customer approval. The same Send schema also
+supports an explicitly approved maximum charge through
+`boundedDirectBroadcastSendInput`, without review references. Both forms
+request immediate sending; neither accepts a future Send time in this release.
+
+Core checks sender readiness, eligibility, billing and dispatch. Business
+acceptance, execution readiness, provider acceptance and delivery remain
+separate facts. `fonte_read_broadcast_send_operation` reads the returned
+same-origin operation URI without advancing work. A bounded foreground wait
+can return pending while Core continues working.
+
+Local review and Send requests are saved before submission. For HTTP, the
+caller must retain the complete immutable input and its request ID before
+calling the tool. After response loss, replay that exact input with the same
+tool and request ID. Do not create another Send identity to recover an
+uncertain request. There is no HTTP request-file recovery tool.
 
 ## Additional local tools
 
@@ -107,11 +128,14 @@ readback observes the same durable request without advancing delivery.
 - `fonte_revise_broadcast_html_file`
 
 HTML-file tools read the explicitly selected local file. Request recovery uses
-the original private request store. The legacy Send instruction tools remain
-available locally for existing callers. Their mutations bind Core's exact
-instruction and approval generations; the spend-limit operation requires a
-separate explicit customer direction. They cannot invent billing authority or
-call a payment service directly.
+the original private request store and replays the unchanged review or Send
+request. `fonte_send_broadcast_now` and `fonte_schedule_broadcast` are retired:
+they refuse new sends with `canonical_send_review_required` and no Core effect.
+The other legacy instruction tools observe or control compatible existing
+instructions. Schedule replacement and cancellation require the current
+instruction generation. Increasing a spend limit also checks the approval
+generation and Core's returned action, and requires explicit customer approval.
+The tools do not calculate a charge or call a payment service.
 
 ## Additional HTTP tools
 
@@ -171,7 +195,7 @@ A mutation that may have reached Core returns `outcome: "ambiguous"` and
 `core_effect: "unknown"`. The client does not automatically resubmit it. Read
 the known operation or resource before deciding what happens next. Repeat a
 request only where its operation explicitly supports the same stable identity
-and unchanged input. A draft read cannot prove Sequence activation, and a
+and unchanged input, as review, Send and contact import do. A draft read cannot prove Sequence activation, and a
 Source read cannot recover an installation key that was returned once.
 
 Neither transport exposes a generic HTTP proxy, external credential input,

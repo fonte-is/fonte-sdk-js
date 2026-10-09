@@ -19,6 +19,7 @@ const memoryStorage = () => {
 };
 
 test("Core installation metadata contracts stay versioned", () => {
+  assert.equal(INSTALLATION_VERIFICATION_SDK_VERSION, "0.2.0");
   assert.deepEqual(
     normalizeInstallationVerification({
       schemaVersion: INSTALLATION_VERIFICATION_SCHEMA_VERSION,
@@ -29,9 +30,18 @@ test("Core installation metadata contracts stay versioned", () => {
     {
       schemaVersion: "fonte.installation_verification.v2",
       installationAttemptId: "10000000-0000-4000-8000-000000000001",
-      sdkVersion: "0.1.0",
+      sdkVersion: "0.2.0",
       configVersion: "fonte.config.v2",
     },
+  );
+  assert.equal(
+    normalizeInstallationVerification({
+      schemaVersion: "fonte.installation_verification.v2",
+      installationAttemptId: "10000000-0000-4000-8000-000000000001",
+      sdkVersion: "0.1.0",
+      configVersion: "fonte.config.v2",
+    }),
+    null,
   );
 });
 
@@ -79,7 +89,7 @@ test("browser capture starts only with permitted policy", async () => {
       verification: {
         schemaVersion: "fonte.installation_verification.v2",
         installationAttemptId: "10000000-0000-4000-8000-000000000002",
-        sdkVersion: "0.1.0",
+        sdkVersion: "0.2.0",
         configVersion: "fonte.config.v2",
       },
     });
@@ -94,7 +104,7 @@ test("browser capture starts only with permitted policy", async () => {
     assert.equal(requests[0].body.scope.current_url.includes("secret="), false);
     assert.deepEqual(Object.keys(capture).sort(), ["page", "reset", "retry"]);
     assert.equal(requests[0].body.verification, undefined);
-    assert.equal(requests[1].body.verification.sdkVersion, "0.1.0");
+    assert.equal(requests[1].body.verification.sdkVersion, "0.2.0");
     assert.deepEqual(
       delivered.deliveries.map(({ status, httpStatus }) => [
         status,

@@ -34,21 +34,12 @@ const audience = z.strictObject({
   purposeRef: broadcastText,
 });
 const route = z.strictObject({
-  schema: z.literal("broadcast_sender_route.v1"),
+  schema: z.literal("broadcast_sender_route.v2"),
   routeId: broadcastText,
   digest: broadcastDigest,
   workspaceId: broadcastText,
   environment: broadcastEnvironment,
-  provider: z.literal("ses_v2"),
-  accountId: broadcastText,
-  region: broadcastText,
-  senderIdentity: broadcastText,
   authorizedFrom: broadcastText,
-  tenantId: broadcastText,
-  configurationSet: broadcastText,
-  feedbackDestination: broadcastText,
-  setupSource: broadcastText,
-  setupRevision: broadcastText,
 });
 const review = z.strictObject({
   workspaceId: broadcastText,
@@ -110,29 +101,47 @@ const sendReceipt = operation.extend({
   executionAuthorized: z.boolean(),
   jobId: broadcastText.nullable(),
 });
-const isolatedSendReceipt = operation.extend({
-  schema: z.literal("broadcast_send_receipt.v3"),
-  outcome: sendReceipt.shape.outcome,
-  businessAccepted: z.boolean(),
-  controlGeneration: broadcastCount,
-  executionState: z.enum(["handoff_pending", "unconfirmed", "ready", "stopped"]),
-  executionAuthorized: z.boolean().nullable(),
-  jobId: broadcastText.nullable(),
-}).superRefine((value, context) => {
-  const accepted = value.businessAccepted;
-  const valid = value.executionState === "ready"
-    ? accepted && value.executionAuthorized === true && value.jobId !== null
-    : value.executionState === "unconfirmed"
-      ? accepted && value.executionAuthorized === null && value.jobId === null
-      : value.executionState === "stopped"
-        ? accepted && value.executionAuthorized === false
-        : value.executionAuthorized === false && (value.jobId === null || accepted);
-  if (!valid || (!accepted && value.executionState !== "handoff_pending"))
-    context.addIssue({ code: "custom", message: "invalid isolated execution authority" });
-});
+const isolatedSendReceipt = operation
+  .extend({
+    schema: z.literal("broadcast_send_receipt.v3"),
+    outcome: sendReceipt.shape.outcome,
+    businessAccepted: z.boolean(),
+    controlGeneration: broadcastCount,
+    executionState: z.enum([
+      "handoff_pending",
+      "unconfirmed",
+      "ready",
+      "stopped",
+    ]),
+    executionAuthorized: z.boolean().nullable(),
+    jobId: broadcastText.nullable(),
+  })
+  .superRefine((value, context) => {
+    const accepted = value.businessAccepted;
+    const valid =
+      value.executionState === "ready"
+        ? accepted && value.executionAuthorized === true && value.jobId !== null
+        : value.executionState === "unconfirmed"
+          ? accepted &&
+            value.executionAuthorized === null &&
+            value.jobId === null
+          : value.executionState === "stopped"
+            ? accepted && value.executionAuthorized === false
+            : value.executionAuthorized === false &&
+              (value.jobId === null || accepted);
+    if (!valid || (!accepted && value.executionState !== "handoff_pending"))
+      context.addIssue({
+        code: "custom",
+        message: "invalid isolated execution authority",
+      });
+  });
 function isIsolatedReceipt(value: unknown): boolean {
-  return value !== null && typeof value === "object" && "schema" in value
-    && value.schema === "broadcast_send_receipt.v3";
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "schema" in value &&
+    value.schema === "broadcast_send_receipt.v3"
+  );
 }
 const execution = z.strictObject({
   state: z.enum(["sending", "paused", "ended", "completed"]),
@@ -202,13 +211,12 @@ export function parseBroadcastSendReceipt(
     validateCoreRequestUrl(parsed.operationUri, coreOrigin);
     if (scope && parsed.draftId !== scope.draftId) throw new TypeError("draft");
     if (!("schema" in parsed) && parsed.outcome === "executable") {
-      if (
-        parsed.executionAuthorized !== true ||
-        parsed.jobId === null
-      )
+      if (parsed.executionAuthorized !== true || parsed.jobId === null)
         throw new TypeError("authority");
-    } else if (!("schema" in parsed) &&
-      (parsed.executionAuthorized !== false || parsed.jobId !== null))
+    } else if (
+      !("schema" in parsed) &&
+      (parsed.executionAuthorized !== false || parsed.jobId !== null)
+    )
       throw new TypeError("authority");
     return parsed as BroadcastSendReceipt;
   }, effect);
@@ -221,7 +229,12 @@ export function parseBroadcastSendStatus(
   return receipt(() => {
     requireCompactBroadcastControl(value);
     if (isIsolatedReceipt(value))
-      return parseBroadcastSendReceipt(value, coreOrigin, "none", scope) as BroadcastSendStatus;
+      return parseBroadcastSendReceipt(
+        value,
+        coreOrigin,
+        "none",
+        scope,
+      ) as BroadcastSendStatus;
     const parsed = sendReceipt
       .extend({ execution: execution.nullable() })
       .parse(value);

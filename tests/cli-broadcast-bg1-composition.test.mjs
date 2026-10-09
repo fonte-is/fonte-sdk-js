@@ -98,7 +98,7 @@ test("authenticated catalog resolves code to immutable ID without changing publi
 });
 
 test("current-custody BG requester refreshes only proven no-effect 401 and keeps control responses bounded", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon813-auth-"));
+  const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-auth-"));
   const ceilings = new Map();
   const original = AbortSignal.timeout;
   AbortSignal.timeout = (milliseconds) => {
@@ -214,7 +214,9 @@ test("actual program preserves the original request key when login fails before 
 });
 
 test("actual MCP server registers one normal path, preserves historical controls and uses BG receipts", async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "fon813-mcp-composition-"));
+  const directory = await mkdtemp(
+    join(tmpdir(), "fonte-broadcast-mcp-composition-"),
+  );
   const child = spawn(
     process.execPath,
     ["tests/fixtures/broadcast-bg1-mcp-composition.mjs", directory],

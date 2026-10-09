@@ -42,7 +42,9 @@ test("BG MCP provider login failure is typed before any Core effect and retains 
 
 for (const explicit of [false, true]) {
   test(`BG MCP ${explicit ? "explicit" : "selected"} workspace applies to prepare, exact recovery and returned-URI observation`, async () => {
-    const directory = await mkdtemp(join(tmpdir(), "fon813-selection-"));
+    const directory = await mkdtemp(
+      join(tmpdir(), "fonte-broadcast-selection-"),
+    );
     try {
       const store = createBroadcastFileStore(directory);
       let selections = 0;

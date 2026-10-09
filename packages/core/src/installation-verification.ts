@@ -1,7 +1,7 @@
 export const FONTE_CONFIG_VERSION = "fonte.config.v2";
 export const INSTALLATION_VERIFICATION_SCHEMA_VERSION =
   "fonte.installation_verification.v2";
-export const INSTALLATION_VERIFICATION_SDK_VERSION = "0.1.0";
+export const INSTALLATION_VERIFICATION_SDK_VERSION = "0.2.0";
 
 const installationAttemptIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

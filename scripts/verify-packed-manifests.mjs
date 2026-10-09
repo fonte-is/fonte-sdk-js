@@ -86,7 +86,9 @@ for (const name of selected) {
       `${manifest.name} packed unexpected file ${entry}`,
     );
     assert.ok(
-      !/\/src\//.test(entry),
+      !/\/src\//.test(entry) ||
+        (name === "cli" &&
+          entry.startsWith("package/native/client-auth-store/")),
       `${manifest.name} leaked source: ${entry}`,
     );
     assert.ok(

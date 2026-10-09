@@ -72,6 +72,14 @@ Referrers retain only their origin, and current URLs retain only an allowed
 route. Campaign values require a configured allowlist or the explicit
 `campaignValues: true` option. Omitting the category collects none of them.
 These are installation choices; they do not establish visitor permission.
+Campaign values must fit 500 UTF-8 bytes and contain no control characters.
+An invalid or oversized value is omitted whole; Fonte does not shorten it into
+a different campaign value. Other permitted link and source facts remain intact.
+
+The current origin and path must fit 2,048 UTF-8 bytes. Longer routes are skipped.
+Complete observations must fit 16,384 bytes after JSON encoding. Larger
+observations return `failed` with reason `rejected`; they are not passed to
+`onObservation`, transmitted or queued for retry.
 
 Click identifiers and cookie values use `sourceEvidence`, a bounded list of
 selected names and values. The approved policy must provide `sourceFields`:

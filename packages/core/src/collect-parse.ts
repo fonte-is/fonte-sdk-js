@@ -1,7 +1,11 @@
 import {
   canonicalizeCurrentUrl,
+  boundedScopeValue,
   clean,
+  collectMaxBytes,
   scopeKeys,
+  scopeUrlMaxBytes,
+  withinUtf8Limit,
 } from "./collect-contract.js";
 import type {
   CollectBody,
@@ -48,9 +52,22 @@ const normalizeScope = (value: unknown): Scope | null => {
   const scope: Scope = {};
   for (const [key, raw] of Object.entries(value)) {
     if (!scopeKeys.has(key)) continue;
-    const maxLength = key === "current_url" || key === "referrer" ? 2048 : 500;
-    const normalized = clean(raw, maxLength);
-    if (normalized) scope[key] = normalized;
+    const urlField = ["current_url", "canonical_route", "referrer"].includes(
+      key,
+    );
+    if (urlField) {
+      if (
+        typeof raw !== "string" ||
+        /[\u0000-\u001f\u007f]/.test(raw) ||
+        !withinUtf8Limit(raw, scopeUrlMaxBytes)
+      ) {
+        if (key === "current_url") return null;
+        continue;
+      }
+      scope[key] = raw;
+      continue;
+    }
+    if (boundedScopeValue(raw)) scope[key] = raw;
   }
   if (scope.referrer) {
     try {
@@ -136,7 +153,7 @@ export async function parse(
   request: Request,
   options: ParseOptions = {},
 ): Promise<CollectBody | null> {
-  const maxBytes = options.maxBytes ?? 16_384;
+  const maxBytes = options.maxBytes ?? collectMaxBytes;
   if (!Number.isInteger(maxBytes) || maxBytes <= 0) return null;
   const length = request.headers.get("content-length");
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes))

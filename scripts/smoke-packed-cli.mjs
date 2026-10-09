@@ -61,6 +61,7 @@ try {
   const localManifestPath = path.join(fixture, ".fonte/installation.json");
   const localManifest = JSON.parse(await readFile(localManifestPath, "utf8"));
   assert.equal(localManifest.cli_version, cliVersion);
+  assert.equal(localManifest.sdk_version, "0.2.0");
   assert.equal(receipt(cli, fixture, ["doctor", "--json"]).outcome, "verified");
   for (const compatibleVersion of [
     "0.1.0",
@@ -195,7 +196,7 @@ async function writeProject(directory) {
     packageManager: "npm@10.9.2",
     dependencies: {
       "@fonte-is/cli": cliVersion,
-      "@fonte-is/nextjs": "0.1.0",
+      "@fonte-is/nextjs": "0.2.0",
       next: "16.2.11",
       react: "19.2.0",
       "react-dom": "19.2.0",

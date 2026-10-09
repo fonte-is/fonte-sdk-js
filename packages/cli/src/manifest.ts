@@ -60,7 +60,7 @@ function parseManagedOperation(value: unknown): ManagedOperation | null {
       input.kind === "dependency" &&
       input.path === "package.json" &&
       input.package === "@fonte-is/nextjs" &&
-      input.version === "0.1.0" &&
+      (input.version === "0.1.0" || input.version === "0.2.0") &&
       input.previous === "absent"
       ? (input as unknown as ManagedOperation)
       : null;
@@ -97,7 +97,7 @@ export function parseManifest(value: unknown): LocalManifest | null {
     value.adapter_id !== "next_app_router" ||
     value.adapter_version !== "v1" ||
     value.sdk_package !== "@fonte-is/nextjs" ||
-    value.sdk_version !== "0.1.0" ||
+    (value.sdk_version !== "0.1.0" && value.sdk_version !== "0.2.0") ||
     !sha256.test(String(value.plan_sha256)) ||
     !Array.isArray(value.managed_operations)
   ) {
@@ -105,6 +105,14 @@ export function parseManifest(value: unknown): LocalManifest | null {
   }
   const operations = value.managed_operations.map(parseManagedOperation);
   if (operations.some((operation) => operation === null)) return null;
+  if (
+    operations.some(
+      (operation) =>
+        operation?.id === "sdk_dependency" &&
+        operation.version !== value.sdk_version,
+    )
+  )
+    return null;
   const ids = operations.map((operation) => operation!.id);
   if (new Set(ids).size !== ids.length) return null;
   const order = ids.join(",");
@@ -125,7 +133,7 @@ export function parseManifest(value: unknown): LocalManifest | null {
     adapter_id: "next_app_router",
     adapter_version: "v1",
     sdk_package: "@fonte-is/nextjs",
-    sdk_version: "0.1.0",
+    sdk_version: value.sdk_version,
     plan_sha256: String(value.plan_sha256),
     managed_operations: operations as ManagedOperation[],
   };

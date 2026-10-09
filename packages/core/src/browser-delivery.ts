@@ -4,6 +4,7 @@ import type {
 } from "./browser-types.js";
 import type { CollectBody, CollectionReceipt } from "./collect-types.js";
 import { permitted, type CollectionPolicy } from "./collection-policy.js";
+import { collectMaxBytes, withinUtf8Limit } from "./collect-contract.js";
 
 type Attempt = {
   body: CollectBody;
@@ -102,6 +103,16 @@ export function createDeliveryClient(config: DeliveryConfig) {
           }),
         );
       const json = JSON.stringify(body);
+      if (!withinUtf8Limit(json, collectMaxBytes))
+        return Promise.resolve(
+          notify({
+            eventType: body.eventType,
+            eventId: body.eventId,
+            occurrenceId: body.occurrenceId,
+            status: "failed",
+            reason: "rejected",
+          }),
+        );
       const a: Attempt = {
         body: JSON.parse(json),
         json,

@@ -5,7 +5,7 @@ import {
   type BrowserObservationTransport,
 } from "./browser-delivery.js";
 import { createScopeReader } from "./browser-scope.js";
-import { clean } from "./collect-contract.js";
+import { clean, collectMaxBytes, withinUtf8Limit } from "./collect-contract.js";
 import { permitted } from "./collection-policy.js";
 import { createClientAttemptId } from "./ids.js";
 import { normalizeInstallationVerification } from "./installation-verification.js";
@@ -127,15 +127,23 @@ export function createCaptureEngine(
         occurrenceId,
         occurredAt,
       );
+      const bounded = new Set(
+        snapshots.filter((body) =>
+          withinUtf8Limit(JSON.stringify(body), collectMaxBytes),
+        ),
+      );
       pageSnapshot =
-        snapshots.find((body) => body.eventType === "page_view") ?? null;
+        snapshots.find(
+          (body) => bounded.has(body) && body.eventType === "page_view",
+        ) ?? null;
       landingSent = false;
       for (const body of snapshots)
-        try {
-          config.onObservation?.(JSON.parse(JSON.stringify(body)));
-        } catch {
-          /* optional observer */
-        }
+        if (bounded.has(body))
+          try {
+            config.onObservation?.(JSON.parse(JSON.stringify(body)));
+          } catch {
+            /* optional observer */
+          }
       return {
         deliveries: await Promise.all(
           snapshots.map((body) => delivery.submit(body, approved)),

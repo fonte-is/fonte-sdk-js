@@ -50,21 +50,12 @@ export interface BroadcastReview {
     readonly digest: string;
   };
   readonly routeRef: {
-    readonly schema: "broadcast_sender_route.v1";
+    readonly schema: "broadcast_sender_route.v2";
     readonly routeId: string;
     readonly digest: string;
     readonly workspaceId: string;
     readonly environment: BroadcastEnvironment;
-    readonly provider: "ses_v2";
-    readonly accountId: string;
-    readonly region: string;
-    readonly senderIdentity: string;
     readonly authorizedFrom: string;
-    readonly tenantId: string;
-    readonly configurationSet: string;
-    readonly feedbackDestination: string;
-    readonly setupSource: string;
-    readonly setupRevision: string;
   };
 }
 export interface BroadcastBlocker {
@@ -125,14 +116,17 @@ export type BroadcastLegacySendReceipt = BroadcastOperation &
  * effective execution authority separate, including completed/stopped jobs. */
 export type BroadcastSendReceiptV3 = BroadcastOperation & {
   readonly schema: "broadcast_send_receipt.v3";
-  readonly outcome: "processing" | "action_required" | "executable" | "rejected";
+  readonly outcome:
+    "processing" | "action_required" | "executable" | "rejected";
   readonly businessAccepted: boolean;
   readonly controlGeneration: number;
-  readonly executionState: "handoff_pending" | "unconfirmed" | "ready" | "stopped";
+  readonly executionState:
+    "handoff_pending" | "unconfirmed" | "ready" | "stopped";
   readonly executionAuthorized: boolean | null;
   readonly jobId: string | null;
 };
-export type BroadcastSendReceipt = BroadcastLegacySendReceipt | BroadcastSendReceiptV3;
+export type BroadcastSendReceipt =
+  BroadcastLegacySendReceipt | BroadcastSendReceiptV3;
 export interface BroadcastExecutionProgress {
   readonly state: "sending" | "paused" | "ended" | "completed";
   readonly stateVersion: number;
@@ -150,9 +144,11 @@ export interface BroadcastExecutionProgress {
   readonly attemptCount: number;
   readonly coverage: "complete" | "partial" | "unavailable";
 }
-export type BroadcastSendStatus = BroadcastSendReceiptV3 | (BroadcastLegacySendReceipt & {
-  readonly execution: BroadcastExecutionProgress | null;
-});
+export type BroadcastSendStatus =
+  | BroadcastSendReceiptV3
+  | (BroadcastLegacySendReceipt & {
+      readonly execution: BroadcastExecutionProgress | null;
+    });
 export type BroadcastReceipt =
   BroadcastReviewReceipt | BroadcastSendReceipt | BroadcastSendStatus;
 export interface SavedBroadcastRequest extends ResolvedBroadcastScope {

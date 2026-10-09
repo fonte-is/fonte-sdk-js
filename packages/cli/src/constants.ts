@@ -1,6 +1,6 @@
 export const CLI_VERSION = "0.4.0";
 export const SDK_PACKAGE = "@fonte-is/nextjs";
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.2.0";
 export const ADAPTER_ID = "next_app_router";
 export const ADAPTER_VERSION = "v1";
 

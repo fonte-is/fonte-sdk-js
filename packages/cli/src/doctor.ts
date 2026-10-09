@@ -16,11 +16,25 @@ export async function verifyInstallation(
   manifest: LocalManifest,
 ): Promise<CliReceipt> {
   await createRemovePlan(profile, manifest);
-  await verifyInstalledSdk(profile);
-  return preparedReceipt("doctor", initPlanFromManifest(manifest), "verified");
+  await verifyInstalledSdk(profile, manifest.sdk_version);
+  const receipt = preparedReceipt(
+    "doctor",
+    initPlanFromManifest(manifest),
+    "verified",
+  );
+  return manifest.sdk_version === SDK_VERSION
+    ? receipt
+    : {
+        ...receipt,
+        reason: "recorded_sdk_installation_verified",
+        next_action: null,
+      };
 }
 
-async function verifyInstalledSdk(profile: ProjectProfile): Promise<void> {
+async function verifyInstalledSdk(
+  profile: ProjectProfile,
+  sdkVersion: LocalManifest["sdk_version"],
+): Promise<void> {
   try {
     const packageRoot = path.join(profile.root, "node_modules", SDK_PACKAGE);
     const packagePath = path.join(packageRoot, "package.json");
@@ -31,7 +45,7 @@ async function verifyInstalledSdk(profile: ProjectProfile): Promise<void> {
       string,
       unknown
     >;
-    if (installed.name !== SDK_PACKAGE || installed.version !== SDK_VERSION) {
+    if (installed.name !== SDK_PACKAGE || installed.version !== sdkVersion) {
       throw new Error("wrong_sdk");
     }
     const exports = objectValue(installed.exports);

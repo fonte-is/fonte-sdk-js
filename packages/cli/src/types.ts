@@ -67,6 +67,8 @@ export interface PlanOperation {
   sha256?: string;
 }
 
+export type InstallationSdkVersion = "0.1.0" | "0.2.0";
+
 export interface InstallationPlanMaterial {
   schema_version: "fonte.cli.plan.v1";
   command: "init" | "remove";
@@ -74,7 +76,7 @@ export interface InstallationPlanMaterial {
   adapter_version: "v1";
   package_manager: "npm";
   sdk_package: "@fonte-is/nextjs";
-  sdk_version: "0.1.0";
+  sdk_version: InstallationSdkVersion;
   operations: PlanOperation[];
 }
 
@@ -88,7 +90,7 @@ export type ManagedOperation =
       kind: "dependency";
       path: "package.json";
       package: "@fonte-is/nextjs";
-      version: "0.1.0";
+      version: InstallationSdkVersion;
       previous: "absent";
     }
   | {
@@ -124,7 +126,7 @@ export interface LocalManifest {
   adapter_id: "next_app_router";
   adapter_version: "v1";
   sdk_package: "@fonte-is/nextjs";
-  sdk_version: "0.1.0";
+  sdk_version: InstallationSdkVersion;
   plan_sha256: string;
   managed_operations: ManagedOperation[];
 }

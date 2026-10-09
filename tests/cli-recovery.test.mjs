@@ -55,7 +55,7 @@ async function installFakeSdk(root) {
     path.join(directory, "package.json"),
     `${JSON.stringify({
       name: "@fonte-is/nextjs",
-      version: "0.1.0",
+      version: "0.2.0",
       type: "module",
       exports: {
         "./installation-verification": {
@@ -71,7 +71,7 @@ async function installFakeSdk(root) {
     [
       'export const FONTE_CONFIG_VERSION = "fonte.config.v2";',
       'export const INSTALLATION_VERIFICATION_SCHEMA_VERSION = "fonte.installation_verification.v2";',
-      'export const INSTALLATION_VERIFICATION_SDK_VERSION = "0.1.0";',
+      'export const INSTALLATION_VERIFICATION_SDK_VERSION = "0.2.0";',
       'export const INSTALLATION_VERIFICATION_ADAPTER_ID = "next_app_router";',
       'export const INSTALLATION_VERIFICATION_ADAPTER_VERSION = "v1";',
       "export const normalizeInstallationVerificationConfig = value => value;",
@@ -92,8 +92,9 @@ function createRunner(calls) {
         args[0] === "install" &&
         args.some((arg) => arg.includes("nextjs@"))
       ) {
+        assert.ok(args.includes("@fonte-is/nextjs@0.2.0"));
         const manifest = await json(path.join(cwd, "package.json"));
-        manifest.dependencies["@fonte-is/nextjs"] = "0.1.0";
+        manifest.dependencies["@fonte-is/nextjs"] = "0.2.0";
         await writeFile(
           path.join(cwd, "package.json"),
           `${JSON.stringify(manifest, null, 2)}\n`,

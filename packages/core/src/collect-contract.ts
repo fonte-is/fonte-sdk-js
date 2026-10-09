@@ -1,5 +1,22 @@
 import type { Scope } from "./types.js";
 
+export const collectMaxBytes = 16_384;
+export const scopeValueMaxBytes = 500;
+export const scopeUrlMaxBytes = 2048;
+export function withinUtf8Limit(value: string, limit: number): boolean {
+  return (
+    value.length <= limit && new TextEncoder().encode(value).length <= limit
+  );
+}
+export function boundedScopeValue(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    !/[\u0000-\u001f\u007f]/.test(value) &&
+    withinUtf8Limit(value, scopeValueMaxBytes)
+  );
+}
+
 export const measurementQueryKeys = [
   "utm_source",
   "utm_medium",

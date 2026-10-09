@@ -5,6 +5,7 @@ import {
   EXECUTION_ERROR_TEXT,
   HELP_TEXT,
   LOCAL_MANIFEST_PATH,
+  SDK_VERSION,
   ROLLBACK_ERROR_TEXT,
   USAGE_TEXT,
   VERSION_TEXT,
@@ -195,7 +196,10 @@ async function executeCommand(
 ): Promise<AnyCliReceipt> {
   if (parsed.command === "init") {
     if (await manifestExists(profile.root)) {
-      return verifyInstallation(profile, await readManifest(profile.root));
+      const manifest = await readManifest(profile.root);
+      if (manifest.sdk_version !== SDK_VERSION)
+        throw new CliBlockedError("dependency_version_conflict");
+      return verifyInstallation(profile, manifest);
     }
     const plan = await createInitPlan(profile);
     return parsed.apply

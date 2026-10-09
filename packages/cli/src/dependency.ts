@@ -11,6 +11,7 @@ import {
   UNINSTALL_COMMAND,
 } from "./constants.js";
 import { CliBlockedError, CliExecutionError } from "./errors.js";
+import type { InstallationSdkVersion } from "./types.js";
 
 const dependencySections = [
   "dependencies",
@@ -20,7 +21,10 @@ const dependencySections = [
 ] as const;
 
 /** Return absent or exact; throw dependency_version_conflict otherwise. */
-export function dependencyPosture(profile: ProjectProfile): DependencyPosture {
+export function dependencyPosture(
+  profile: ProjectProfile,
+  sdkVersion: InstallationSdkVersion = SDK_VERSION,
+): DependencyPosture {
   const occurrences = dependencySections.flatMap((section) => {
     const value = profile.package_manifest[section];
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
@@ -31,7 +35,7 @@ export function dependencyPosture(profile: ProjectProfile): DependencyPosture {
   if (
     occurrences.length !== 1 ||
     occurrences[0]!.section !== "dependencies" ||
-    occurrences[0]!.version !== SDK_VERSION
+    occurrences[0]!.version !== sdkVersion
   ) {
     throw new CliBlockedError("dependency_version_conflict");
   }

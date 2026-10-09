@@ -57,6 +57,24 @@ test("batch reads preserve a canonical workspace code exactly", async () => {
   const h = harness();
   await h.client.readContactImportStatus({ ...input, workspace: "A3" });
   assert.equal(JSON.parse(h.calls[0].init.body).workspaceSlug, "A3");
+  const historicalBatch = "ABCDEFAB-CDEF-4ABC-8ABC-ABCDEFABCDEF";
+  const upper = harness({
+    ...completed,
+    contactImportBatchId: historicalBatch.toLowerCase(),
+  });
+  assert.equal(
+    (
+      await upper.client.readContactImportStatus({
+        ...input,
+        contactImportBatchId: historicalBatch,
+      })
+    ).contact_import_batch_id,
+    historicalBatch.toLowerCase(),
+  );
+  assert.equal(
+    JSON.parse(upper.calls[0].init.body).contactImportBatchId,
+    historicalBatch,
+  );
   assert.throws(() =>
     parseArguments([
       "bridge",

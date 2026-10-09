@@ -64,7 +64,7 @@ async function createFixture(options = {}) {
   return { root, manifest };
 }
 
-async function installFakeSdk(root) {
+async function installFakeSdk(root, sdkVersion = "0.2.0") {
   const directory = path.join(root, "node_modules/@fonte-is/nextjs");
   await mkdir(path.join(directory, "dist"), { recursive: true });
   await writeFile(
@@ -72,7 +72,7 @@ async function installFakeSdk(root) {
     `${JSON.stringify(
       {
         name: "@fonte-is/nextjs",
-        version: "0.1.0",
+        version: sdkVersion,
         type: "module",
         exports: {
           "./installation-verification": {
@@ -91,7 +91,7 @@ async function installFakeSdk(root) {
     [
       'export const FONTE_CONFIG_VERSION = "fonte.config.v2";',
       'export const INSTALLATION_VERIFICATION_SCHEMA_VERSION = "fonte.installation_verification.v2";',
-      'export const INSTALLATION_VERIFICATION_SDK_VERSION = "0.1.0";',
+      `export const INSTALLATION_VERIFICATION_SDK_VERSION = "${sdkVersion}";`,
       'export const INSTALLATION_VERIFICATION_ADAPTER_ID = "next_app_router";',
       'export const INSTALLATION_VERIFICATION_ADAPTER_VERSION = "v1";',
       "export function normalizeInstallationVerificationConfig(value) {",
@@ -115,9 +115,10 @@ function createRunner(calls) {
         args[0] === "install" &&
         args.some((arg) => arg.startsWith("@fonte-is/nextjs@"))
       ) {
+        assert.ok(args.includes("@fonte-is/nextjs@0.2.0"));
         const manifestPath = path.join(cwd, "package.json");
         const manifest = await json(manifestPath);
-        manifest.dependencies["@fonte-is/nextjs"] = "0.1.0";
+        manifest.dependencies["@fonte-is/nextjs"] = "0.2.0";
         await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
         if (!args.includes("--package-lock=false")) {
           await writeFile(
@@ -230,6 +231,8 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
     `node_modules\n${IGNORE_BLOCK_TEXT}`,
   );
   const localManifest = await json(path.join(root, ".fonte/installation.json"));
+  assert.equal(localManifest.sdk_version, "0.2.0");
+  assert.equal(localManifest.managed_operations[0].version, "0.2.0");
   assert.equal(localManifest.installation_id, dependencies.randomUUID());
   assert.equal("secret" in localManifest, false);
   assert.equal(
@@ -272,7 +275,7 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
     (await json(path.join(root, "package.json"))).dependencies[
       "@fonte-is/nextjs"
     ],
-    "0.1.0",
+    "0.2.0",
   );
 
   await writeFile(path.join(root, "fonte/installation.ts"), originalSource);
@@ -297,6 +300,151 @@ test("plan, init, idempotent init, doctor, drift refusal, and remove", async () 
     await readFile(path.join(root, ".gitignore"), "utf8"),
     "node_modules\n",
   );
+});
+
+test("a recorded SDK 0.1.0 installation remains removable without claiming an upgrade", async () => {
+  const { root } = await createFixture();
+  const packagePath = path.join(root, "package.json");
+  const packageManifest = await json(packagePath);
+  packageManifest.dependencies["@fonte-is/nextjs"] = "0.1.0";
+  await writeFile(packagePath, `${JSON.stringify(packageManifest, null, 2)}\n`);
+  await installFakeSdk(root, "0.1.0");
+  await mkdir(path.join(root, "fonte"));
+  await mkdir(path.join(root, ".fonte"));
+  await writeFile(
+    path.join(root, "fonte/installation.ts"),
+    MANAGED_SOURCE_TEXT,
+  );
+  await writeFile(
+    path.join(root, ".gitignore"),
+    `node_modules\n${IGNORE_BLOCK_TEXT}`,
+  );
+  const localManifest = {
+    schema_version: "fonte.local_installation.v1",
+    installation_id: "10000000-0000-4000-8000-000000000008",
+    cli_version: "0.3.5",
+    adapter_id: "next_app_router",
+    adapter_version: "v1",
+    sdk_package: "@fonte-is/nextjs",
+    sdk_version: "0.1.0",
+    plan_sha256:
+      "1e6abf4b2493eb39615354e818bf80c03fe371a9b75f716b928bc2bf7e05c6c1",
+    managed_operations: [
+      {
+        id: "sdk_dependency",
+        kind: "dependency",
+        path: "package.json",
+        package: "@fonte-is/nextjs",
+        version: "0.1.0",
+        previous: "absent",
+      },
+      {
+        id: "installation_module",
+        kind: "created_file",
+        path: "fonte/installation.ts",
+        sha256:
+          "e04dc9dbd826fe97e4c7a0a186693c85e87787cd74a2c40d4de19f6954fa0d5c",
+      },
+      {
+        id: "local_state_ignore",
+        kind: "managed_block",
+        path: ".gitignore",
+        sha256:
+          "c1d433b118869fa669ee813100aecbca385b3fdb0257992f40f6c21607ce4f5a",
+      },
+    ],
+  };
+  const manifestPath = path.join(root, ".fonte/installation.json");
+  const recordedBytes = `${JSON.stringify(localManifest, null, 2)}\n`;
+  await writeFile(manifestPath, recordedBytes);
+  const calls = [];
+  const request = {
+    cwd: root,
+    randomUUID: () => localManifest.installation_id,
+    runner: createRunner(calls),
+  };
+
+  const doctor = await runProgram(["doctor", "--json"], request);
+  assert.equal(doctor.exitCode, 0);
+  assert.equal(
+    JSON.parse(doctor.stdout).reason,
+    "recorded_sdk_installation_verified",
+  );
+  assert.equal(JSON.parse(doctor.stdout).next_action, null);
+  const humanDoctor = await runProgram(["doctor"], request);
+  assert.match(
+    humanDoctor.stdout,
+    /recorded Fonte SDK 0\.1\.0 installation is intact/,
+  );
+  assert.match(
+    humanDoctor.stdout,
+    /Current setup targets SDK 0\.2\.0\. No upgrade was performed/,
+  );
+  const init = await runProgram(["init", "--yes", "--json"], request);
+  assert.equal(init.exitCode, 3);
+  assert.equal(JSON.parse(init.stdout).reason, "dependency_version_conflict");
+  assert.equal(calls.length, 0);
+  assert.equal(await readFile(manifestPath, "utf8"), recordedBytes);
+  assert.equal(
+    (await json(packagePath)).dependencies["@fonte-is/nextjs"],
+    "0.1.0",
+  );
+
+  const mismatchedPackage = await json(packagePath);
+  mismatchedPackage.dependencies["@fonte-is/nextjs"] = "0.2.0";
+  await writeFile(
+    packagePath,
+    `${JSON.stringify(mismatchedPackage, null, 2)}\n`,
+  );
+  const drift = await runProgram(["remove", "--yes", "--json"], request);
+  assert.equal(drift.exitCode, 3);
+  assert.equal(JSON.parse(drift.stdout).reason, "managed_code_drifted");
+  assert.equal(calls.length, 0);
+  await writeFile(packagePath, `${JSON.stringify(packageManifest, null, 2)}\n`);
+  const originalPackageBytes = await readFile(packagePath, "utf8");
+  const lockPath = path.join(root, "package-lock.json");
+  const originalLockBytes = await readFile(lockPath, "utf8");
+  let failedRemovalCalls = 0;
+  const failedRemoval = await runProgram(["remove", "--yes", "--json"], {
+    ...request,
+    runner: {
+      async run(_command, args) {
+        failedRemovalCalls += 1;
+        if (args[0] === "uninstall") {
+          const changed = await json(packagePath);
+          delete changed.dependencies["@fonte-is/nextjs"];
+          await writeFile(packagePath, `${JSON.stringify(changed)}\n`);
+          await writeFile(lockPath, "interrupted removal\n");
+          return 1;
+        }
+        assert.equal(args[0], "install");
+        assert.equal(
+          (await json(packagePath)).dependencies["@fonte-is/nextjs"],
+          "0.1.0",
+        );
+        await writeFile(lockPath, "reconciled legacy dependency\n");
+        return 0;
+      },
+    },
+  });
+  assert.equal(failedRemoval.exitCode, 1);
+  assert.equal(failedRemoval.stderr, "Fonte failed: execution_failed.\n");
+  assert.equal(failedRemovalCalls, 2);
+  assert.equal(await readFile(packagePath, "utf8"), originalPackageBytes);
+  assert.equal(await readFile(lockPath, "utf8"), originalLockBytes);
+  assert.equal(await readFile(manifestPath, "utf8"), recordedBytes);
+  assert.equal(
+    await readFile(path.join(root, "fonte/installation.ts"), "utf8"),
+    MANAGED_SOURCE_TEXT,
+  );
+  const removed = await runProgram(["remove", "--yes", "--json"], request);
+  assert.equal(removed.exitCode, 0);
+  assert.equal(JSON.parse(removed.stdout).outcome, "removed");
+  assert.equal(
+    (await json(packagePath)).dependencies["@fonte-is/nextjs"],
+    undefined,
+  );
+  assert.equal(await exists(manifestPath), false);
 });
 
 test("a pre-existing exact ignore rule is preserved and never claimed", async () => {

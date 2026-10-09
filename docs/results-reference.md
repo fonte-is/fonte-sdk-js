@@ -69,7 +69,7 @@ Fonte has not confirmed.
 
 The server queue holds at most 1,000 records. Delivery sends at most 100
 records and 64 KiB per request, with one active request. Requests are bounded
-to 750 ms and up to three attempts per cycle. Custom `fetch` implementations
+to 750 ms and up to three retries after the first attempt. Custom `fetch` implementations
 must honor their AbortSignal. Redirects are refused and cookies are omitted.
 
 An acknowledgement must name the exact source and every submitted UUID with

@@ -249,7 +249,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Persists and submits the exact approved review references. Processing is not executable; an executable job is not provider acceptance. The default request ceiling is 60 seconds.",
+      "Saves and submits the approved input: exact review references or an explicit maximum charge. Processing is not execution readiness or delivery. The default request ceiling is 60 seconds.",
     json: true,
   },
   {
@@ -261,7 +261,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Recovers the exact durably saved request after response loss. It never creates another approval or request identity.",
+      "Replays the exact saved review or Send request after response loss, using its original request ID. It creates no new approval.",
     json: true,
   },
   {
@@ -297,18 +297,14 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Accepts one saved Broadcast instruction for the exact future time. Expensive work remains backend-owned and does not begin before it is due.",
+      "Retired entrypoint; it refuses new sends with canonical_send_review_required. New Send inputs support immediate sending only.",
     json: true,
   },
   {
     command: ["broadcast", "send", "status"],
-    usage: [
-      [
-        "--workspace <slug> --environment production --draft-id <uuid> [--watch]",
-      ],
-    ],
+    usage: [["--workspace <slug> --environment production --draft-id <uuid>"]],
     detail:
-      "Observes the durable Send operation with GET only. It never prepares, authorizes, retries, or otherwise advances work.",
+      "Reads the canonical Send operation by draft ID with GET only. For bounded observation of a returned operation URI, use broadcast operation with --wait-ms.",
     json: true,
   },
   {
@@ -371,7 +367,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Explicitly authorizes Core to freeze recipients and start the broadcast.",
+      "Retired entrypoint; it refuses new sends with canonical_send_review_required. Review the exact draft, then use broadcast send with the approved input.",
     json: true,
   },
   {

@@ -11,7 +11,11 @@ import {
   SDK_VERSION,
 } from "./constants.js";
 import { sha256 } from "./digests.js";
-import type { InstallationPlanMaterial, PlanOperation } from "./types.js";
+import type {
+  InstallationPlanMaterial,
+  InstallationSdkVersion,
+  PlanOperation,
+} from "./types.js";
 
 const baseMaterial: Omit<InstallationPlanMaterial, "command" | "operations"> = {
   schema_version: PLAN_SCHEMA_VERSION,
@@ -25,9 +29,11 @@ const baseMaterial: Omit<InstallationPlanMaterial, "command" | "operations"> = {
 export function createInitMaterial(
   addDependency: boolean,
   addIgnore: boolean,
+  sdkVersion: InstallationSdkVersion = SDK_VERSION,
 ): InstallationPlanMaterial {
   return {
     ...baseMaterial,
+    sdk_version: sdkVersion,
     command: "init",
     operations: [
       {
@@ -62,6 +68,12 @@ export function createInitMaterial(
 
 export function createRemoveMaterial(
   operations: PlanOperation[],
+  sdkVersion: InstallationSdkVersion = SDK_VERSION,
 ): InstallationPlanMaterial {
-  return { ...baseMaterial, command: "remove", operations };
+  return {
+    ...baseMaterial,
+    sdk_version: sdkVersion,
+    command: "remove",
+    operations,
+  };
 }

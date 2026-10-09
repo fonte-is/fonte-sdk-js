@@ -28,7 +28,9 @@ const execute = promisify(execFile);
 for (const mode of ["cli", "mcp"])
   for (const loss of ["before", "after"]) {
     test(`fresh ${mode} process recovers exact input after response loss ${loss} simulated commit`, async () => {
-      const directory = await mkdtemp(join(tmpdir(), "fon813-process-"));
+      const directory = await mkdtemp(
+        join(tmpdir(), "fonte-broadcast-process-"),
+      );
       try {
         const input = {
           mode,
@@ -69,7 +71,7 @@ for (const mode of ["cli", "mcp"])
 
 for (const mode of ["cli", "mcp"])
   test(`fresh ${mode} review and explicit CAS re-approval retire the superseded saved request`, async () => {
-    const directory = await mkdtemp(join(tmpdir(), "fon813-resume-"));
+    const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-resume-"));
     try {
       const input = {
         mode,
@@ -156,7 +158,7 @@ for (const mode of ["cli", "mcp"])
 
 for (const mode of ["cli", "mcp"])
   test(`fresh ${mode} zero-recipient review and rejection never imply execution`, async () => {
-    const directory = await mkdtemp(join(tmpdir(), "fon813-empty-"));
+    const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-empty-"));
     try {
       const input = {
         mode,

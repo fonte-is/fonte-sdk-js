@@ -1,5 +1,10 @@
 import type { Scope } from "./types.js";
-import { measurementQueryKeys } from "./collect-contract.js";
+import {
+  boundedScopeValue,
+  measurementQueryKeys,
+  scopeUrlMaxBytes,
+  withinUtf8Limit,
+} from "./collect-contract.js";
 import {
   normalizeSourceEvidence,
   validSourceFields,
@@ -79,7 +84,8 @@ export function minimizeScope(
   }
   if (
     !["https:", "http:"].includes(url.protocol) ||
-    !routePermitted(url.pathname, policy)
+    !routePermitted(url.pathname, policy) ||
+    !withinUtf8Limit(`${url.origin}${url.pathname}`, scopeUrlMaxBytes)
   )
     return null;
   const result: Scope = {
@@ -92,14 +98,17 @@ export function minimizeScope(
   }
   try {
     const referrer = new URL(scope.referrer);
-    if (["https:", "http:"].includes(referrer.protocol))
+    if (
+      ["https:", "http:"].includes(referrer.protocol) &&
+      withinUtf8Limit(referrer.origin, scopeUrlMaxBytes)
+    )
       result.referrer = referrer.origin;
   } catch {
     /* absent remains unknown */
   }
   for (const key of measurementQueryKeys) {
     if (
-      scope[key] &&
+      boundedScopeValue(scope[key]) &&
       (policy.campaignValues === true ||
         policy.campaignValues?.[key]?.includes(scope[key]))
     )

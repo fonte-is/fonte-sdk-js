@@ -131,7 +131,7 @@ test("Next installation metadata stays exact", () => {
     normalizeInstallationVerificationConfig({
       schemaVersion: "fonte.installation_verification.v2",
       installationAttemptId: "10000000-0000-4000-8000-000000000003",
-      sdkVersion: "0.1.0",
+      sdkVersion: "0.2.0",
       configVersion: "fonte.config.v2",
       adapterId: "next_app_router",
       adapterVersion: "v1",

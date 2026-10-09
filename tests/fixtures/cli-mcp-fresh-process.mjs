@@ -8,7 +8,7 @@ import {
 } from "../../packages/cli/dist/mcp-sequence-server.js";
 
 const configUrl = "https://config.example.test/.well-known/fonte-cli.json";
-const proofPath = process.env.FON742_PROOF_FILE;
+const proofPath = process.env.FONTE_MCP_EFFECTS_FILE;
 let providerAcquisitions = 0;
 let coreRequests = 0;
 const session = createDurableFonteMcpSession({

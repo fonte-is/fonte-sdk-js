@@ -78,7 +78,7 @@ test("fonte setup --json reaches the shared readiness projection", async () => {
   assert.match(config, /\[mcp_servers\.fonte\]/u);
 });
 
-test("fresh MCP process presents one question and keeps Send explicit", async (t) => {
+test("fresh MCP process rejects incomplete preparation and keeps Send explicit", async (t) => {
   const directory = await mkdtemp(path.join(tmpdir(), "fonte-setup-fresh-"));
   const proofFile = path.join(directory, "effects.json");
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -97,8 +97,8 @@ test("fresh MCP process presents one question and keeps Send explicit", async (t
   const tools = listed.result.tools;
   const names = tools.map(({ name }) => name);
   assert.deepEqual(names, [...MCP_FONTE_TOOLS]);
-  assert.equal(names.length, 41);
-  assert.equal(new Set(names).size, 41);
+  assert.equal(names.length, 56);
+  assert.equal(new Set(names).size, 56);
 
   const statusTool = tools.find(({ name }) => name === "fonte_status");
   const prepareTool = tools.find(
@@ -108,23 +108,20 @@ test("fresh MCP process presents one question and keeps Send explicit", async (t
   assert.equal(statusTool.annotations.readOnlyHint, true);
   assert.equal(prepareTool.annotations.destructiveHint, false);
   assert.equal(sendTool.annotations.destructiveHint, true);
-  assert.match(sendTool.description, /exact preparation_reference/u);
+  assert.match(sendTool.description, /exact approved review references/u);
 
   const status = await host.call("fonte_status", {});
   assert.equal(status.state, "ready");
   assert.equal(status.selected_workspace.slug, "demo-workspace");
 
-  const prepare = await host.call("fonte_prepare_broadcast", {});
-  assert.equal(prepare.status, "needs_input");
-  assert.deepEqual(prepare.missing, ["draft_id_or_create_new"]);
-  assert.deepEqual(prepare.choices, [
-    {
-      field: "create_new",
-      value: "true",
-      label: "Create one new draft",
-    },
-  ]);
-  assert.equal(prepare.send_input, null);
+  assert.ok(prepareTool.inputSchema.required.includes("request"));
+  const prepare = await host.request("tools/call", {
+    name: "fonte_prepare_broadcast",
+    arguments: {},
+  });
+  assert.equal(prepare.error, undefined);
+  assert.equal(prepare.result.isError, true);
+  assert.equal(prepare.result.structuredContent, undefined);
 
   await host.close();
   const effects = JSON.parse(await readFile(proofFile, "utf8"));
@@ -143,10 +140,8 @@ test("fresh MCP process presents one question and keeps Send explicit", async (t
           selected_workspace: status.selected_workspace.slug,
         },
         prepare: {
-          status: prepare.status,
-          missing: prepare.missing,
-          choices: prepare.choices,
-          send_input: prepare.send_input,
+          incomplete_input_rejected: prepare.result.isError,
+          preparation_created: prepare.result.structuredContent !== undefined,
         },
         send: {
           available: true,
@@ -166,7 +161,7 @@ function startMcp(proofFile) {
     ["tests/fixtures/cli-mcp-fresh-process.mjs"],
     {
       cwd: process.cwd(),
-      env: { ...process.env, FON742_PROOF_FILE: proofFile },
+      env: { ...process.env, FONTE_MCP_EFFECTS_FILE: proofFile },
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
