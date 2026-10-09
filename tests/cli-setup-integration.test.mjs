@@ -79,7 +79,7 @@ test("fonte setup --json reaches the shared readiness projection", async () => {
 });
 
 test("fresh MCP process presents one question and keeps Send explicit", async (t) => {
-  const directory = await mkdtemp(path.join(tmpdir(), "fon742-fresh-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "fonte-setup-fresh-"));
   const proofFile = path.join(directory, "effects.json");
   t.after(() => rm(directory, { recursive: true, force: true }));
   const host = startMcp(proofFile);
@@ -163,7 +163,7 @@ test("fresh MCP process presents one question and keeps Send explicit", async (t
 function startMcp(proofFile) {
   const child = spawn(
     process.execPath,
-    ["tests/fixtures/cli-mcp-fon742-fresh-process.mjs"],
+    ["tests/fixtures/cli-mcp-fresh-process.mjs"],
     {
       cwd: process.cwd(),
       env: { ...process.env, FON742_PROOF_FILE: proofFile },
