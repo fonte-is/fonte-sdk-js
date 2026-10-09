@@ -6,7 +6,7 @@ same action. Both use the same identity, permission and Broadcast Results rules.
 
 A confirmation is a signed string. It binds your connection, its acknowledged
 revision, the original authenticated user and the successful action's UUID,
-key and commit time. The SDK does not choose a service or construct its events.
+key and commit time. Carry it with your application's existing event format.
 
 ## Confirm after the save
 

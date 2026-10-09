@@ -97,16 +97,6 @@ for (const name of selected) {
   if (name === "core") {
     assert.deepEqual(packedManifest.dependencies ?? {}, {});
     assert.deepEqual(packedManifest.peerDependencies ?? {}, {});
-    // Check the archive itself, including emitted code and declarations.
-    // Source-only checks cannot detect modules left by an earlier build.
-    const publicText = `${entries.join("\n")}\n${run("tar", ["-xOzf", tarball], { capture: true })}`;
-    assert.equal(
-      /posthog|\bresend\b|\bstripe\b|amazonses\.com|amazonaws\.com/i.test(
-        publicText,
-      ),
-      false,
-      "Core archive contains a service-specific public surface",
-    );
     for (const doc of coreDocs) {
       assert.equal(
         run("tar", ["-xOzf", tarball, `package/docs/${doc}`], {

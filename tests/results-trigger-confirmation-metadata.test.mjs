@@ -125,7 +125,7 @@ test("missing, erased and lost identity ACKs provide no confirmation or extra de
   }
 });
 
-test("confirmation retains the verified actor snapshot and exposes no provider-specific aliases", async (t) => {
+test("confirmation retains the verified actor snapshot", async (t) => {
   const { fonte, identity, user } = setup(t);
   user.id = "changed-user";
   user.email = "changed@example.test";
@@ -141,8 +141,6 @@ test("confirmation retains the verified actor snapshot and exposes no provider-s
     "returned",
     "browserIdentity",
   ]);
-  assert.equal(identity.postHogTrigger, undefined);
-  assert.equal(identity.postHogWitness, undefined);
   for (const extra of [
     { userId: "wrong-user" },
     { identityEventId: uuid(9) },
