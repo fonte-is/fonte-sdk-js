@@ -8,9 +8,9 @@ versioned package through the ordinary npm registry:
 npm install @fonte-is/core@0.2.0
 ```
 
-This guide targets version `0.2.0`. Package qualification alone does not prove
-public registry availability, deployed Fonte setup, or a successful customer
-journey; verify those separately.
+Open **Fonte → Settings → Application** to connect your app and configure its
+successful actions. Save the installation ID and one-time key in your server
+environment, then verify a signed-in visit and a committed action in Results.
 
 Upload CSV → install Fonte once → identify the current authenticated user →
 select up to five named successful actions → optionally add verified Stripe
@@ -47,13 +47,14 @@ Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/pos
 foreground returns, retry limits and optional upgrade/money behavior. The
 optional [PostHog setup](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/posthog-selected-actions.md)
 adds a witness after the successful business commit to the application's
-existing capture. Its deployed consent, destination delivery and real Results
-journey require separate qualification; SDK tests do not establish them.
+existing capture. Connect the project in **Fonte → Settings → Plugins →
+PostHog**, select existing events, and add the witness to your backend capture
+using that guide. A public capture key alone does not prove a successful action.
 
 ## Existing Website/acquisition API
 
-Framework-neutral evidence collection. This candidate uses the versioned
-`fonte.acquisition.v1` observation contract. It is not a production release.
+Framework-neutral evidence collection uses the versioned
+`fonte.acquisition.v1` observation contract.
 
 ```js
 import { createCapture } from "@fonte-is/core";
@@ -96,8 +97,8 @@ attribution caches are not reused as history.
 with the matching event ID, durable record ID, and durable receipt time.
 Ignored, rejected, unavailable, and bare HTTP 2xx responses do not establish
 custody. The server must enforce installation/environment-scoped idempotency
-and reject conflicting observations. SDK tests alone cannot prove that server
-property. Browser occurrence time remains reported, not trusted ordering.
+and reject conflicting observations. Browser occurrence time remains reported,
+not trusted ordering.
 
 Referrers retain only their origin; current URLs retain only an allowed route.
 UTM values require an explicit value allowlist. Cookie history does not create

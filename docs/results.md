@@ -10,9 +10,9 @@ the ordinary npm registry:
 npm install @fonte-is/core@0.2.0
 ```
 
-Server code requires Node.js 20.9 or later. Package qualification alone does not
-prove public registry availability, a deployed application connection, or a
-successful customer journey. Verify those separately using the steps below.
+Server code requires Node.js 20.9 or later. Connect and configure your
+application in Fonte, then verify a signed-in visit and a successful action
+using the steps below.
 
 ## Set up once
 
@@ -141,7 +141,7 @@ effort delivery. It cannot prove a durable receipt to your browser code.
 Money comes from Fonte's authoritative Stripe payment/refund connection when
 that connection is verified and available. These SDK calls never report money
 collected or refunded. A purchase-shaped action name cannot establish a payment.
-During qualification, leave money unavailable until the provider proof exists.
+Leave money unavailable until the payment connection is verified.
 
 Send your Broadcast normally and open its Results in Fonte. Results show which
 CSV Contacts returned, which performed each configured successful action, and
@@ -153,9 +153,10 @@ Use the [repeatable customer journey](./results-journey.md) to compare real
 sign-in and committed actions with independently frozen Results, then repeat
 direct returns, wrong users, failed actions and delivery/restart cases.
 
-The optional PostHog shortcut is being prepared. There is no released Connect
-PostHog path in this candidate, and existing identified events are not already
-qualified by this SDK guide.
+For existing PostHog events, follow the [PostHog setup](./posthog-selected-actions.md).
+Connect the project, select successful-action events, and add the server witness
+after the business commit. Existing identified records without that witness
+cannot prove a successful action.
 
 ## Capture and retry limits
 

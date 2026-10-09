@@ -88,10 +88,9 @@ Realtime destination coverage is best effort. Missing deliveries, provider
 quarantine and disconnected periods do not establish zero activity. This adapter
 does not poll `/query` or promise a provider history cursor.
 
-The Core adapter and this SDK helper require deployment/publication before
-customer use. A real project grant, destination setup, first-time installation
-and the complete ordinary customer PostHog journey remain separate qualification
-steps. Official provider references:
+Connect your existing project in **Fonte → Settings → Plugins → PostHog**,
+select successful-action events, and verify a new committed action in Broadcast
+Results. Official provider references:
 [webhook destinations](https://posthog.com/docs/cdp/destinations/webhook),
 [capture authentication](https://posthog.com/docs/api),
 [destination delivery caveats](https://posthog.com/docs/cdp/destinations).
@@ -99,6 +98,6 @@ steps. Official provider references:
 The ordinary PostHog connection must distinguish authorization, event selection
 and backend action verification. Selecting an existing identified event is not
 enough to establish a successful action: this small server installation step is
-required. Old captured records must not be retroactively signed. Qualify with a
+required. Old captured records must not be retroactively signed. Verify with a
 new genuine committed action, its actual provider capture/delivery and the
 independently expected Results, then repeat the adverse cases.
