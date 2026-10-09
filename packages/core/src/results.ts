@@ -171,6 +171,12 @@ function fonte(options: FonteOptions): Fonte {
       });
       const valid = (now: number) =>
         !stopped() && now < Date.parse(record.validUntil);
+      const acknowledgedOriginal = (input: FonteObservationOptions) =>
+        !stopped()
+        && Object.hasOwn(input, "eventId") && input.eventId !== undefined
+        && Object.hasOwn(input, "occurredAt") && input.occurredAt !== undefined
+        && acknowledgement.sourceRevision !== null
+        && ["stored", "replayed"].includes(acknowledgement.outcome ?? "");
       const activity = (
         kind: "return" | "trigger",
         key: unknown,
@@ -182,11 +188,7 @@ function fonte(options: FonteOptions): Fonte {
           // A trusted server can redeliver an original committed action after restart.
           // Its original UUID/time and exact durable identity ACK are mandatory;
           // current actions and browser/foreground authority still expire normally.
-          const replay = kind === "trigger" && !stopped()
-            && Object.hasOwn(input, "eventId") && input.eventId !== undefined
-            && Object.hasOwn(input, "occurredAt") && input.occurredAt !== undefined
-            && acknowledgement.sourceRevision !== null
-            && ["stored", "replayed"].includes(acknowledgement.outcome ?? "");
+          const replay = kind === "trigger" && acknowledgedOriginal(input);
           if (!valid(now) && !replay) return delivery.reject("record_invalid");
           const original = observation(input, now);
           const activity = normalizeNativeRecord(
@@ -216,8 +218,10 @@ function fonte(options: FonteOptions): Fonte {
           if (!delivery.gate(true)) return null;
           try {
             const now = delivery.clock();
-            if (!valid(now) || acknowledgement.sourceRevision === null
-              || !["stored", "replayed"].includes(acknowledgement.outcome ?? "")) throw 0;
+            // Like native replay, this can recover only an explicitly retained
+            // original action under its exact identity ACK. The canonical proof
+            // builder still enforces the original witness interval and 30 days.
+            if (!acknowledgedOriginal(input) || acknowledgement.sourceRevision === null) throw 0;
             return postHogCapture(installationId, signingKey, record, key, input, now,
               acknowledgement.sourceRevision);
           } catch {

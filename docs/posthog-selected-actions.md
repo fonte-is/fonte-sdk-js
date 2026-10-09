@@ -50,8 +50,9 @@ no email or installation key. Adding existing safe PostHog properties does not
 make those properties part of Fonte's admitted payload.
 
 This method is synchronous and returns `null` for invalid input, denied or
-closed measurement, an expired identity handle, or an identity without its exact
-stored/replayed native acknowledgement. It never throws into the
+closed measurement, an action outside its original identity interval or intake
+bound, or an identity without its exact stored/replayed native acknowledgement.
+It never throws into the
 successful application operation. Capture the native identity early in the
 request; use the ordinary SDK lifecycle drain outside the successful business
 transaction. The helper uses the Source revision from that identity's validated
@@ -62,9 +63,18 @@ Do not await measurement in a successful business transaction.
 
 Preserve the complete original capture input for retries. Reuse the operation's
 UUID, time and identity witness. A new UUID is a new observation; a later login
-must not retroactively prove an older action. The original identity is valid for
-at most fifteen minutes. Accepted events can arrive later within Fonte's
-existing thirty-day recovery bound; they retain their original action time.
+must not retroactively prove an older action. The original identity covers
+actions committed within at most fifteen minutes. A trusted server may recover
+that original committed action after an outage or restart within Fonte's
+existing thirty-day bound. Reverify the current actor and measurement permission,
+read the original business receipt and verified authentication witness, and
+identify with that witness's unchanged UUID, user, observed time and validity
+interval. Only its exact stored/replayed ACK permits regenerating metadata for
+the same original capture. Missing or erased witnesses withhold conversion.
+The SDK supplies no persistent store or automatic restart recovery. It cannot
+renew browser Return or authorize a new current action under an expired witness.
+Do not reconstruct a witness from an old provider record or a later login.
+Forwarded events retain their original action time.
 
 Fonte verifies the current installation credential, selected project, exact
 event mapping and Source revision. Rotation, disconnect, withdrawn permission

@@ -70,8 +70,9 @@ test("witness shares original user/window/revision gates and cannot create a cur
     assert.equal(identity.postHogWitness("report_saved", { ...input, ...changes }), null);
   }
   clock = now + 900000;
-  assert.equal(identity.postHogWitness("report_saved", input), null);
-  assert.equal(identity.postHogTrigger("report_saved", input), null);
+  assert.equal(identity.browserIdentity, null);
+  assert.equal(identity.postHogWitness("report_saved", { ...input, occurredAt: new Date(clock).toISOString() }), null);
+  assert.equal(identity.postHogTrigger("report_saved", { ...input, occurredAt: new Date(clock).toISOString() }), null);
   fonte.close(); assert.equal(identity.postHogWitness("report_saved", input), null);
 });
 

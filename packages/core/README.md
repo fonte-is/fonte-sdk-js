@@ -43,9 +43,9 @@ Call `handle.trigger()` after the original committed success with its UUID and
 UTC time. Examples are `project_created`, `report_saved`, and `invite_accepted`.
 Calls enqueue synchronously and delivery is best effort, with no disk outbox.
 
-Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/results.md) for the 15-minute handle,
+Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-original-recovery-sdk-20261009/docs/results.md) for the 15-minute handle,
 foreground returns, retry limits and optional upgrade/money behavior. The
-optional [PostHog setup](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-existing-capture-witness-sdk-20261008/docs/posthog-selected-actions.md)
+optional [PostHog setup](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-original-recovery-sdk-20261009/docs/posthog-selected-actions.md)
 adds a witness after the successful business commit to the application's
 existing capture. Connect the project in **Fonte → Settings → Plugins →
 PostHog**, select existing events, and add the witness to your backend capture

@@ -171,16 +171,22 @@ witness with the existing durable business receipt and retry that same committed
 fact after restart. Reverify the current actor and measurement permission, then
 use `identify()` with the original identity UUID, observed time and validity
 interval. After that exact identity's stored/replayed ACK, server `trigger()`
-can replay an explicitly supplied original action UUID/time within the existing
-30-day intake bound. The action must have occurred inside the original witness
-interval. No new login, ID or clock can retroactively prove an older action.
+can replay the original action, or `postHogWitness()` can supply metadata for
+its original PostHog capture, within the existing 30-day intake bound. Both
+require the explicitly retained original action UUID/time and an action that
+occurred inside the original witness interval. Reuse the original identity UUID,
+user, observed time and validity interval; never substitute a later login,
+invent an older clock or sign a provider record without its genuine business
+receipt. The current installation, key, selected event mapping and privacy
+permissions still control admission.
 
 A default `identify()` normally creates a new identity ID; reusing an action
 UUID under that different witness is a conflicting record. The SDK adds no
 persistent store or automatic restart recovery. The application must already
 own the original facts; missing or erased evidence must withhold the conversion.
-Current actions, browser Return authority and new PostHog proof generation still
-expire after 15 minutes. A late native replay grants none of those capabilities.
+Current actions and browser Return authority still expire after 15 minutes.
+Recovering the original committed fact grants neither capability and does not
+establish a new action or a new visit.
 
 `fonte.status()` reports bounded delivery state without private payloads. A
 disconnected or incomplete source means coverage is incomplete; a missing
