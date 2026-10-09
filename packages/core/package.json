@@ -1,7 +1,7 @@
 {
   "name": "@fonte-is/core",
   "version": "0.2.0",
-  "description": "Framework-neutral browser and server primitives for Fonte",
+  "description": "Website tracking and Broadcast Results for Fonte applications",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
   "repository": {
@@ -36,7 +36,10 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "docs"
   ],
   "exports": {
     ".": {
@@ -73,11 +76,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prepack": "npm run build",
+    "prepack": "npm run build && node ../../scripts/prepare-core-package.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "beta"
   }
 }

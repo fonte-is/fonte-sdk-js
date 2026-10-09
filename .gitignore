@@ -1,5 +1,7 @@
 node_modules/
 packages/*/dist/
+packages/core/docs/
+packages/core/LICENSE
 .artifacts/
 .vendor/
 *.tgz
