@@ -1,119 +1,65 @@
-# `@fonte-is/core`
+# Fonte Core
 
-Native Broadcast Results uses `@fonte-is/core/results` on the server and
-`@fonte-is/core/results-browser` on a visible authenticated page. Install the
-versioned package through the ordinary npm registry:
+See which Broadcast recipients returned to your app and completed a successful
+action, such as saving a report or accepting an invitation.
+
+**0.2 is a preview.** Install the explicit version:
 
 ```sh
 npm install @fonte-is/core@0.2.0
 ```
 
-Open **Fonte → Settings → Application** to connect your app and configure its
-successful actions. Save the installation ID and one-time key in your server
-environment, then verify a signed-in visit and a committed action in Results.
+The release uses the `beta` tag. An unversioned install continues to use
+the stable release. Server code requires Node.js 20.9 or later and ESM.
 
-Upload CSV → install Fonte once → identify the current authenticated user →
-select up to five named successful actions → optionally add verified Stripe
-money → Send → Broadcast Results.
+## Get started
+
+1. Open **Fonte → Settings → Application**. Connect your app and choose up to
+   five successful actions.
+2. Save the connection ID and one-time key in your server environment.
+3. Identify the signed-in user with their verified email and your existing
+   measurement permission. Fonte matches that email to your Broadcast contacts.
+4. Record an action after the save succeeds. Record a Return when the user
+   visits a visible signed-in page.
+5. Send to one controlled contact and check Results against the actual saved
+   record.
 
 ```ts
-import { createFonte, type AuthenticatedAppUser } from "@fonte-is/core/results";
+import { createFonte } from "@fonte-is/core/results";
 
 const fonte = createFonte({
   installationId: process.env.FONTE_APPLICATION_SOURCE_ID!,
   serverKey: process.env.FONTE_APPLICATION_SERVER_KEY!,
 });
-
-export function identifyAuthenticatedRequest(
-  user: AuthenticatedAppUser,
-  existingServerPermission: boolean | null | undefined,
-) {
-  if (existingServerPermission !== true || user.emailVerified !== true) return null;
-  return fonte.identify(
-    { id: user.id, email: user.email, emailVerified: user.emailVerified },
-    { measurementAllowed: true },
-  );
-}
 ```
 
-The user comes from your existing server authentication. Their verified email
-must match a CSV Contact. Unknown permission withholds measurement. Keep the
-returned handle in the current request; keep the server key out of browser code.
-Call `handle.trigger()` after the original committed success with its UUID and
-UTC time. Examples are `project_created`, `report_saved`, and `invite_accepted`.
-Calls enqueue synchronously and delivery is best effort, with no disk outbox.
+The [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/results.md)
+includes the complete server save and browser visit examples. Keep the server
+key on your server. Each identity handle belongs to one authenticated user;
+never share it as a global "current user."
 
-Read the [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-original-recovery-sdk-20261009/docs/results.md) for the 15-minute handle,
-foreground returns, retry limits and optional upgrade/money behavior. The
-optional [PostHog setup](https://github.com/fonte-is/fonte-sdk-js/blob/codex/posthog-original-recovery-sdk-20261009/docs/posthog-selected-actions.md)
-adds a witness after the successful business commit to the application's
-existing capture. Connect the project in **Fonte → Settings → Plugins →
-PostHog**, select existing events, and add the witness to your backend capture
-using that guide. A public capture key alone does not prove a successful action.
+Action calls queue locally and deliver in the background. A `true` return does
+not mean Results have updated. Unconfirmed events are held in memory and can
+be lost on restart. See the
+[API and delivery reference](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/results-reference.md)
+for retries and recovery.
 
-## Existing Website/acquisition API
+## Already using PostHog?
 
-Framework-neutral evidence collection uses the versioned
-`fonte.acquisition.v1` observation contract.
+Connect your existing project in **Fonte → Settings → Plugins → PostHog**,
+then select the events you want to measure. The
+[PostHog guide](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/posthog-selected-actions.md)
+shows how your server confirms that the selected action actually saved.
+Selecting an event alone does not prove a successful action.
 
-```js
-import { createCapture } from "@fonte-is/core";
-const capture = createCapture({
-  storage: "demo-site",
-  collectionPolicy: () => readApprovedSitePolicy(),
-});
-await capture.page();
-```
+## Existing integrations
 
-The installer supplies the actual configured collection policy. With no policy,
-unknown/denied status, or an expired policy, capture performs no telemetry or
-nonessential cookie/storage reads. A policy includes `version`, an absolute
-`expiresAt` (timestamp or `null` for no automatic expiry), `storage` (`memory` or `persistent`), and `routes` (exact paths, `/section/*`, or `*`).
-Click IDs, inherited ad cookies, source tokens, and enumerated campaign values
-are separate opt-ins. Do not construct permission from a visitor's silence.
-The server independently validates its policy, origin, route, and fields.
+The Website and application v1 APIs remain available:
 
-`page()` records one document/navigation occurrence. Repeated calls during that
-occurrence do not resend. Call `page({navigation:true})` for a real same-URL
-navigation; React bindings do this automatically. Page and source events have
-distinct event IDs and share one occurrence ID. Count source events or distinct
-occurrences, never both representations as independent acquisitions.
+- [Website tracking](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/website-tracking.md)
+  uses `@fonte-is/core` and `@fonte-is/core/server`.
+- [Application v1](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/application-outcomes.md)
+  uses `@fonte-is/core/application`.
 
-`retry()` replays frozen IDs, evidence, browser identity, and occurrence time.
-There are at most 32 pending events per capture instance, three attempts per
-event, a three-second request bound, and a 30-minute pending lifetime capped by
-the original policy expiry. Pending observations are memory-only: they survive
-storage failure within the document, not reloads. No cross-reload exactly-once
-claim is made. No automatic retries or offline queue are installed.
-
-`reset()` discards pending work and active browser continuity. Call it on
-logout, identity switching, withdrawal, and unlink. Persistent continuity has
-an absolute lifetime (`maxAgeDays`, default `null` for no automatic expiry), capped by policy expiry;
-reading it does not refresh expiry. Explicit reset removes this installation's
-stored continuity even in a fresh document. A browser ID is not a physical device, person, or account. Old
-attribution caches are not reused as history.
-
-`delivered` requires an explicit `accepted` or `duplicate_of_accepted` receipt
-with the matching event ID, durable record ID, and durable receipt time.
-Ignored, rejected, unavailable, and bare HTTP 2xx responses do not establish
-custody. The server must enforce installation/environment-scoped idempotency
-and reject conflicting observations. Browser occurrence time remains reported,
-not trusted ordering.
-
-Referrers retain only their origin; current URLs retain only an allowed route.
-UTM values require an explicit value allowlist. Cookie history does not create
-a new Meta encounter. X referrers use exact hostname boundaries. A presented
-source token does not resolve or authenticate its issued placement; the
-runtime must retain the versioned issued context separately.
-
-`@fonte-is/core/server` exposes bounded parsing, scope minimization, and the
-existing `/v1/touches` client. This SDK does not create a storage/identity
-service, decide attribution, create contacts, bill, or export conversions.
-
-`campaignValues: true` retains presented campaign fields without a predeclared
-value list. Operators may instead supply an allowlist or omit the category.
-These are installation choices, not a universal visitor-consent requirement.
-
-The retained [application v1 adapter](https://github.com/fonte-is/fonte-sdk-js/blob/codex/fon909-outcomes-sdk/docs/application-outcomes.md) has its
-own historical API documentation. New native Results installations start with
-the guide above.
+All these guides are also included in the installed package's `docs` directory.
+The package has no runtime dependencies and is licensed under Apache-2.0.

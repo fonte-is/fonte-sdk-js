@@ -1,113 +1,153 @@
-# Selected backend PostHog actions
+# Use your existing PostHog events in Broadcast Results
 
-Fonte can use the application's existing PostHog action events with the same
-native installation, authenticated identity and Results engine. Configure up to
-five existing event names and their Fonte action keys on the installation.
-PostHog sends those events through its supported realtime HTTP destination.
-Native signed-in Return works independently.
+Keep your existing PostHog project and event names. Choose the successful actions
+you want to measure, add a small server confirmation to those captures, then see
+which Broadcast recipients returned and took action.
 
-The application must add a small proof to each selected backend event **after
-the successful operation commits**. PostHog's public capture token admits
-client-authored events, so identified/profile/success properties alone cannot
-prove a committed action. This helper uses the existing Fonte installation key.
-It adds no key, authentication system, provider SDK or native action delivery.
+## 1. Connect your project
 
-Use the same request-local `identity` returned by
-`createFonte(...).identify(...)` in the [native Results setup](./results.md).
-Supply the actual authenticated user from the application's trusted session,
-explicit measurement permission, and its existing verified email. Keep the
-installation key on the server.
+Complete the [application setup](./results.md) so Fonte can identify your signed-in
+users. Keep the Fonte server key in your server environment.
+
+Open **Fonte → Settings → Plugins → PostHog → Connect PostHog**, choose your
+project's cloud region and continue to PostHog to authorize the connection.
+Return to Fonte and choose your existing project. You keep your current PostHog
+SDK and capture configuration.
+
+## 2. Choose events that mean a successful action
+
+Select up to five existing events and give each a Fonte action key and a Results
+label. For example:
+
+| Existing PostHog event | Fonte action key | Results label  |
+| ---------------------- | ---------------- | -------------- |
+| `Report saved`         | `report_saved`   | Saved a report |
+
+Choose events sent by your server after the real operation succeeds. Clicking
+**Save** without saving a change must not produce this action.
+
+Selecting an identified PostHog event is only part of setup. Fonte also needs the
+server confirmation below: an event name, user property or `success: true` value
+can be submitted without a real save.
+
+## 3. Confirm the save in your existing capture
+
+Use the `identity` from [identifying the signed-in user](./results.md). Create it
+while handling the authenticated request, before the save. Its user ID must be
+the same ID your existing capture uses for `distinctId`.
+
+After the save commits, pass its original capture to the code below. Retain the
+operation's original UUID and saved time. Run delivery in your framework's
+supported work after the response; saving must not wait for Fonte or PostHog.
+
+This Next.js example uses `after()`. Pass a request-local Fonte client and your
+existing PostHog client. `canMeasureOriginalUser` must check your app's current
+verified user and measurement permission for that person.
 
 ```ts
-// In the existing measurement lifecycle callback, outside the successful response:
-// The application's real save has already committed with its original operation ID/time.
-await fonte.flush();
-const witness = identity?.postHogWitness("report_saved", {
-  projectId: "123",                  // Selected PostHog project, from setup
-  event: originalPostHogCapture.event,
-  eventId: originalPostHogCapture.uuid,
-  occurredAt: originalPostHogCapture.timestamp.toISOString(),
-});
-existingPostHog.capture({
-  ...originalPostHogCapture,
-  properties: { ...originalPostHogCapture.properties, ...(witness ?? {}) },
-});
+import { after } from "next/server";
+import type { PostHog } from "posthog-node";
+import type { Fonte, FonteIdentityHandle } from "@fonte-is/core/results";
+
+type SavedCapture = Parameters<PostHog["capture"]>[0] & {
+  distinctId: string;
+  uuid: string;
+  timestamp: Date;
+};
+
+export function sendSavedReportEvent(
+  fonte: Fonte,
+  identity: FonteIdentityHandle | null,
+  posthog: PostHog,
+  originalCapture: SavedCapture,
+  projectId: string,
+  canMeasureOriginalUser: (userId: string) => boolean | Promise<boolean>,
+) {
+  // Call only after the real changed save commits.
+  after(async () => {
+    try {
+      if ((await canMeasureOriginalUser(originalCapture.distinctId)) !== true)
+        return;
+      await fonte.flush(); // Let Fonte confirm this specific signed-in identity.
+      if ((await canMeasureOriginalUser(originalCapture.distinctId)) !== true)
+        return;
+
+      const confirmation = identity?.postHogWitness("report_saved", {
+        projectId,
+        event: originalCapture.event,
+        eventId: originalCapture.uuid,
+        occurredAt: originalCapture.timestamp.toISOString(),
+      });
+
+      // Remove any previous confirmation before adding this attempt's result.
+      const properties = { ...originalCapture.properties };
+      delete properties.fonte_commit;
+      posthog.capture({
+        ...originalCapture,
+        properties: { ...properties, ...(confirmation ?? {}) },
+      });
+      await posthog.flush();
+    } finally {
+      fonte.close();
+    }
+  });
+}
 ```
 
-The original capture must already describe the genuine committed operation,
-use the authenticated user's same `id` as its `distinctId`, and retain the
-durable operation UUID/time. Failed operations must not call this helper.
-`postHogWitness` returns only frozen `{fonte_commit}` metadata. It changes no
-existing event name, UUID, distinct ID, timestamp or properties, and enqueues no
-native Action. If Fonte is unavailable, the existing PostHog capture can proceed
-without the proof; Fonte withholds conversion rather than fabricating success.
-The older `postHogTrigger` method still returns the full compatible capture
-input when that is convenient.
+`projectId` is your selected PostHog project's numeric ID as a string. The
+helper adds only `fonte_commit` metadata. Keep the existing event name, UUID,
+`distinctId`, timestamp and other properties unchanged, and reserve that property
+for Fonte. Do not call `identity.trigger()` as well for the PostHog-only path.
 
-The provider's original UUID and distinct ID must match the proof. It contains
-the native action, original identity witness and original occurrence time, with
-no email or installation key. Adding existing safe PostHog properties does not
-make those properties part of Fonte's admitted payload.
+The helper produces confirmation only after Fonte has acknowledged this exact
+identity. `flush()` returning or an HTTP success alone does not establish that
+confirmation; the SDK checks it before returning metadata. If confirmation is
+unavailable, your existing PostHog capture can still proceed. Fonte leaves the
+action unmeasured. Failed or unchanged saves must never reach this code.
 
-This method is synchronous and returns `null` for invalid input, denied or
-closed measurement, an action outside its original identity interval or intake
-bound, or an identity without its exact stored/replayed native acknowledgement.
-It never throws into the
-successful application operation. Capture the native identity early in the
-request; use the ordinary SDK lifecycle drain outside the successful business
-transaction. The helper uses the Source revision from that identity's validated
-native ACK; missing, malformed, erased or failed ACKs produce no proof. The
-ordinary strict receipt JSON is unchanged; revision is nonsecret HTTP metadata.
-Only the exact source and identity event's successful ACK can update its handle.
-Do not await measurement in a successful business transaction.
+## 4. Check Broadcast Results
 
-Preserve the complete original capture input for retries. Reuse the operation's
-UUID, time and identity witness. A new UUID is a new observation; a later login
-must not retroactively prove an older action. The original identity covers
-actions committed within at most fifteen minutes. A trusted server may recover
-that original committed action after an outage or restart within Fonte's
-existing thirty-day bound. Reverify the current actor and measurement permission,
-read the original business receipt and verified authentication witness, and
-identify with that witness's unchanged UUID, user, observed time and validity
-interval. Only its exact stored/replayed ACK permits regenerating metadata for
-the same original capture. Missing or erased witnesses withhold conversion.
-The SDK supplies no persistent store or automatic restart recovery. It cannot
-renew browser Return or authorize a new current action under an expired witness.
-Do not reconstruct a witness from an old provider record or a later login.
-Forwarded events retain their original action time.
+Save your selected events in Fonte and send a Broadcast with that action selected.
+For a test with one real recipient, have them visit the app, sign in, make a real
+changed save and reload the report to confirm it persisted.
 
-Fonte verifies the current installation credential, selected project, exact
-event mapping and Source revision. Rotation, disconnect, withdrawn permission
-or configuration changes fence stale delivery. The next native identity ACK
-automatically supplies the current revision after settings change, including a
-label-only edit. No application revision setting needs redeploying. The optional
-`sourceRevision` input is only a compatibility assertion; a value different from
-that identity's ACK is rejected. Previously captured old proofs stay fenced.
-Previously accepted native and
-PostHog copies of the same operation use the same existing deduplication key.
+Check the PostHog capture and its destination delivery, then open Broadcast
+Results. For this successful one-person journey, expect **Returned: 1** and
+**Action: 1**. Fonte matches the actual signed-in person using their verified
+email; forwarding a link does not identify them as the original recipient.
 
-The destination forwards only the closed payload
-`{schema,sourceId,projectId,eventId,event,userId,commitProof}` to
-`POST /v1/application-posthog-observations`. The existing signed proof
-authenticates the exact action with the private Source verifier; the destination
-needs no copy of the application key or installation headers. Legacy headers
-remain supported when both are valid. Disable debug logging and do not export
-person profiles or arbitrary event properties.
+The PostHog connection shows **Verification required** until a selected action
+reaches Fonte successfully, then **Verified action received**. A configured
+connection alone does not prove the action worked. Repeat the save with a failed
+write and confirm it adds no Action; retry the same saved operation and confirm
+it adds no duplicate.
 
-Realtime destination coverage is best effort. Missing deliveries, provider
-quarantine and disconnected periods do not establish zero activity. This adapter
-does not poll `/query` or promise a provider history cursor.
+## Retries, downtime and settings changes
 
-Connect your existing project in **Fonte → Settings → Plugins → PostHog**,
-select successful-action events, and verify a new committed action in Broadcast
-Results. Official provider references:
-[webhook destinations](https://posthog.com/docs/cdp/destinations/webhook),
-[capture authentication](https://posthog.com/docs/api),
-[destination delivery caveats](https://posthog.com/docs/cdp/destinations).
+Retry an original operation with its same UUID, time and verified sign-in facts.
+Do not replace them with the time of the retry or a later login. An action must
+have happened within its original sign-in's fifteen-minute measurement interval.
+When your existing business receipt retains those original facts, a trusted
+server can recover delivery after a restart or outage within thirty days. Check
+the current user and permission again, obtain Fonte's acknowledgement of the
+original identity, and resend the same original capture. Missing or erased
+evidence leaves the action unmeasured. The SDK provides no persistent store or
+automatic recovery without your application's retry or readback.
 
-The ordinary PostHog connection must distinguish authorization, event selection
-and backend action verification. Selecting an existing identified event is not
-enough to establish a successful action: this small server installation step is
-required. Old captured records must not be retroactively signed. Verify with a
-new genuine committed action, its actual provider capture/delivery and the
-independently expected Results, then repeat the adverse cases.
+Recovery preserves the original save time. It does not extend the Broadcast's
+seven-day attribution window.
+
+Recovery cannot renew browser Return or authorize a new action using an expired
+identity. Never sign an old PostHog record using a later login. Native and PostHog
+copies of the same original action are deduplicated by Fonte.
+
+Disconnects, key rotation, withdrawn permission and changed settings can reject
+older confirmations. The next acknowledged identity uses the current settings;
+you do not need to redeploy a revision number after editing a label. PostHog's
+realtime destination is best effort, so a missing delivery does not prove the
+recipient did nothing.
+
+See the [Results reference](./results-reference.md) for acknowledgement, timing,
+privacy and delivery details. PostHog documents its
+[webhook destinations](https://posthog.com/docs/cdp/destinations/webhook) and
+[destination delivery behavior](https://posthog.com/docs/cdp/destinations).

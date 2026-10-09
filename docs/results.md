@@ -1,200 +1,229 @@
 # Broadcast Results
 
-Upload CSV → install Fonte once → identify the current authenticated user → add
-up to five successful actions → optionally add money → Send → trustworthy Results.
+This guide connects one real signed-in visit and one saved report to a
+Broadcast. At the end, you can compare Fonte's Results with the user and
+saved record your application already knows.
 
-The native API uses `@fonte-is/core` version `0.2.0`. Install that version through
-the ordinary npm registry:
+Already using PostHog? Use the [PostHog setup](./posthog-selected-actions.md)
+for actions, and the browser visit example below for Returns.
+
+## 1. Connect your app
+
+Open **Fonte → Settings → Application**. Connect your application and add
+`report_saved` as a successful action. You can select up to five actions.
+Save the connection ID and one-time key in your server environment:
+
+```text
+FONTE_APPLICATION_SOURCE_ID=your-connection-id
+FONTE_APPLICATION_SERVER_KEY=your-server-key
+```
+
+**Version 0.2 is a preview.** Install the explicit version:
 
 ```sh
 npm install @fonte-is/core@0.2.0
 ```
 
-Server code requires Node.js 20.9 or later. Connect and configure your
-application in Fonte, then verify a signed-in visit and a successful action
-using the steps below.
-
-## Set up once
-
-Upload your recipient CSV in Fonte. Add your app connection, choose the actions
-you care about, and save the connection ID and server key in your server
-environment. Create one Fonte client there. Your app keeps its existing
-authentication and permissions.
-
-Identify the current authenticated user for each request that you measure. Use
-the verified email supplied by your authentication provider. Fonte matches
-that address exactly to a CSV Contact after email normalization. An unverified
-or unmatched user cannot establish a measured recipient.
+Use Node.js 20.9 or later and ESM on the server. Create `fonte.ts`:
 
 ```ts
-import { createFonte, type AuthenticatedAppUser } from "@fonte-is/core/results";
+import { createFonte } from "@fonte-is/core/results";
 
-const fonte = createFonte({
-  installationId: process.env.FONTE_APPLICATION_SOURCE_ID!,
-  serverKey: process.env.FONTE_APPLICATION_SERVER_KEY!,
-});
-
-export function identifyAuthenticatedRequest(
-  user: AuthenticatedAppUser,
-  existingServerPermission: boolean | null | undefined,
-) {
-  if (existingServerPermission !== true || user.emailVerified !== true) return null;
-  return fonte.identify(
-    { id: user.id, email: user.email, emailVerified: user.emailVerified },
-    { measurementAllowed: true },
-  );
+export function createFonteClient() {
+  return createFonte({
+    installationId: process.env.FONTE_APPLICATION_SOURCE_ID!,
+    serverKey: process.env.FONTE_APPLICATION_SERVER_KEY!,
+  });
 }
 ```
 
-`user` and `existingServerPermission` come from the current request's existing
-server authorities. Pass `true` only for a real affirmative measurement grant;
-denied or unknown permission withholds the observation. Authentication alone
-does not grant measurement permission.
+Your server authentication supplies the user's ID and verified email. Fonte
+matches that email to a Broadcast contact after trimming and lowercasing it.
+An unverified email cannot identify a recipient. A forwarded link does not
+make its visitor the original recipient.
 
-The returned handle belongs only to this authenticated user. Its original
-authentication witness covers at most 15 minutes of actions. Keep the handle
-local to the request or its supported response lifecycle.
-Discard it when the user changes, logs out or withdraws permission. Never keep
-a shared mutable current-user handle.
+Use your application's existing measurement permission. A signed-in session
+alone is not permission. If permission is denied or unknown, skip measurement.
 
-## Record the successful actions you care about
+## 2. Record the report after it saves
 
-Configure the same action keys in Fonte and in your app. Three ordinary examples:
-
-| Action key | Call after |
-| --- | --- |
-| `project_created` | A new project is actually committed |
-| `report_saved` | A report change is actually saved |
-| `invite_accepted` | An invitation is actually accepted |
-
-Create the handle while handling this authenticated request, before the useful
-action commits. Call the hook only for the original successful commit. A failed
-operation, no-change result, business replay, status read or background job
-does not establish another successful user action.
+Create `save-report.ts` to wrap your existing authentication and save functions.
+Connect `ReportApp` to those functions; do not accept the session, permission,
+or commit receipt from the browser.
 
 ```ts
-import type { FonteIdentityHandle } from "@fonte-is/core/results";
+import type { AuthenticatedAppUser, Fonte } from "@fonte-is/core/results";
 
-type UsefulAction = "project_created" | "report_saved" | "invite_accepted";
-type OriginalCommit = { operationId: string; committedAt: string };
+type ReportInput = { title: string };
+type Session = {
+  user: AuthenticatedAppUser;
+  measurementAllowed: boolean;
+};
+type SavedReport = {
+  report: { id: string; title: string };
+  // null for a no-change save or a replay of a business operation.
+  originalCommit: { operationId: string; committedAt: string } | null;
+};
+type ReportApp = {
+  readSession(): Promise<Session | null>;
+  saveReport(input: ReportInput, userId: string): Promise<SavedReport>;
+  // Check the current actor and permission using your existing server state.
+  canMeasure(userId: string): boolean;
+};
 
-export function recordSuccessfulAction(
-  handle: FonteIdentityHandle | null,
-  action: UsefulAction,
-  committed: OriginalCommit,
+export async function saveReport(
+  input: ReportInput,
+  app: ReportApp,
+  fonte: Fonte,
 ) {
-  return handle?.trigger(action, {
-    eventId: committed.operationId, // The original committed UUID.
-    occurredAt: committed.committedAt, // The original UTC commit time.
-  }) ?? false;
+  const session = await app.readSession();
+  if (!session) throw new Error("Sign in to save a report.");
+
+  const user = session.user;
+  const identity =
+    session.measurementAllowed === true && app.canMeasure(user.id) === true
+      ? fonte.identify(
+          { id: user.id, email: user.email, emailVerified: user.emailVerified },
+          { measurementAllowed: true },
+        )
+      : null;
+
+  const saved = await app.saveReport(input, user.id);
+
+  if (saved.originalCommit && app.canMeasure(user.id) === true) {
+    identity?.trigger("report_saved", {
+      eventId: saved.originalCommit.operationId,
+      occurredAt: saved.originalCommit.committedAt,
+    });
+  }
+
+  return saved.report;
 }
 ```
 
-Use the UUID and timestamp already owned by that operation. UTC timestamps such
-as a stored `Date.toISOString()` value are accepted. Repeated occurrences have
-different original UUIDs, while retries of one occurrence keep its UUID and
-time unchanged. A `true` return means the record was enqueued locally; it does
-not prove that Fonte received it. Return your business result without waiting
-for Fonte delivery.
-
-If your own account system has a genuine completed upgrade, you may configure
-an ordinary successful action such as `upgrade_completed`. Optional upgrade
-measurement uses your existing authoritative success receipt. Money is measured
-separately through the payment provider.
-
-## Measure an authenticated return
-
-`handle.returned()` is for real authenticated foreground activity. Identify
-alone, timers, background requests and status polling do not prove a return.
-Recheck current permission before using a handle for a later activity.
-
-For a visible authenticated browser page, pass only this request's
-`handle.browserIdentity` to that same user's page. Keep it in page memory and
-discard it on logout, identity switching or permission withdrawal. Do not put
-the server key or server client in the browser, or log/persist the browser
-identity.
+For Next.js, call this wrapper from your existing route or server action.
+It sends queued observations after the response, then closes this request's
+client. Create `report-request.ts`:
 
 ```ts
-import { recordFonteReturn, type FonteBrowserIdentity } from "@fonte-is/core/results-browser";
+import { after } from "next/server";
+import { createFonteClient } from "./fonte.js";
+import { saveReport } from "./save-report.js";
 
-export function observeVisibleAuthenticatedPage(
+export async function saveReportInRequest(
+  input: Parameters<typeof saveReport>[0],
+  app: Parameters<typeof saveReport>[1],
+) {
+  const fonte = createFonteClient();
+  try {
+    return await saveReport(input, app, fonte);
+  } finally {
+    after(async () => {
+      try {
+        await fonte.flush();
+      } finally {
+        fonte.close();
+      }
+    });
+  }
+}
+```
+
+In a long-lived Node server, create one client at startup and pass it to
+`saveReport()`. Keep every identity handle local to its own request and close
+the shared client only when its lifecycle ends. Other serverless frameworks
+need their equivalent of `after()`; do not close before delivery finishes.
+
+Identify the user before the save, then call `trigger()` after the transaction
+commits. If the save throws, the action is never called. Your save function
+must check the user's access and return a commit receipt only for an actual
+new saved change.
+
+Use the operation's original UUID and UTC commit time, such as a stored
+`Date.toISOString()` value. The report's ID is not the operation's ID: saving
+the same report twice creates two operations. A delivery retry keeps the
+original operation ID and time.
+
+Map your authentication provider's user to exactly `{ id, email,
+emailVerified }`. Passing the provider's entire user object adds fields the
+SDK rejects. Discard the handle if the user or permission changes. It expires
+after at most 15 minutes.
+
+`trigger()` returns `true` when an event enters the local queue. Delivery
+happens in the background; do not wait for Fonte before returning the saved
+report. A failed delivery must not turn a successful save into an app error.
+
+## 3. Record a signed-in visit
+
+When serving a signed-in page, identify its current user as above and pass
+only `identity.browserIdentity` to that user's page. Keep it in page memory.
+Discard it on logout, account switching, or permission withdrawal.
+
+Use this browser helper on a real visible page visit or navigation:
+
+```ts
+import {
+  recordFonteReturn,
+  type FonteBrowserIdentity,
+} from "@fonte-is/core/results-browser";
+
+export function recordVisit(
   identity: FonteBrowserIdentity | null,
-  isCurrentlyAuthenticated: boolean,
-  existingMeasurementPermission: boolean | null | undefined,
+  currentUserId: string | null,
+  measurementAllowed: boolean,
 ) {
   if (
-    !isCurrentlyAuthenticated ||
-    existingMeasurementPermission !== true ||
     !identity ||
+    !currentUserId ||
+    identity.userId !== currentUserId ||
+    measurementAllowed !== true ||
     document.visibilityState !== "visible"
-  ) return false;
+  )
+    return false;
+
   return recordFonteReturn(identity);
 }
 ```
 
-Call this for a real page visit or foreground navigation, with current
-permission and the correct current user's browser identity. It starts best
-effort delivery. It cannot prove a durable receipt to your browser code.
+The user and permission must come from your current signed-in state. Never
+place the server key in the page or store the browser identity in logs,
+cookies, or local storage. A background poll, timer, or `identify()` call
+does not record a Return. A `true` result means delivery started, not that
+Fonte has confirmed it.
 
-## Optional money, then Send and Results
+For a server-rendered visit, `identity.returned()` is also available. Call it
+only for actual authenticated foreground activity, with current permission.
 
-Money comes from Fonte's authoritative Stripe payment/refund connection when
-that connection is verified and available. These SDK calls never report money
-collected or refunded. A purchase-shaped action name cannot establish a payment.
-Leave money unavailable until the payment connection is verified.
+## 4. Send once and check Results
 
-Send your Broadcast normally and open its Results in Fonte. Results show which
-CSV Contacts returned, which performed each configured successful action, and
-what verified money was collected or refunded when available. Repeated events
-do not turn one Contact into several people. Actions are observed after Send;
-this does not assert that the Broadcast caused them.
+Upload a contact you control and send them a real Broadcast. After sending,
+sign in as that contact, visit a visible page, and save a changed report.
+Read the saved report back from your application's normal interface before
+checking the Broadcast's Results.
 
-Use the [repeatable customer journey](./results-journey.md) to compare real
-sign-in and committed actions with independently frozen Results, then repeat
-direct returns, wrong users, failed actions and delivery/restart cases.
+| What you independently verified                      | Expected Results                         |
+| ---------------------------------------------------- | ---------------------------------------- |
+| One recipient visited while signed in                | Returned: 1                              |
+| That recipient saved a new report change             | `report_saved`: 1                        |
+| They revisit or delivery retries                     | Still one person for each result         |
+| A different, unmatched user opens the forwarded link | No attribution to the original recipient |
+| The save fails or makes no change                    | No successful action                     |
 
-For existing PostHog events, follow the [PostHog setup](./posthog-selected-actions.md).
-Connect the project, select successful-action events, and add the server witness
-after the business commit. Existing identified records without that witness
-cannot prove a successful action.
+Also try signing in directly without clicking the email. The authenticated
+visit should still establish Return attribution for the matching contact.
+Results count activity within seven days after the original send was accepted.
+They do not establish that the Broadcast caused it.
 
-## Capture and retry limits
+If Results are missing, check the contact's verified email, current permission,
+selected action key, and connection status. A delivery gap does not prove the
+user did nothing. See the [delivery reference](./results-reference.md) before
+retrying an old operation or testing restarts.
 
-Capture is best effort until Fonte durably acknowledges it. Delivery uses a
-bounded in-memory queue and bounded retries. Process exit, redeploy, overflow,
-explicit close or denied authorization can lose unacknowledged observations.
-The SDK adds no persistent outbox and makes no cross-restart delivery guarantee.
+## Payments and existing integrations
 
-SDK transport retries preserve exact identity and action IDs, payloads and
-original clocks. An application can retain its original verified authentication
-witness with the existing durable business receipt and retry that same committed
-fact after restart. Reverify the current actor and measurement permission, then
-use `identify()` with the original identity UUID, observed time and validity
-interval. After that exact identity's stored/replayed ACK, server `trigger()`
-can replay the original action, or `postHogWitness()` can supply metadata for
-its original PostHog capture, within the existing 30-day intake bound. Both
-require the explicitly retained original action UUID/time and an action that
-occurred inside the original witness interval. Reuse the original identity UUID,
-user, observed time and validity interval; never substitute a later login,
-invent an older clock or sign a provider record without its genuine business
-receipt. The current installation, key, selected event mapping and privacy
-permissions still control admission.
+Payment and refund Results require Fonte's verified Stripe connection and
+actual provider records. A `purchase_completed` action cannot establish that
+money was collected.
 
-A default `identify()` normally creates a new identity ID; reusing an action
-UUID under that different witness is a conflicting record. The SDK adds no
-persistent store or automatic restart recovery. The application must already
-own the original facts; missing or erased evidence must withhold the conversion.
-Current actions and browser Return authority still expire after 15 minutes.
-Recovering the original committed fact grants neither capability and does not
-establish a new action or a new visit.
-
-`fonte.status()` reports bounded delivery state without private payloads. A
-disconnected or incomplete source means coverage is incomplete; a missing
-observation is not proof that a customer did nothing. `fonte.flush()` is an
-optional separate supported lifecycle drain. Never await it in the successful
-business operation. `fonte.close()` discards queued work; use it when ending
-the client lifecycle or stopping the whole installation.
-
-Existing integrations can continue using the separately documented
-[Website/acquisition API](../packages/core/README.md#existing-websiteacquisition-api)
-and [historical application v1 API](./application-outcomes.md).
+Existing integrations can keep the [Website API](./website-tracking.md) and
+[application v1 API](./application-outcomes.md).
