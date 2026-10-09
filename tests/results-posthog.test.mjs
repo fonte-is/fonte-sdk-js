@@ -152,7 +152,7 @@ test("reordered receipts qualify only their own non-erased identity and pending 
   assert.equal(value.status().requests, 1);
 });
 
-test("recovery stress distinguishes exact ACK cells from original action clocks and late identity expiry", async t => {
+test("recovery stress distinguishes exact ACK cells, original action clocks and expired current authority", async t => {
   const count = 48, offsets = [-1, 0, 1, 300000, 899999, 900000];
   let clock = now + 600000, phase = "unavailable", release, revision = "7";
   const outcome = eventId => Number(eventId.slice(-12)) % 9 === 0 ? "erased"
@@ -233,9 +233,17 @@ test("recovery stress distinguishes exact ACK cells from original action clocks 
   const delayed = value.flush(); await new Promise(resolve => setImmediate(resolve));
   clock = now + 900000; release();
   assert.equal((await delayed).acknowledged, count + 3);
-  assert.equal(expires.postHogTrigger("report_saved", automatic), null); noProof();
-  assert.equal(renewed.postHogTrigger("report_saved", entry.action), null);
+  assert.equal(claims(expires.postHogTrigger("report_saved", automatic)).record.identityEventId, uuid(800));
+  for (const item of entries) {
+    const delta = Date.parse(item.action.occurredAt) - now;
+    const expected = outcome(uuid(item.n)) !== "erased" && delta >= 0 && delta < 900000;
+    assert.equal(item.identity.postHogTrigger("report_saved", item.action) !== null, expected);
+    assert.equal(item.identity.browserIdentity, null);
+    assert.equal(item.identity.returned({ eventId: uuid(item.n + 2000), occurredAt: item.action.occurredAt }), false);
+    assert.equal(item.identity.postHogTrigger("report_saved", { ...item.action, occurredAt: new Date(clock).toISOString() }), null);
+  }
+  assert.equal(claims(renewed.postHogTrigger("report_saved", entry.action)).sourceRevision, 8);
   assert.equal(claims(original).record.occurredAt, entry.action.occurredAt);
   t.diagnostic(JSON.stringify({ controlledRecoveryStress: { identities: count, admitted, erased, beforeWitness,
-    outsideWindow, invalidReceiptQualified: 0, expiredHandlesQualified: 0, expiredIdentityAckConfirmed: 1 } }));
+    outsideWindow, invalidReceiptQualified: 0, expiredCurrentActionsQualified: 0, expiredIdentityAckConfirmed: 1 } }));
 });

@@ -54,7 +54,8 @@ for (const days of [13, 20, 30]) test(`native recovery after ${days} days preser
   assert.equal(f.identity.trigger("report_saved", { ...action, occurredAt: "2026-10-06T09:59:59.999Z" }), false);
   assert.equal(f.identity.trigger("report_saved", { ...action, occurredAt: "2026-10-06T10:15:00.000Z" }), false);
   assert.equal(f.identity.returned(action), false);
-  assert.equal(f.identity.postHogTrigger("report_saved", { ...action, projectId: "123", event: "Report saved" }), null);
+  assert.equal(f.identity.postHogTrigger("report_saved", { ...action, projectId: "123", event: "Report saved",
+    occurredAt: new Date(originalClock + days * day).toISOString() }), null);
   assert.equal(f.value.status().queued, 0);
 });
 

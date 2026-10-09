@@ -100,9 +100,9 @@ export interface FonteOptions extends Omit<
 export interface FonteIdentityHandle {
   /** After commit. Late server replay requires the original UUID/time and this original identity's durable ACK. */
   trigger(key: string, options?: FonteObservationOptions): boolean;
-  /** After commit and this identity's durable ACK. Uses its acknowledged Source revision; no native trigger enqueue. */
+  /** After commit and this identity's durable ACK. Original UUID/time can recover within 30 days; no native trigger enqueue. */
   postHogTrigger(key: string, options: FontePostHogTriggerOptions): FontePostHogCapture | null;
-  /** Add proof to an existing backend capture without changing its name, UUID, time or distinct ID. No native Action enqueue. */
+  /** Add proof to the original committed capture, including acknowledged original-fact recovery. No native Action enqueue. */
   postHogWitness(key: string, options: FontePostHogTriggerOptions): FontePostHogWitness | null;
   /** Current authenticated foreground activity. */
   returned(options?: FonteObservationOptions): boolean;
