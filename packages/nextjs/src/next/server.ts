@@ -2,8 +2,10 @@ export { collect } from "@fonte-is/core/server";
 export type {
   CollectBody,
   CollectEventType,
+  CollectionPolicy,
+  CollectionReceipt,
   Evidence,
   ParseOptions,
-  SourceTouchClassification,
-  TouchPayload,
+  SourceEvidence,
+  SourceFields,
 } from "@fonte-is/core/server";

@@ -794,7 +794,7 @@ async function applyCsvAudience(
 ): Promise<BroadcastDraftLifecycleResult | BroadcastPavedPreparationResult> {
   if (!input.audience_file) return draft;
   if (!dependencies.recipientSetSupplier) {
-    return blocked(context, "The internal CSV audience supplier is unavailable.", [
+    return blocked(context, "CSV audience import is unavailable.", [
       "broadcast_csv_audience_supplier_unavailable",
     ]);
   }

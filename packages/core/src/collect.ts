@@ -1,25 +1,22 @@
-import { classifySourceTouch } from "./collect-classify.js";
 import { acceptScope, parse } from "./collect-parse.js";
-import { minimizeScope, permitted } from "./collection-policy.js";
-import { toTouch } from "./collect-touch.js";
-
+import {
+  minimizeScope,
+  minimizeSourceEvidence,
+  permitted,
+} from "./collection-policy.js";
 export const collect = {
   parse,
   minimizeScope,
+  minimizeSourceEvidence,
   permitted,
   acceptScope,
-  classifySourceTouch,
-  toTouch,
 };
-
 export type {
   CollectBody,
   CollectEventType,
   Evidence,
   ParseOptions,
-  SourceTouchClassification,
-  TouchPayload,
+  CollectionReceipt,
 } from "./collect-types.js";
-
 export type { CollectionPolicy } from "./collection-policy.js";
-export type { CollectionReceipt } from "./collect-types.js";
+export type { SourceFields, SourceEvidence } from "./source-evidence.js";

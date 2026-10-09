@@ -285,8 +285,6 @@ function operatorDependencies(fetch) {
     fetch,
     authorize: async () => "synthetic-bearer",
     sleep: async () => {},
-    readProviderEvidenceCandidateFile: async () => null,
-    readProviderPlacementApplicationFile: async () => null,
   };
 }
 

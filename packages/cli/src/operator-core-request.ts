@@ -126,8 +126,11 @@ export function createCoreRequester(
         failureEffect(post, response.status, reason),
       );
     }
-    const allowNullReceipt = !post && callOptions &&
-      "allowNullReceipt" in callOptions && callOptions.allowNullReceipt === true;
+    const allowNullReceipt =
+      !post &&
+      callOptions &&
+      "allowNullReceipt" in callOptions &&
+      callOptions.allowNullReceipt === true;
     if (!parsed.ok || (parsed.value === null && !allowNullReceipt)) {
       throw new CoreOperatorError(
         "core_operator_receipt_invalid",
@@ -189,7 +192,12 @@ function requestMethod(
 ): PreparedRequest["method"] {
   if (!hasBody) return "GET";
   if (method === undefined) return "POST";
-  if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+  if (
+    method === "POST" ||
+    method === "PUT" ||
+    method === "PATCH" ||
+    method === "DELETE"
+  ) {
     return method;
   }
   throw new CoreOperatorError("core_request_invalid", null, "none");
@@ -318,11 +326,7 @@ function failureEffect(
   reason: string,
 ): "none" | "unknown" {
   if (post?.lostResponseEffect !== "unknown" || status < 500) return "none";
-  if (
-    reason === "resend_bridge_unavailable" ||
-    reason === "resend_bridge_provider_unavailable" ||
-    reason === "provider_oauth_unavailable"
-  ) {
+  if (reason === "provider_oauth_unavailable") {
     return "none";
   }
   return "unknown";

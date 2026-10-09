@@ -3,7 +3,6 @@ import { CliUsageError } from "./errors.js";
 import { operatorHelp } from "./operator-help.js";
 import { parseOperatorArguments } from "./operator-arguments.js";
 import { AUTH_HELP_TEXT } from "./auth-commands.js";
-import { parseReleaseArguments } from "./release-arguments.js";
 
 /** Implement exactly the invocation grammar in CONTRACT.md. */
 export function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -34,11 +33,9 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
   const command = argv[0];
   if (command === "setup") return parseSetupArguments(argv.slice(1));
   if (command === "auth") return parseAuthArguments(argv.slice(1));
-  if (command === "release") return parseReleaseArguments(argv.slice(1));
   if (
     command === "broadcast" ||
     command === "bridge" ||
-    command === "provider-evidence" ||
     command === "sequence" ||
     command === "campaign" ||
     command === "segment"

@@ -10,6 +10,10 @@ const policy = () => ({
   routes: ["/"],
   clickIds: true,
   adCookies: true,
+  sourceFields: {
+    query: ["campaign_click", "alternate_click"],
+    cookies: ["visit_cookie", "session_cookie"],
+  },
 });
 const storage = () => {
   const m = new Map();
@@ -80,8 +84,8 @@ test("lost response and unavailable storage preserve direct snapshot ID payload 
         collectionPolicy: policy,
       });
       await capture.page();
-      window.location = new URL("https://example.test/?twclid=changed");
-      document.cookie = "_fbc=changed";
+      window.location = new URL("https://example.test/?campaign_click=changed");
+      document.cookie = "visit_cookie=changed";
       await capture.retry();
       assert.equal(requests.length, 4);
       assert.deepEqual(requests.slice(0, 2), requests.slice(2));
@@ -119,35 +123,6 @@ test("unknown policy touches no storage cookies or transport", () =>
     },
     { blockedStorage: true },
   ));
-test("X referral outranks inherited Meta cookies; missing referrer stays unknown", () => {
-  const x = collect.classifySourceTouch({
-    current_url: "https://example.test/",
-    referrer: "https://t.co/link",
-    fbc: "old",
-    fbp: "old",
-  });
-  assert.equal(x.sourcePlatform, "x");
-  assert.equal(x.channelType, "organic");
-  assert.notEqual(
-    collect.classifySourceTouch({
-      current_url: "https://example.test/",
-      referrer: "https://x.com.attacker.test/",
-    }).sourcePlatform,
-    "x",
-  );
-  assert.equal(
-    collect.classifySourceTouch({ current_url: "https://example.test/" })
-      .sourcePlatform,
-    "unknown",
-  );
-  const touch = collect.toTouch(
-    { twclid: "x-click", ttclid: "tiktok-click" },
-    "browser",
-  );
-  assert.equal(touch.twclid, "x-click");
-  assert.equal(touch.ttclid, "tiktok-click");
-});
-
 test("policy withdrawal prevents pending replay and clears memory identity", () =>
   browser(
     async (requests) => {
@@ -175,9 +150,10 @@ test("policy withdrawal prevents pending replay and clears memory identity", () 
 test("frozen snapshot has only admitted fields and referral origin", () =>
   browser(async (requests) => {
     window.location = new URL(
-      "https://example.test/?utm_source=fake-secret@example.test&twclid=ok-click&access_token=planted-secret",
+      "https://example.test/?utm_source=fake-secret@example.test&campaign_click=ok-click&access_token=planted-secret",
     );
-    document.referrer = "https://x.com/private/path?token=planted-secret";
+    document.referrer =
+      "https://referrer.example/private/path?token=planted-secret";
     await createCapture({
       storage: "redaction",
       collectionPolicy: policy,
@@ -186,8 +162,10 @@ test("frozen snapshot has only admitted fields and referral origin", () =>
     assert.ok(!serialized.includes("planted-secret"));
     assert.ok(!serialized.includes("fake-secret"));
     assert.ok(!serialized.includes("/private/path"));
-    assert.equal(requests[0].scope.twclid, "ok-click");
-    assert.equal(requests[0].scope.referrer, "https://x.com");
+    assert.deepEqual(requests[0].sourceEvidence.query, [
+      { name: "campaign_click", value: "ok-click" },
+    ]);
+    assert.equal(requests[0].scope.referrer, "https://referrer.example");
   }));
 test("retry stops after the bounded number of attempts", () =>
   browser(
@@ -233,15 +211,17 @@ test("bounded parser cancels an oversized streaming request before reading the r
   assert.ok(cancelled);
   assert.ok(reads <= 2);
 });
-test("source link identity does not replace observed referrer", () => {
-  const c = collect.classifySourceTouch({
-    fonte: "opaque-issued-link",
-    current_url: "https://example.test/",
-    referrer: "https://elsewhere.example.test",
-  });
-  assert.equal(c.sourcePlatform, "elsewhere.example.test");
-  assert.equal(c.channelType, "referral");
-});
+test("source link identity and observed referrer remain separate facts", () =>
+  browser(async (requests) => {
+    window.location = new URL("https://example.test/?fonte=opaque-issued-link");
+    document.referrer = "https://elsewhere.example.test/private";
+    await createCapture({
+      storage: "link-evidence",
+      collectionPolicy: () => ({ ...policy(), sourceTokens: true }),
+    }).page();
+    assert.equal(requests[0].scope.fonte, "opaque-issued-link");
+    assert.equal(requests[0].scope.referrer, "https://elsewhere.example.test");
+  }));
 
 test("renewing policy expiry cannot extend an existing pending snapshot", () =>
   browser(
@@ -334,13 +314,212 @@ test("explicit reset after a document reload erases owned persistent continuity"
   }));
 
 test("installation can select all routes and campaigns without an automatic expiry", () => {
-  const rich = { status: "granted", version: "synthetic-rich-v1", expiresAt: null, storage: "persistent", routes: ["*"], campaignValues: true, clickIds: true, sourceTokens: true };
+  const rich = {
+    status: "granted",
+    version: "synthetic-rich-v1",
+    expiresAt: null,
+    storage: "persistent",
+    routes: ["*"],
+    campaignValues: true,
+    clickIds: true,
+    sourceFields: { query: ["campaign_click"], cookies: [] },
+    sourceTokens: true,
+  };
   assert.equal(collect.permitted(rich), true);
-  const scope = collect.minimizeScope({ current_url: "https://example.test/workspace/home?secret=excluded", utm_campaign: "new-campaign", twclid: "new-click" }, rich);
+  const scope = collect.minimizeScope(
+    {
+      current_url: "https://example.test/workspace/home?secret=excluded",
+      utm_campaign: "new-campaign",
+      campaign_click: "new-click",
+    },
+    rich,
+  );
   assert.equal(scope.utm_campaign, "new-campaign");
-  assert.equal(scope.twclid, "new-click");
+  assert.deepEqual(
+    collect.minimizeSourceEvidence(
+      { query: [{ name: "campaign_click", value: "new-click" }], cookies: [] },
+      rich,
+    ).query,
+    [{ name: "campaign_click", value: "new-click" }],
+  );
   assert.equal(scope.current_url, "https://example.test/workspace/home");
-  assert.equal(collect.minimizeScope({ current_url: "https://example.test/docs/start" }, { ...rich, routes: ["/docs/*"] }).canonical_route, "/docs/start");
-  assert.equal(collect.minimizeScope({ current_url: "https://example.test/not-docs/start" }, { ...rich, routes: ["/docs/*"] }), null);
+  assert.equal(
+    collect.minimizeScope(
+      { current_url: "https://example.test/docs/start" },
+      { ...rich, routes: ["/docs/*"] },
+    ).canonical_route,
+    "/docs/start",
+  );
+  assert.equal(
+    collect.minimizeScope(
+      { current_url: "https://example.test/not-docs/start" },
+      { ...rich, routes: ["/docs/*"] },
+    ),
+    null,
+  );
   assert.equal(collect.permitted({ ...rich, status: "denied" }), false);
 });
+
+test("campaign facts fit 500 UTF-8 bytes or remain absent without truncating other evidence", () =>
+  browser(async (requests) => {
+    const url = new URL("https://example.test/");
+    url.searchParams.set("utm_source", "x".repeat(501));
+    url.searchParams.set("utm_medium", "é".repeat(251));
+    url.searchParams.set("utm_campaign", "é".repeat(250));
+    url.searchParams.set("utm_content", "x".repeat(500));
+    url.searchParams.set("utm_term", "campaign\u0000changed");
+    url.searchParams.set("fonte", "issued-link");
+    url.searchParams.set("campaign_click", "retained-click");
+    window.location = url;
+    const observed = [];
+    await createCapture({
+      storage: "campaign-bounds",
+      collectionPolicy: () => ({
+        ...policy(),
+        campaignValues: true,
+        sourceTokens: true,
+      }),
+      onObservation: (body) => observed.push(body),
+    }).page();
+    assert.equal(requests.length, 2);
+    assert.deepEqual(observed, requests);
+    for (const body of requests) {
+      assert.equal(body.scope.utm_source, undefined);
+      assert.equal(body.scope.utm_medium, undefined);
+      assert.equal(body.scope.utm_term, undefined);
+      assert.equal(body.scope.utm_campaign, "é".repeat(250));
+      assert.equal(body.scope.utm_content, "x".repeat(500));
+      assert.equal(body.scope.fonte, "issued-link");
+      assert.deepEqual(body.sourceEvidence.query, [
+        { name: "campaign_click", value: "retained-click" },
+      ]);
+      assert(Buffer.byteLength(JSON.stringify(body)) <= 16384);
+    }
+    const reparsed = await collect.parse(
+      new Request("https://example.test/", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requests[0],
+          scope: {
+            ...requests[0].scope,
+            utm_source: "x".repeat(501),
+            utm_medium: "é".repeat(251),
+            utm_term: "campaign\u0000changed",
+          },
+        }),
+      }),
+    );
+    assert.deepEqual(reparsed, requests[0]);
+  }));
+
+test("collector never shortens a route or source token into a different accepted fact", () =>
+  browser(async (requests) => {
+    window.location = new URL(`https://example.test/${"p".repeat(2000)}`);
+    await createCapture({
+      storage: "parser-field-bounds",
+      collectionPolicy: () => ({ ...policy(), routes: ["*"] }),
+    }).page();
+    const body = requests[0];
+    const parse = (scope) =>
+      collect.parse(
+        new Request("https://example.test/", {
+          method: "POST",
+          body: JSON.stringify({ ...body, scope }),
+        }),
+      );
+    assert.equal(
+      (await parse(body.scope)).scope.canonical_route,
+      `/${"p".repeat(2000)}`,
+    );
+    assert.equal(
+      await parse({
+        ...body.scope,
+        current_url: `https://example.test/${"p".repeat(2048)}`,
+      }),
+      null,
+    );
+    const admitted = await parse({
+      ...body.scope,
+      fonte: `${"f".repeat(500)}suffix`,
+      referrer: `https://${"r".repeat(2048)}.test/`,
+    });
+    assert.equal(admitted.scope.fonte, undefined);
+    assert.equal(admitted.scope.referrer, undefined);
+    assert.equal(admitted.scope.current_url, body.scope.current_url);
+    assert.equal(admitted.journeyId, body.journeyId);
+  }));
+
+test("an oversized route is neither observed nor queued and a later valid visit still works", () =>
+  browser(async (requests) => {
+    window.location = new URL(`https://example.test/${"x".repeat(20000)}`);
+    const observed = [];
+    const capture = createCapture({
+      storage: "route-bounds",
+      collectionPolicy: () => ({ ...policy(), routes: ["*"] }),
+      onObservation: (body) => observed.push(body),
+    });
+    const result = await capture.page();
+    assert(result.deliveries.every((item) => item.status === "skipped"));
+    assert.equal(requests.length, 0);
+    assert.equal(observed.length, 0);
+    assert.deepEqual((await capture.retry()).deliveries, []);
+    window.location = new URL("https://example.test/");
+    await capture.page();
+    assert.equal(requests.length, 2);
+  }));
+
+test("complete envelopes over the collector limit never reach hooks, transport or retry", () =>
+  browser(async (requests) => {
+    const query = Array.from(
+      { length: 8 },
+      (_, i) => `query_${i}_${"q".repeat(56)}`,
+    );
+    const cookies = Array.from(
+      { length: 2 },
+      (_, i) => `cookie_${i}_${"c".repeat(55)}`,
+    );
+    const url = new URL(`https://example.test/${"p".repeat(2000)}`);
+    for (const name of query) url.searchParams.set(name, "x".repeat(500));
+    for (const name of [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term",
+    ])
+      url.searchParams.set(name, '"'.repeat(500));
+    url.searchParams.set("fonte", "f".repeat(500));
+    window.location = url;
+    document.referrer = `https://${"r".repeat(2000)}.test/`;
+    document.cookie = cookies
+      .map((name) => `${name}=${"c".repeat(500)}`)
+      .join("; ");
+    const observed = [];
+    const capture = createCapture({
+      storage: "envelope-bounds",
+      collectionPolicy: () => ({
+        ...policy(),
+        routes: ["*"],
+        campaignValues: true,
+        sourceTokens: true,
+        sourceFields: { query, cookies },
+      }),
+      onObservation: (body) => observed.push(body),
+    });
+    const result = await capture.page();
+    assert.equal(result.deliveries.length, 2);
+    assert(
+      result.deliveries.every(
+        (item) => item.status === "failed" && item.reason === "rejected",
+      ),
+    );
+    assert.equal(requests.length, 0);
+    assert.equal(observed.length, 0);
+    assert.deepEqual((await capture.retry()).deliveries, []);
+    window.location = new URL("https://example.test/");
+    document.referrer = "";
+    document.cookie = "";
+    await capture.page({ navigation: true });
+    assert.equal(requests.length, 2);
+    assert.equal(observed.length, 2);
+  }));

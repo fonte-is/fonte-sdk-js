@@ -22,7 +22,7 @@ interface StoreReplaceOptions {
   readonly signal?: AbortSignal;
 }
 
-/** Compatibility surface retained until FON-679 switches CLI composition. */
+/** Credential storage interface for sign-in operations. */
 export interface SecureLoginStore {
   read(): Promise<string | null>;
   write(value: string): Promise<void>;

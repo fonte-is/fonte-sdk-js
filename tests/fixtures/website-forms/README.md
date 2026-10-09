@@ -1,4 +1,4 @@
-These are frontend browser fixtures for FON-822. The injected submission port
+These are frontend browser fixtures. The injected submission port
 returns synthetic receipts and never calls Core, creates Contacts, persists
 entered values, or sends email. Fixture values use `.test` addresses only.
 
@@ -15,7 +15,7 @@ node --test tests/website-forms.test.mjs
 
 The suite uses Playwright's installed Chromium, falling back to the installed
 headless Chrome channel when no Playwright browser cache exists. It writes the
-browser/profile receipt, screenshots and Playwright trace to
-`/private/tmp/fon822-website-forms-evidence/`. These are source-only browser
+browser/profile receipt, screenshots and Playwright trace to a temporary
+directory that is removed after the suite. These are source-only browser
 evidence, not proof of durable acceptance, production CDN delivery or performance
-on a customer website. The full UW-1 measurements remain owned by FON-828.
+on a customer website.

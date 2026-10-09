@@ -3,7 +3,7 @@
 See which Broadcast recipients returned to your app and completed a successful
 action, such as saving a report or accepting an invitation.
 
-**0.2 is a preview.** Install the explicit version:
+**0.2 is an unpublished preview.** When released, install the explicit version:
 
 ```sh
 npm install @fonte-is/core@0.2.0
@@ -33,33 +33,36 @@ const fonte = createFonte({
 });
 ```
 
-The [Results guide](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/results.md)
-includes the complete server save and browser visit examples. Keep the server
+The Results guide, `docs/results.md`, includes the complete server save and
+browser visit examples. Keep the server
 key on your server. Each identity handle belongs to one authenticated user;
 never share it as a global "current user."
 
 Action calls queue locally and deliver in the background. A `true` return does
 not mean Results have updated. Unconfirmed events are held in memory and can
-be lost on restart. See the
-[API and delivery reference](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/results-reference.md)
-for retries and recovery.
+be lost on restart. See `docs/results-reference.md` for retries and recovery.
 
-## Already using PostHog?
+## Carry actions through existing events
 
-Connect your existing project in **Fonte → Settings → Plugins → PostHog**,
-then select the events you want to measure. The
-[PostHog guide](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/posthog-selected-actions.md)
-shows how your server confirms that the selected action actually saved.
-Selecting an event alone does not prove a successful action.
+`identity.confirmTrigger()` signs an original saved action. Any event pipeline
+can carry that confirmation in its metadata. Fonte verifies it using the same
+identity, permission and Results rules as direct delivery. See
+`docs/action-confirmations.md`.
 
 ## Existing integrations
 
 The Website and application v1 APIs remain available:
 
-- [Website tracking](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/website-tracking.md)
+- Website tracking, `docs/website-tracking.md`,
   uses `@fonte-is/core` and `@fonte-is/core/server`.
-- [Application v1](https://github.com/fonte-is/fonte-sdk-js/blob/core-v0.2.0/docs/application-outcomes.md)
+- Application v1, `docs/application-outcomes.md`,
   uses `@fonte-is/core/application`.
 
-All these guides are also included in the installed package's `docs` directory.
+Website tracking accepts campaign values up to 500 UTF-8 bytes without control
+characters and a route origin plus path up to 2,048 UTF-8 bytes. An oversized
+campaign value is omitted as a whole. A browser observation over 16,384 bytes
+is rejected before the observation hook, transport or pending queue.
+
+These guides live in the repository's `docs` directory and the installed
+package's `@fonte-is/core/docs` directory.
 The package has no runtime dependencies and is licensed under Apache-2.0.

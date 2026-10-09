@@ -6,9 +6,8 @@ observations to an **existing Website installation** through the server-only
 authentication, account authorization, Contact mapping, business transactions,
 and entitlement store. Keep the existing Website collector in the host layout.
 
-This is source and local protocol qualification using explicitly synthetic host
-ports. It is not a customer pilot, a verified payment-provider connection, or a
-complete qualification of Broadcast Results.
+The reference requires your application's real session and business-store
+bindings. Its example report and plan changes do not verify a payment.
 
 ## Bind the existing application ports
 
@@ -127,30 +126,28 @@ immutable event UUIDs/bodies, and the SDK acknowledges success only after the
 exact Core receipt confirms every submitted event. Fonte-ACK durability belongs
 to Core.
 
-## Local qualification
+## Check the example
 
-Build the SDK candidate packages, then run from the SDK repository root:
+Build the SDK packages, then run from the SDK repository root:
 
 ```sh
 node --test tests/application-reference.test.mjs
 node node_modules/typescript/bin/tsc -p examples/application-nextjs/tsconfig.json
 ```
 
-The focused test compiles the actual reference wrapper with strict TypeScript,
-uses the actual `@fonte-is/nextjs/application` server export, and sends batches
+The test compiles the reference wrapper with strict TypeScript,
+uses the `@fonte-is/nextjs/application` server export, and sends batches
 to a local HTTP receiver. It covers authenticated report success, returns,
 explicit permission denial without observation reads, auth/business failures,
 genuine versus pending/failed upgrades, stable UUID replay, outages/recovery,
 source denial, and absence of fabricated payments.
 
-The receiver supplies synthetic receipts to test SDK behavior. It is not Core
-storage or provider proof. Core integration and independent Results qualification
-must inspect source ingestion, Send-time custody, outcome calculation, customer
-Results presentation, and the real deployment separately.
+The receiver supplies synthetic receipts to test SDK behavior. Check your
+installation separately by saving a real record and comparing its authenticated
+person and commit time with the visible Broadcast Results.
 
 The example manifest references this checkout's Next.js SDK package. For an
-isolated consumer build, pack the candidate Core/React/Next.js packages and
+isolated consumer build, pack the Core/React/Next.js packages and
 install those tarballs together in a disposable copy of the example, then run
-its `build` command. The checkout's version label alone does not claim that its
-new application export has been published to the registry. The reference stays
-unbound until the host integrates its existing services.
+its `build` command. The reference stays unbound until the host integrates its
+existing services.

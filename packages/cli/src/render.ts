@@ -54,6 +54,13 @@ export function renderHuman(receipt: AnyCliReceipt): string {
   if (receipt.outcome === "removed") {
     return "Fonte was removed.\n";
   }
+  if (receipt.reason === "recorded_sdk_installation_verified") {
+    return [
+      "The recorded Fonte SDK 0.1.0 installation is intact.",
+      "Current setup targets SDK 0.2.0. No upgrade was performed.",
+      "",
+    ].join("\n");
+  }
   if (receipt.state === "prepared") {
     return [
       "Fonte is prepared locally.",

@@ -21,13 +21,10 @@ export interface WorkspaceInvitationWorkspaceResult {
 export interface WorkspaceInvitationResult {
   readonly invitation_id: string;
   readonly workspace: WorkspaceInvitationWorkspaceResult;
-  readonly intended_identity: {
-    readonly supabase_subject: string;
-    readonly email: string;
-  };
+  readonly intended_email: string;
   readonly role: WorkspaceInvitationRole;
   readonly status: WorkspaceInvitationStatus;
-  readonly issued_by_supabase_subject: string;
+  readonly grant_id: string | null;
   readonly created_at: string;
   readonly expires_at: string;
   readonly revoked_at: string | null;
@@ -37,14 +34,13 @@ export interface WorkspaceInvitationResult {
 export interface WorkspaceInvitationCreateInput {
   readonly workspace: string;
   readonly environment: WorkspaceInvitationEnvironment;
-  readonly intendedSupabaseSubject: string;
   readonly intendedEmail: string;
   readonly role: WorkspaceInvitationRole;
   readonly expiresAt: string;
 }
 
 export interface WorkspaceInvitationCreateResult {
-  readonly schema_version: "workspace-invitation.v0";
+  readonly schema_version: "workspace-invitation.v1";
   readonly invitation: WorkspaceInvitationResult;
   readonly invitation_token: string;
 }
@@ -56,7 +52,7 @@ export interface WorkspaceInvitationClaimInput {
 }
 
 export interface WorkspaceInvitationClaimResult {
-  readonly schema_version: "workspace-invitation.v0";
+  readonly schema_version: "workspace-invitation.v1";
   readonly invitation_id: string;
   readonly workspace: WorkspaceInvitationWorkspaceResult;
   readonly role: WorkspaceInvitationRole;
@@ -96,10 +92,6 @@ export function createWorkspaceInvitationClient(
     async createWorkspaceInvitation(input) {
       const workspace = workspaceSlug(input.workspace);
       const environment = workspaceEnvironment(input.environment);
-      const intendedSupabaseSubject = boundedText(
-        input.intendedSupabaseSubject,
-        200,
-      );
       const intendedEmail = emailAddress(input.intendedEmail);
       const role = workspaceRole(input.role);
       const expiresAt = instant(input.expiresAt);
@@ -107,7 +99,6 @@ export function createWorkspaceInvitationClient(
         `/v1/workspaces/${encodeURIComponent(workspace)}/invitations?environment=${environment}`,
         {
           body: {
-            intendedSupabaseSubject,
             intendedEmail,
             role,
             expiresAt,
@@ -121,9 +112,7 @@ export function createWorkspaceInvitationClient(
           if (
             parsed.invitation.workspace.workspace_slug !== workspace ||
             parsed.invitation.workspace.environment !== environment ||
-            parsed.invitation.intended_identity.supabase_subject !==
-              intendedSupabaseSubject ||
-            parsed.invitation.intended_identity.email !== intendedEmail ||
+            parsed.invitation.intended_email !== intendedEmail ||
             parsed.invitation.role !== role ||
             parsed.invitation.expires_at !== expiresAt
           ) {
@@ -177,16 +166,17 @@ function parseInvitationCreate(
     "invitation",
     "invitationToken",
   ]);
-  if (body.schemaVersion !== "workspace-invitation.v0") invalidReceipt();
+  if (body.schemaVersion !== "workspace-invitation.v1") invalidReceipt();
   const invitation = parseInvitation(body.invitation);
   if (
     invitation.status !== "pending" ||
     invitation.revoked_at !== null ||
-    invitation.claimed_at !== null
+    invitation.claimed_at !== null ||
+    invitation.grant_id !== null
   )
     invalidReceipt();
   return {
-    schema_version: "workspace-invitation.v0",
+    schema_version: "workspace-invitation.v1",
     invitation,
     invitation_token: invitationToken(body.invitationToken),
   };
@@ -205,13 +195,13 @@ function parseInvitationClaim(value: unknown): WorkspaceInvitationClaimResult {
     "claimedAt",
   ]);
   if (
-    body.schemaVersion !== "workspace-invitation.v0" ||
+    body.schemaVersion !== "workspace-invitation.v1" ||
     body.status !== "claimed"
   ) {
     invalidReceipt();
   }
   return {
-    schema_version: "workspace-invitation.v0",
+    schema_version: "workspace-invitation.v1",
     invitation_id: boundedText(body.invitationId, 500),
     workspace: parseInvitationWorkspace(body.workspace),
     role: workspaceRole(body.role),
@@ -227,29 +217,22 @@ function parseInvitation(value: unknown): WorkspaceInvitationResult {
   const body = exactObject(value, [
     "invitationId",
     "workspace",
-    "intendedIdentity",
+    "intendedEmail",
     "role",
     "status",
-    "issuedBySupabaseSubject",
+    "grantId",
     "createdAt",
     "expiresAt",
     "revokedAt",
     "claimedAt",
   ]);
-  const identity = exactObject(body.intendedIdentity, [
-    "supabaseSubject",
-    "email",
-  ]);
   return {
     invitation_id: boundedText(body.invitationId, 500),
     workspace: parseInvitationWorkspace(body.workspace),
-    intended_identity: {
-      supabase_subject: boundedText(identity.supabaseSubject, 200),
-      email: canonicalEmailAddress(identity.email),
-    },
+    intended_email: canonicalEmailAddress(body.intendedEmail),
     role: workspaceRole(body.role),
     status: invitationStatus(body.status),
-    issued_by_supabase_subject: boundedText(body.issuedBySupabaseSubject, 500),
+    grant_id: body.grantId === null ? null : boundedText(body.grantId, 500),
     created_at: instant(body.createdAt),
     expires_at: instant(body.expiresAt),
     revoked_at: optionalInstant(body.revokedAt),

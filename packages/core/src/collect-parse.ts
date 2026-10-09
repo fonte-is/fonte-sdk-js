@@ -1,7 +1,11 @@
 import {
   canonicalizeCurrentUrl,
+  boundedScopeValue,
   clean,
+  collectMaxBytes,
   scopeKeys,
+  scopeUrlMaxBytes,
+  withinUtf8Limit,
 } from "./collect-contract.js";
 import type {
   CollectBody,
@@ -11,10 +15,15 @@ import type {
 } from "./collect-types.js";
 import { normalizeInstallationVerification } from "./installation-verification.js";
 import type { Scope } from "./types.js";
+import { normalizeSourceEvidence } from "./source-evidence.js";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const eventTypes = new Set<CollectEventType>(["page_view", "source_touch", "browser_landing"]);
+const eventTypes = new Set<CollectEventType>([
+  "page_view",
+  "source_touch",
+  "browser_landing",
+]);
 
 const origin = (value: string | null | undefined): string | null => {
   if (!value) return null;
@@ -43,9 +52,22 @@ const normalizeScope = (value: unknown): Scope | null => {
   const scope: Scope = {};
   for (const [key, raw] of Object.entries(value)) {
     if (!scopeKeys.has(key)) continue;
-    const maxLength = key === "current_url" || key === "referrer" ? 2048 : 500;
-    const normalized = clean(raw, maxLength);
-    if (normalized) scope[key] = normalized;
+    const urlField = ["current_url", "canonical_route", "referrer"].includes(
+      key,
+    );
+    if (urlField) {
+      if (
+        typeof raw !== "string" ||
+        /[\u0000-\u001f\u007f]/.test(raw) ||
+        !withinUtf8Limit(raw, scopeUrlMaxBytes)
+      ) {
+        if (key === "current_url") return null;
+        continue;
+      }
+      scope[key] = raw;
+      continue;
+    }
+    if (boundedScopeValue(raw)) scope[key] = raw;
   }
   if (scope.referrer) {
     try {
@@ -64,18 +86,19 @@ const normalizeBody = (value: unknown): CollectBody | null => {
   const eventType = clean(input.eventType, 40) as CollectEventType;
   const journeyId = clean(input.journeyId, 80).toLowerCase();
   const scope = normalizeScope(input.scope);
+  const sourceEvidence = normalizeSourceEvidence(input.sourceEvidence);
   if (
     !uuidPattern.test(eventId) ||
     !eventTypes.has(eventType) ||
     !uuidPattern.test(journeyId) ||
     !scope ||
+    !sourceEvidence ||
     scope.fonte_journey_id !== journeyId
   ) {
     return null;
   }
   if (
-    input.schemaVersion !== "fonte.acquisition.v1" ||
-    input.classifierVersion !== "source.v2" ||
+    input.schemaVersion !== "fonte.acquisition.v2" ||
     typeof input.occurrenceId !== "string" ||
     !uuidPattern.test(input.occurrenceId) ||
     typeof input.occurredAt !== "string" ||
@@ -89,16 +112,25 @@ const normalizeBody = (value: unknown): CollectBody | null => {
     eventType === "source_touch"
       ? normalizeInstallationVerification(input.verification)
       : null;
-  const browserEvidence = input.browserEvidence as CollectBody["browserEvidence"];
-  if (eventType === "browser_landing" &&
-    (typeof input.pageEventId !== "string" || !uuidPattern.test(input.pageEventId) ||
-      !browserEvidence || typeof browserEvidence !== "object" ||
-      Object.keys(browserEvidence).sort().join(",") !== "interaction,version,visibility" ||
-      browserEvidence.version !== "interaction.v1" || browserEvidence.visibility !== "visible" ||
-      !["pointerdown", "keydown", "touchstart"].includes(browserEvidence.interaction))) return null;
+  const browserEvidence =
+    input.browserEvidence as CollectBody["browserEvidence"];
+  if (
+    eventType === "browser_landing" &&
+    (typeof input.pageEventId !== "string" ||
+      !uuidPattern.test(input.pageEventId) ||
+      !browserEvidence ||
+      typeof browserEvidence !== "object" ||
+      Object.keys(browserEvidence).sort().join(",") !==
+        "interaction,version,visibility" ||
+      browserEvidence.version !== "interaction.v1" ||
+      browserEvidence.visibility !== "visible" ||
+      !["pointerdown", "keydown", "touchstart"].includes(
+        browserEvidence.interaction,
+      ))
+  )
+    return null;
   return {
-    schemaVersion: "fonte.acquisition.v1",
-    classifierVersion: "source.v2",
+    schemaVersion: "fonte.acquisition.v2",
     occurrenceId: input.occurrenceId,
     occurredAt: input.occurredAt,
     collectionVersion: input.collectionVersion,
@@ -106,9 +138,14 @@ const normalizeBody = (value: unknown): CollectBody | null => {
     eventType,
     journeyId,
     ...(verification ? { verification } : {}),
-    ...(eventType === "browser_landing" ? { pageEventId: input.pageEventId as string,
-      browserEvidence: { ...browserEvidence! } } : {}),
+    ...(eventType === "browser_landing"
+      ? {
+          pageEventId: input.pageEventId as string,
+          browserEvidence: { ...browserEvidence! },
+        }
+      : {}),
     scope,
+    sourceEvidence,
   };
 };
 
@@ -116,7 +153,7 @@ export async function parse(
   request: Request,
   options: ParseOptions = {},
 ): Promise<CollectBody | null> {
-  const maxBytes = options.maxBytes ?? 16_384;
+  const maxBytes = options.maxBytes ?? collectMaxBytes;
   if (!Number.isInteger(maxBytes) || maxBytes <= 0) return null;
   const length = request.headers.get("content-length");
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes))

@@ -1,9 +1,6 @@
 # Fonte CLI V0 implementation contract
 
-This file is the implementation authority for the first `@fonte-is/cli`
-candidate. Implementers may fill the declared function bodies. They may not
-change package identity, public behavior, paths, schemas, vocabulary, or
-verification semantics without returning the fork to the parent task.
+This contract describes the CLI commands, receipts and supported installation path.
 
 ## Boundary
 
@@ -18,7 +15,7 @@ V0 supports only:
 - npm projects;
 - Next.js App Router projects with exactly one of `app/layout.*` or
   `src/app/layout.*`;
-- exact SDK version `0.1.0` from `@fonte-is/nextjs`;
+- exact SDK version `0.2.0` from `@fonte-is/nextjs` for new installations;
 - local preparation, verification, and removal;
 - one browser-authorized, directly spawned local consumer process; and
 - one browser-authorized sandbox provider proof to the signed-in account's
@@ -34,16 +31,15 @@ V0 supports only:
 - one stdio-only MCP surface over that same closed Sequence-authoring and
   activation
   authority, as frozen in `MCP_CONTRACT.md`; and
-- one thin Bridge collection, completed Contact-import identity read,
-  provider-audience reconciliation, and explicit fingerprint-bound freeze
-  journey over Core-owned authority; and
-- one thin Resend/Kit native-OAuth connection list, connect, and reconnect
-  journey over Core-owned custody; and
+- Fonte connection authorization, source discovery, contact import and readback; and
+- completed Contact-import identity read, audience reconciliation and explicit
+  fingerprint-bound freeze through Core-owned operations; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
-V0 does not create an account, arbitrary recipient, sender identity, domain,
-contact, payment, or transactional application-email request. Production
+V0 does not create an account, arbitrary message recipient, sender identity,
+domain, payment or transactional application-email request. Connected-source
+imports create or update Contacts through Fonte's existing import operation. Production
 broadcast commands only submit explicit operator material to admitted Core
 routes; Core remains the sole authority for eligibility, billing, safety,
 sender readiness, recipient freeze, dispatch, and provider capacity.
@@ -64,7 +60,10 @@ fonte auth status [--json]
 fonte auth logout [--json]
 fonte auth exec -- <command> [args...]
 fonte broadcast <command> ... [--json]
-fonte bridge <command> ... [--json]
+fonte connections <command> ... [--json]
+fonte contacts <command> ... [--json]
+fonte audience <reconcile|freeze> ... [--json]
+fonte bridge import status ... [--json]
 fonte sequence <command> ... [--json]
 fonte remove [--yes] [--json]
 fonte --help
@@ -79,8 +78,8 @@ argument. `--help` is either the only argument or the final argument of a
 current public command with no other command options; it prints that command's
 admitted syntax and authority. In particular, broadcast-test help distinguishes
 the fixed sandbox canary syntax from the verified-account production-test
-syntax, and Bridge help names the admitted Resend copy and provider-audience
-routes.
+syntax. Connection, import and audience help lists the references and flags
+required by those operations.
 There is no terminal prompt. Only explicit `auth login` may open the system
 browser for the registered public CLI client. Ordinary authenticated commands
 never initiate account login. The workspace slug
@@ -88,11 +87,15 @@ is explicit, lowercase, and remains subject to server-side Fonte workspace
 membership.
 
 `auth login`, `auth status`, and `auth logout` manage persistent human identity
-through native OS credential custody as specified in README.md. `auth exec` and
+through the selected credential store as specified in README.md. `auth exec` and
 ordinary authenticated commands reuse that identity across processes and refresh
 silently. Only refresh credentials persist; each bearer stays in memory and the
-direct child's `FONTE_HUMAN_BEARER` environment. No credential enters plaintext
-files, process arguments, shell history, logs, receipts or ordinary configuration.
+direct child's `FONTE_HUMAN_BEARER` environment. Native storage is preferred;
+interactive login can explicitly select a per-user file after native storage
+is unavailable. That file contains the refresh credential without CLI
+encryption and uses restrictive filesystem permissions. Access tokens never
+enter files, process arguments, shell history, logs, receipts or ordinary
+configuration.
 A non-reusable marker is committed before refresh; an uncertain rotation
 requires explicit login and is never replayed. `FONTE_NONINTERACTIVE=1`
 disables browser and native human interaction; other values are invalid. Core
@@ -121,7 +124,7 @@ production cryptography.
 The callback listener binds only `127.0.0.1:49671`, requires the exact Host,
 path, random state, and one code-or-error result. The OAuth access token remains
 in process memory. It is never rendered, copied by the user, placed in an
-installation manifest, or persisted outside native OS credential custody.
+installation manifest, or persisted to disk.
 
 After a passing Doctor check, `test` creates fixed synthetic sandbox content,
 requests the existing signed-in sandbox canary, and polls its existing readback.
@@ -212,11 +215,14 @@ local_state_ignore   managed_block .gitignore   (only when needed)
 local_manifest       create_local_manifest .fonte/installation.json
 ```
 
-`@fonte-is/nextjs` may be absent or exactly `0.1.0` in `dependencies`. Presence
+`@fonte-is/nextjs` may be absent or exactly `0.2.0` in `dependencies`. Presence
 in another dependency section or any other value blocks with
 `dependency_version_conflict`. A pre-existing `fonte/installation.ts` without
 a valid Fonte manifest blocks with `existing_unmanaged_path`, even when its
 bytes happen to match.
+
+Init does not upgrade a recorded SDK `0.1.0` installation. It returns
+`dependency_version_conflict` without changing the recorded installation.
 
 The plan SHA-256 is computed over canonical compact UTF-8 JSON for the complete
 plan without `plan_sha256`. Object keys are recursively sorted; array order is
@@ -232,7 +238,7 @@ existing `package-lock.json`, `.gitignore`, and every target file.
 Apply executes in this order:
 
 1. `npm install --save-exact --ignore-scripts --no-audit --no-fund
-@fonte-is/nextjs@0.1.0` when the dependency was absent, adding
+@fonte-is/nextjs@0.2.0` when the dependency was absent, adding
    `--package-lock=false` when the project began without `package-lock.json`;
 2. atomically create `fonte/installation.ts` with exclusive semantics;
 3. atomically append the ignore block when required;
@@ -271,16 +277,18 @@ Its fixed values are:
 
 ```text
 schema_version  fonte.local_installation.v1
-cli_version     0.3.0
+cli_version     0.4.0
 adapter_id      next_app_router
 adapter_version v1
 sdk_package     @fonte-is/nextjs
-sdk_version     0.1.0
+sdk_version     0.2.0
 ```
 
-The 0.3.0 CLI writes `cli_version` 0.3.0 and continues to accept exact
-0.1.0-, 0.1.1-, 0.1.2-, 0.1.3-, 0.1.4-, and 0.2.0-created manifests. Any other or
-unknown CLI manifest version is invalid.
+The 0.4.0 CLI writes `cli_version` 0.4.0 and accepts exact 0.1.0 through
+0.1.4, 0.2.0, 0.3.0 through 0.3.5, and 0.4.0 CLI manifest versions. The
+recorded SDK version may be 0.1.0 or 0.2.0; any owned dependency operation must
+match it. Other CLI or SDK manifest versions are invalid. Plan verification
+and removal use the recorded SDK version, preserving the original digest.
 
 `managed_operations` excludes `local_manifest` and contains only operations
 actually owned by Fonte. A dependency already present at the exact version and
@@ -302,6 +310,11 @@ Doctor is read-only. It verifies:
 Doctor never executes project scripts or installed package code. Either could
 write files, contact the network, or invoke providers, so neither can be part
 of a read-only verification receipt.
+
+For a recorded SDK 0.1.0 installation, Doctor reports
+`recorded_sdk_installation_verified` with no next action. This verifies only
+the integrity of that recorded installation. It does not qualify the current
+SDK features or perform an upgrade.
 
 ## Remove
 
@@ -360,35 +373,3 @@ production email readiness. A prepared receipt's next action is exactly:
 
 No receipt contains an invented URL. Unknown and unavailable facts are never
 rendered as numeric zero.
-
-## Implementation permissions
-
-The implementation task may edit only paths explicitly supplied by the parent.
-It may replace `fonte_cli_frame_incomplete` bodies with code conforming to this
-contract. Hosted-test implementation may add only the declared OAuth library,
-fixed browser bridge, exact hosted calls, and test receipt. It may not add
-fallback authority, plaintext token persistence, telemetry, arbitrary recipients, or
-production/application-email claims.
-
-The fixed private module split is:
-
-```text
-arguments.ts       invocation grammar only
-project.ts         project and package-manager detection only
-plan.ts            pure plan construction and sealing only
-plan-material.ts   fixed ordered plan material only
-installation-plan.ts read-only project state inspection and plan composition only
-manifest.ts        exact manifest read, parse, and serialization only
-filesystem.ts      snapshots and atomic local file operations only
-dependency.ts      exact npm dependency posture and commands only
-ignore.ts          exact ignore-line/block ownership only
-installation-state.ts exact local ownership composition only
-mutation-journal.ts record exact CLI-produced filesystem states only
-doctor.ts          compose read-only verification only
-mutations.ts       compose init/remove transactions only
-rollback.ts        exact snapshot restoration and npm reconciliation only
-program.ts         command dispatch and presentation selection only
-```
-
-No implementation body may absorb another module's responsibility merely to
-avoid calling the declared helper.

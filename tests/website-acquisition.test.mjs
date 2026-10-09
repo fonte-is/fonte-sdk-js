@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCapture } from "@fonte-is/core";
-import { collect } from "@fonte-is/core/server";
 import { createWebsiteAcquisition } from "../packages/core/dist/website/acquisition.js";
 
 const siteId = "site_0123456789abcdef";
@@ -13,6 +12,10 @@ const policy = (extra = {}) => ({
   routes: ["*"],
   clickIds: true,
   adCookies: true,
+  sourceFields: {
+    query: ["campaign_click", "alternate_click"],
+    cookies: ["visit_cookie", "session_cookie"],
+  },
   sourceTokens: true,
   campaignValues: true,
   ...extra,
@@ -91,9 +94,15 @@ async function host(
     configurable: true,
   });
   const listeners = new Map();
-  globalThis.document = { visibilityState: "visible",
-    addEventListener(type, listener) { listeners.set(type, listener); },
-    removeEventListener(type, listener) { if (listeners.get(type) === listener) listeners.delete(type); } };
+  globalThis.document = {
+    visibilityState: "visible",
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+    removeEventListener(type, listener) {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    },
+  };
   Object.defineProperty(document, "referrer", {
     get() {
       sourceReads++;
@@ -145,7 +154,7 @@ async function host(
       savedValues,
       async interact(type = "pointerdown", isTrusted = true) {
         listeners.get(type)?.({ type, isTrusted });
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
       },
       advance(ms) {
         now += ms;
@@ -166,25 +175,39 @@ test("browser confirmation requires a visible trusted interaction, is per page, 
     const acquisition = make();
     acquisition.setPolicy(policy());
     await acquisition.page();
-    assert.equal(requests.filter(body => body.eventType === "browser_landing").length, 0);
+    assert.equal(
+      requests.filter((body) => body.eventType === "browser_landing").length,
+      0,
+    );
     await interact("pointerdown", false);
     document.visibilityState = "hidden";
     await interact();
-    assert.equal(requests.filter(body => body.eventType === "browser_landing").length, 0);
+    assert.equal(
+      requests.filter((body) => body.eventType === "browser_landing").length,
+      0,
+    );
     document.visibilityState = "visible";
     await interact();
     await interact("keydown");
-    const landing = requests.filter(body => body.eventType === "browser_landing");
-    const page = requests.find(body => body.eventType === "page_view");
+    const landing = requests.filter(
+      (body) => body.eventType === "browser_landing",
+    );
+    const page = requests.find((body) => body.eventType === "page_view");
     assert.equal(landing.length, 1);
     assert.equal(landing[0].pageEventId, page.eventId);
     assert.equal(landing[0].occurrenceId, page.occurrenceId);
     assert.deepEqual(landing[0].scope, page.scope);
-    assert.deepEqual(landing[0].browserEvidence,
-      { version: "interaction.v1", visibility: "visible", interaction: "pointerdown" });
+    assert.deepEqual(landing[0].browserEvidence, {
+      version: "interaction.v1",
+      visibility: "visible",
+      interaction: "pointerdown",
+    });
     acquisition.setPolicy(null);
     await interact();
-    assert.equal(requests.filter(body => body.eventType === "browser_landing").length, 1);
+    assert.equal(
+      requests.filter((body) => body.eventType === "browser_landing").length,
+      1,
+    );
     acquisition.destroy();
     await interact();
   });
@@ -194,17 +217,23 @@ test("a Fonte redirect click survives Website collection only with source tokens
   const click = "a9c148f6-3010-4e21-8f2c-95129e6682d0";
   const href = `https://website.example/join?fonte=fl_ABCDEFGHIJKL&fonte_click=${click}&private=discarded`;
   for (const enabled of [true, false]) {
-    const requests = await host(async ({ make, requests }) => {
-      const acquisition = make();
-      acquisition.setPolicy(policy({ sourceTokens: enabled }));
-      await acquisition.page();
-      acquisition.destroy();
-      return requests;
-    }, { href });
+    const requests = await host(
+      async ({ make, requests }) => {
+        const acquisition = make();
+        acquisition.setPolicy(policy({ sourceTokens: enabled }));
+        await acquisition.page();
+        acquisition.destroy();
+        return requests;
+      },
+      { href },
+    );
     assert.equal(requests.length, 2);
     for (const request of requests) {
       assert.equal(request.scope.fonte_click, enabled ? click : undefined);
-      assert.equal(request.scope.fonte, enabled ? "fl_ABCDEFGHIJKL" : undefined);
+      assert.equal(
+        request.scope.fonte,
+        enabled ? "fl_ABCDEFGHIJKL" : undefined,
+      );
       assert(!JSON.stringify(request).includes("private"));
     }
   }
@@ -212,22 +241,22 @@ test("a Fonte redirect click survives Website collection only with source tokens
 
 for (const fixture of [
   {
-    name: "X source with inherited Meta cookies",
-    href: "https://website.example/?twclid=x-click&fonte=source-token&utm_source=x&access_token=discarded",
-    referrer: "https://t.co/link?private=discarded",
-    cookies: "_fbc=old-meta; _fbp=old-meta",
+    name: "selected click and inherited cookies",
+    href: "https://website.example/?campaign_click=campaign-click&fonte=source-token&utm_source=campaign&access_token=discarded",
+    referrer: "https://referrer.example/link?private=discarded",
+    cookies: "visit_cookie=old-visit; session_cookie=old-visit",
   },
   { name: "missing referrer", href: "https://website.example/", referrer: "" },
   {
-    name: "false X hostname",
+    name: "unfamiliar referral hostname",
     href: "https://website.example/?utm_campaign=campaign",
-    referrer: "https://x.com.attacker.example/private",
+    referrer: "https://referrer.example.attacker.example/private",
   },
   {
     name: "minimized ad and campaign values",
-    href: "https://website.example/?twclid=allowed-click&ttclid=tiktok-click&utm_source=person@example.test&fonte=token&secret=discarded",
+    href: "https://website.example/?campaign_click=allowed-click&alternate_click=alternate-click&utm_source=person@example.test&fonte=token&secret=discarded",
     referrer: "https://elsewhere.example/private?secret=discarded",
-    cookies: "_fbc=old-meta",
+    cookies: "visit_cookie=old-visit",
     approved: policy({
       clickIds: false,
       adCookies: false,
@@ -269,16 +298,25 @@ for (const fixture of [
     assert.equal(website[0].occurrenceId, website[1].occurrenceId);
     assert.notEqual(website[0].eventId, website[1].eventId);
     assert.notEqual(website[0].occurrenceId, website[2].occurrenceId);
-    const classified = collect.classifySourceTouch(website[0].scope);
-    if (fixture.name.startsWith("X source"))
-      assert.equal(classified.sourcePlatform, "x");
+    if (fixture.name.startsWith("selected click")) {
+      assert.deepEqual(website[0].sourceEvidence.query, [
+        { name: "campaign_click", value: "campaign-click" },
+      ]);
+      assert.deepEqual(website[0].sourceEvidence.cookies, [
+        { name: "session_cookie", value: "old-visit" },
+        { name: "visit_cookie", value: "old-visit" },
+      ]);
+      assert.equal(website[0].scope.referrer, "https://referrer.example");
+    }
     if (fixture.name === "missing referrer")
-      assert.equal(classified.sourcePlatform, "unknown");
-    if (fixture.name === "false X hostname")
-      assert.notEqual(classified.sourcePlatform, "x");
+      assert.equal(website[0].scope.referrer, undefined);
+    if (fixture.name === "unfamiliar referral hostname")
+      assert.equal(
+        website[0].scope.referrer,
+        "https://referrer.example.attacker.example",
+      );
     if (fixture.name.startsWith("minimized")) {
-      assert.equal(website[0].scope.twclid, undefined);
-      assert.equal(website[0].scope.fbc, undefined);
+      assert.deepEqual(website[0].sourceEvidence, { query: [], cookies: [] });
       assert.equal(website[0].scope.fonte, undefined);
       assert.equal(website[0].scope.utm_source, undefined);
       assert(!JSON.stringify(website).includes("discarded"));
@@ -398,36 +436,53 @@ test("identical policy keeps dedup; changed policy clears context and pending ob
 
 const pending = new Map();
 test("a late page receipt cannot replace the current navigation source", () =>
-  host(async ({ make, requests }) => {
-    const acquisition = make();
-    acquisition.setPolicy(policy());
-    const first = acquisition.page();
-    await new Promise(setImmediate);
-    const firstId = requests.find((body) => body.eventType === "page_view")?.eventId;
-    assert.ok(firstId);
-    window.location = "https://website.example/second";
-    const second = acquisition.page({ navigation: true });
-    await new Promise(setImmediate);
-    const secondId = requests.findLast((body) => body.eventType === "page_view")?.eventId;
-    assert.ok(secondId);
-    assert.notEqual(secondId, firstId);
-    assert.equal(acquisition.latestPageEventId(), null);
-    pending.get(secondId)(accepted({ eventId: secondId }));
-    await second;
-    assert.equal(acquisition.latestPageEventId(), secondId);
-    assert.deepEqual(acquisition.latestPageReceipt(), { siteId, eventId: secondId,
-      recordId: `record-${secondId}` });
-    pending.get(firstId)(accepted({ eventId: firstId }));
-    await first;
-    assert.equal(acquisition.latestPageEventId(), secondId);
-    acquisition.setPolicy(null);
-    assert.equal(acquisition.latestPageEventId(), null);
-    assert.equal(acquisition.latestPageReceipt(), null);
-    acquisition.destroy();
-  }, { reply(body) {
-    if (body.eventType !== "page_view") return { httpStatus: 200, receipt: accepted(body) };
-    return new Promise((resolve) => pending.set(body.eventId, (receipt) => resolve({ httpStatus: 200, receipt })));
-  } }));
+  host(
+    async ({ make, requests }) => {
+      const acquisition = make();
+      acquisition.setPolicy(policy());
+      const first = acquisition.page();
+      await new Promise(setImmediate);
+      const firstId = requests.find(
+        (body) => body.eventType === "page_view",
+      )?.eventId;
+      assert.ok(firstId);
+      window.location = "https://website.example/second";
+      const second = acquisition.page({ navigation: true });
+      await new Promise(setImmediate);
+      const secondId = requests.findLast(
+        (body) => body.eventType === "page_view",
+      )?.eventId;
+      assert.ok(secondId);
+      assert.notEqual(secondId, firstId);
+      assert.equal(acquisition.latestPageEventId(), null);
+      pending.get(secondId)(accepted({ eventId: secondId }));
+      await second;
+      assert.equal(acquisition.latestPageEventId(), secondId);
+      assert.deepEqual(acquisition.latestPageReceipt(), {
+        siteId,
+        eventId: secondId,
+        recordId: `record-${secondId}`,
+      });
+      pending.get(firstId)(accepted({ eventId: firstId }));
+      await first;
+      assert.equal(acquisition.latestPageEventId(), secondId);
+      acquisition.setPolicy(null);
+      assert.equal(acquisition.latestPageEventId(), null);
+      assert.equal(acquisition.latestPageReceipt(), null);
+      acquisition.destroy();
+    },
+    {
+      reply(body) {
+        if (body.eventType !== "page_view")
+          return { httpStatus: 200, receipt: accepted(body) };
+        return new Promise((resolve) =>
+          pending.set(body.eventId, (receipt) =>
+            resolve({ httpStatus: 200, receipt }),
+          ),
+        );
+      },
+    },
+  ));
 
 test("grant after denied arrival does not capture until caller supplies a new occurrence", () =>
   host(async ({ make, requests }) => {
@@ -456,7 +511,7 @@ test("policy is snapshotted; caller mutation cannot silently broaden fields or p
       input.campaignValues.utm_source.push("planted");
       input.expiresAt += 60000;
       await acquisition.page();
-      assert.equal(requests[0].scope.twclid, undefined);
+      assert.deepEqual(requests[0].sourceEvidence.query, []);
       assert.equal(requests[0].scope.utm_source, undefined);
       advance(101);
       await acquisition.retry();
@@ -465,7 +520,7 @@ test("policy is snapshotted; caller mutation cannot silently broaden fields or p
       acquisition.destroy();
     },
     {
-      href: "https://website.example/?twclid=click&utm_source=planted",
+      href: "https://website.example/?campaign_click=click&utm_source=planted",
       reply() {
         throw Error("offline");
       },
@@ -478,18 +533,22 @@ test("port mutation cannot alter stable retry body, identity, occurrence or time
       const acquisition = make();
       acquisition.setPolicy(policy());
       await acquisition.page();
-      window.location = "https://website.example/changed?twclid=new";
+      window.location = "https://website.example/changed?campaign_click=new";
       await acquisition.retry();
       assert.deepEqual(requests.slice(0, 2), requests.slice(2, 4));
       acquisition.destroy();
     },
     {
-      href: "https://website.example/?twclid=original",
+      href: "https://website.example/?campaign_click=original",
       reply(body) {
         assert(Object.isFrozen(body));
         assert(Object.isFrozen(body.scope));
         assert.throws(() => (body.eventId = "mutated"), TypeError);
-        assert.throws(() => (body.scope.twclid = "mutated"), TypeError);
+        assert(Object.isFrozen(body.sourceEvidence.query));
+        assert.throws(
+          () => (body.sourceEvidence.query[0].value = "mutated"),
+          TypeError,
+        );
         throw Error("lost acknowledgement");
       },
     },
@@ -810,5 +869,22 @@ test("route denial reads no cookies/storage or identity and invalid legacy endpo
         () => createCapture({ storage: "legacy", collect }),
         /same_origin_app_path/,
       );
+    acquisition.destroy();
+  }));
+
+test("enabled source categories without finite selected fields read no cookies or storage", () =>
+  host(async ({ make, metrics }) => {
+    const acquisition = make();
+    acquisition.setPolicy(policy({ sourceFields: undefined }));
+    const result = await acquisition.page();
+    assert(
+      result.deliveries.every(
+        (delivery) => delivery.reason === "collection_not_permitted",
+      ),
+    );
+    assert.equal(metrics().cookieReads, 0);
+    assert.equal(metrics().storageReads, 0);
+    assert.equal(metrics().uuidCalls, 0);
+    assert.equal(metrics().requests, 0);
     acquisition.destroy();
   }));

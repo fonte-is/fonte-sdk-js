@@ -36,7 +36,7 @@ async function server(reply: (request: { url: string; body: unknown; authorizati
   return { url: `http://127.0.0.1:${address.port}`, calls, close: () => new Promise<void>(resolve => http.close(() => resolve())) };
 }
 
-test("FON-837 fixture digest, one unsaved count POST and zero result", async () => {
+test("fixture digest, one unsaved count POST and zero result", async () => {
   assert.equal(await audienceCountSelectionDigestV1(valid.scope.workspaceId, valid.scope.environment, valid.scope.draftId,
     { ...valid.request, recipientExpression: valid.normalizedRecipientExpression }), valid.selectionDigest);
   const local = await server(() => ({ status: 200, body: valid.result }));

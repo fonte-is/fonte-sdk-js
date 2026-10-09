@@ -16,7 +16,7 @@ import { renderHuman } from "../packages/cli/dist/render.js";
 
 const config = {
   schema: "fonte.cli.hosted_config.v1",
-  authorizationServer: "https://project.supabase.co/auth/v1",
+  authorizationServer: "https://accounts.example.test/auth/v1",
   clientId: "fonte-cli-client-v0",
   coreApiBaseUrl: "https://api.fonte.is",
   redirectUri: "http://127.0.0.1:49671/callback",

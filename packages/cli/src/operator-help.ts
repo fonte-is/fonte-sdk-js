@@ -1,5 +1,3 @@
-import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
-import { providerEvidenceHelpEntries } from "./operator-provider-evidence-help.js";
 import { workspaceMarketingSettingsHelpEntries } from "./operator-marketing-settings-help.js";
 import { CAMPAIGN_OPERATOR_HELP } from "./operator-campaign-help.js";
 import { SEGMENT_OPERATOR_HELP } from "./operator-segment-help.js";
@@ -251,7 +249,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Persists and submits the exact approved review references. Processing is not executable; an executable job is not provider acceptance. The default request ceiling is 60 seconds.",
+      "Saves and submits the approved input: exact review references or an explicit maximum charge. Processing is not execution readiness or delivery. The default request ceiling is 60 seconds.",
     json: true,
   },
   {
@@ -263,7 +261,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Recovers the exact durably saved request after response loss. It never creates another approval or request identity.",
+      "Replays the exact saved review or Send request after response loss, using its original request ID. It creates no new approval.",
     json: true,
   },
   {
@@ -299,18 +297,14 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Accepts one saved Broadcast instruction for the exact future time. Expensive work remains backend-owned and does not begin before it is due.",
+      "Retired entrypoint; it refuses new sends with canonical_send_review_required. New Send inputs support immediate sending only.",
     json: true,
   },
   {
     command: ["broadcast", "send", "status"],
-    usage: [
-      [
-        "--workspace <slug> --environment production --draft-id <uuid> [--watch]",
-      ],
-    ],
+    usage: [["--workspace <slug> --environment production --draft-id <uuid>"]],
     detail:
-      "Observes the durable Send operation with GET only. It never prepares, authorizes, retries, or otherwise advances work.",
+      "Reads the canonical Send operation by draft ID with GET only. For bounded observation of a returned operation URI, use broadcast operation with --wait-ms.",
     json: true,
   },
   {
@@ -373,7 +367,7 @@ const entries: readonly HelpEntry[] = [
       ],
     ],
     detail:
-      "Explicitly authorizes Core to freeze recipients and start the broadcast.",
+      "Retired entrypoint; it refuses new sends with canonical_send_review_required. Review the exact draft, then use broadcast send with the approved input.",
     json: true,
   },
   {
@@ -426,66 +420,6 @@ const entries: readonly HelpEntry[] = [
       "Reads final counts, billing facts, and frozen audience provenance.",
     json: true,
   },
-  {
-    command: ["bridge", "observe", "resend"],
-    usage: [
-      [
-        "--workspace <slug> --environment <sandbox|production> --segment-id <id>",
-      ],
-    ],
-    detail: "Observes one Resend segment without mutating provider state.",
-    json: true,
-  },
-  {
-    command: ["bridge", "copy", "resend"],
-    usage: [
-      [
-        "--workspace <slug> --environment <sandbox|production> --segment-id <id>",
-        "--fingerprint <sha256> --idempotency-key <key>",
-      ],
-    ],
-    detail: "Copies one fingerprint-bound Resend observation through Core.",
-    json: true,
-  },
-  ...(["resend", "kit"] as const).flatMap((provider) => [
-    {
-      command: ["bridge", "connections", "list", provider],
-      usage: [["--workspace <slug> --environment <sandbox|production>"]],
-      detail: `Lists Core's sanitized ${provider} connection metadata.`,
-      json: true as const,
-    },
-    {
-      command: ["bridge", "connections", "connect", provider],
-      usage: [
-        [
-          "--workspace <slug> --environment <sandbox|production>",
-          "--display-name <name>",
-        ],
-      ],
-      detail:
-        provider === "resend"
-          ? "Starts native Resend OAuth and waits when the authorization page opens."
-          : "Kit OAuth is currently unavailable and fails closed until its application and scope authority exists.",
-      json: true as const,
-    },
-    {
-      command: ["bridge", "connections", "reconnect", provider],
-      usage: [
-        [
-          "--workspace <slug> --environment <sandbox|production>",
-          "--connection-id <uuid> --display-name <name>",
-          "--expected-credential-version <n>",
-        ],
-      ],
-      detail:
-        provider === "resend"
-          ? "Reauthorizes one existing connection through native Resend OAuth."
-          : "Kit OAuth is currently unavailable and fails closed until its application and scope authority exists.",
-      json: true as const,
-    },
-  ]),
-  ...providerAudienceHelpEntries,
-  ...providerEvidenceHelpEntries,
   ...(["prepare", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({
       command: ["broadcast", operation],
@@ -495,25 +429,15 @@ const entries: readonly HelpEntry[] = [
       json: true,
     }),
   ),
-  ...(["status", "diff", "placement-plan"] as const).map((operation) => ({
-    command: ["bridge", operation],
-    usage: [[]],
-    detail:
-      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
-    json: true,
-  })),
   {
-    command: ["bridge", "observe", "kit"],
-    usage: [[]],
-    detail:
-      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
-    json: true,
-  },
-  {
-    command: ["bridge", "copy", "kit"],
-    usage: [[]],
-    detail:
-      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
+    command: ["bridge", "import", "status"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--contact-import-batch-id <uuid>",
+      ],
+    ],
+    detail: "Reads a completed Contact import and its identity set.",
     json: true,
   },
 ];

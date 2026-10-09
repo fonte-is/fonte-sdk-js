@@ -77,7 +77,7 @@ export const reviseBroadcastHtmlInputSchema = z
 
 const conversionSchema = z
   .object({
-    kind: z.enum(["provider_token", "provider_artifact", "literal_fallback"]),
+    kind: z.enum(["recipient_slot", "literal_fallback"]),
     source: z.string(),
     replacement: z.string(),
     occurrences: z.number().int().positive().safe(),

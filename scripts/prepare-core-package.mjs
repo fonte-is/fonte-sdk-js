@@ -13,7 +13,7 @@ await copyFile(path.join(root, "LICENSE"), path.join(core, "LICENSE"));
 for (const name of [
   "results.md",
   "results-reference.md",
-  "posthog-selected-actions.md",
+  "action-confirmations.md",
   "website-tracking.md",
   "application-outcomes.md",
 ]) {

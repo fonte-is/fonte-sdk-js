@@ -12,29 +12,7 @@ import {
   isBroadcastSendInstructionCommand,
 } from "./operator-broadcast-send-instruction-run.js";
 import { withAmbiguousSequenceRecovery } from "./operator-sequence-recovery.js";
-import {
-  executeProviderAudienceCommand,
-  providerAudienceReceiptDescriptor,
-} from "./operator-provider-audience-run.js";
-import {
-  executeProviderPlacementCommand,
-  isProviderPlacementCommand,
-  loadProviderPlacementApplication,
-  providerPlacementReceiptDescriptor,
-  type ProviderPlacementApplicationFileReader,
-} from "./operator-provider-audience-placement-run.js";
-import {
-  executeProviderConnectionCommand,
-  isProviderConnectionCommand,
-  providerConnectionReceiptDescriptor,
-} from "./operator-provider-connection-run.js";
-import {
-  executeProviderEvidenceCommand,
-  isProviderEvidenceCommand,
-  loadProviderEvidenceCandidates,
-  providerEvidenceReceiptDescriptor,
-  type ProviderEvidenceCandidateFileReader,
-} from "./operator-provider-evidence-run.js";
+
 import {
   executeProductionCommand,
   isProductionCommand,
@@ -83,8 +61,7 @@ export interface OperatorDependencies {
     force?: boolean,
   ): Promise<string>;
   sleep(milliseconds: number): Promise<void>;
-  readProviderEvidenceCandidateFile: ProviderEvidenceCandidateFileReader;
-  readProviderPlacementApplicationFile: ProviderPlacementApplicationFileReader;
+
   openUrl?(url: URL): Promise<boolean>;
   readonly signal?: AbortSignal;
   now?(): Date;
@@ -99,51 +76,81 @@ export async function runOperatorCommand(
     return runBroadcastCanary(command, dependencies, randomUUID(), randomUUID);
   }
   try {
-    const providerEvidenceCandidates = isProviderEvidenceCommand(command)
-      ? await loadProviderEvidenceCandidates(
-          command,
-          dependencies.readProviderEvidenceCandidateFile,
-        )
-      : null;
-    const providerPlacementApplication = isProviderPlacementCommand(command)
-      ? await loadProviderPlacementApplication(
-          command,
-          dependencies.readProviderPlacementApplicationFile,
-        )
-      : null;
     const config = await loadHostedConfig(
       dependencies.fetch as typeof fetch,
       dependencies.configUrl,
     );
     const bearer = await dependencies.authorize(config, dependencies.signal);
-    if (command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
-      || command.kind === "broadcast_canonical_control") {
-      const request = createCoreRequester({ coreApiBaseUrl: config.coreApiBaseUrl, bearer,
-        fetch: dependencies.fetch as typeof fetch, signal: dependencies.signal });
+    if (
+      command.kind === "broadcast_canonical_send" ||
+      command.kind === "broadcast_canonical_status" ||
+      command.kind === "broadcast_canonical_control"
+    ) {
+      const request = createCoreRequester({
+        coreApiBaseUrl: config.coreApiBaseUrl,
+        bearer,
+        fetch: dependencies.fetch as typeof fetch,
+        signal: dependencies.signal,
+      });
       const canonical = createCanonicalBroadcastClient(request);
       if (command.kind === "broadcast_canonical_send") {
         return sendPrepared(command.sendInput, {
-          draftLifecycle: async () => createBroadcastDraftLifecycleClient(request),
+          draftLifecycle: async () =>
+            createBroadcastDraftLifecycleClient(request),
           canonical: async () => canonical,
         });
       }
       if (command.kind === "broadcast_canonical_control") {
         const operation = await canonical.control(command);
-        return currentReceipt(command, { kind: "executable_broadcast_operation", status: "accepted", operation },
-          operation.phase === "complete" || operation.phase === "ended" ? "terminal"
-            : operation.phase === "paused" ? "blocked" : "queued",
-          `broadcast_send_${operation.phase}`, "controlled");
+        return currentReceipt(
+          command,
+          {
+            kind: "executable_broadcast_operation",
+            status: "accepted",
+            operation,
+          },
+          operation.phase === "complete" || operation.phase === "ended"
+            ? "terminal"
+            : operation.phase === "paused"
+              ? "blocked"
+              : "queued",
+          `broadcast_send_${operation.phase}`,
+          "controlled",
+        );
       }
-      const operation = await canonical.read({ workspace: command.workspace, draftId: command.draftId });
-      return {
-        schema_version: "fonte.cli.operator_receipt.v1", command: command.kind,
-        outcome: operation === null ? "completed" : operation.phase === "complete" || operation.phase === "ended"
-          ? "terminal" : operation.phase === "paused" ? "blocked" : "queued",
-        reason: operation === null ? "broadcast_send_operation_absent" : `broadcast_send_${operation.phase}`,
+      const operation = await canonical.read({
         workspace: command.workspace,
-        authority: { status: "current", contract_id: "fonte.core.broadcast_send" },
-        core_effect: "none", result: operation === null ? null
-          : { kind: "executable_broadcast_operation", status: "accepted", operation },
+        draftId: command.draftId,
+      });
+      return {
+        schema_version: "fonte.cli.operator_receipt.v1",
+        command: command.kind,
+        outcome:
+          operation === null
+            ? "completed"
+            : operation.phase === "complete" || operation.phase === "ended"
+              ? "terminal"
+              : operation.phase === "paused"
+                ? "blocked"
+                : "queued",
+        reason:
+          operation === null
+            ? "broadcast_send_operation_absent"
+            : `broadcast_send_${operation.phase}`,
+        workspace: command.workspace,
+        authority: {
+          status: "current",
+          contract_id: "fonte.core.broadcast_send",
+        },
+        core_effect: "none",
+        result:
+          operation === null
+            ? null
+            : {
+                kind: "executable_broadcast_operation",
+                status: "accepted",
+                operation,
+              },
       };
     }
     const client = createCoreOperatorClient({
@@ -180,15 +187,7 @@ export async function runOperatorCommand(
         descriptor.coreEffect,
       );
     }
-    const result = await execute(
-      command,
-      client,
-      randomUUID,
-      dependencies.openUrl,
-      dependencies.sleep,
-      providerEvidenceCandidates,
-      providerPlacementApplication,
-    );
+    const result = await execute(command, client, dependencies.sleep);
     return successReceipt(command, result);
   } catch (error) {
     const core = error instanceof CoreOperatorError ? error : null;
@@ -217,15 +216,7 @@ export async function runOperatorCommand(
 async function execute(
   command: Exclude<OperatorCommand, { readonly kind: "unsupported" }>,
   client: ReturnType<typeof createCoreOperatorClient>,
-  randomUUID: () => string,
-  openUrl: ((url: URL) => Promise<boolean>) | undefined,
   sleep: (milliseconds: number) => Promise<void>,
-  providerEvidenceCandidates: Awaited<
-    ReturnType<typeof loadProviderEvidenceCandidates>
-  >,
-  providerPlacementApplication: Awaited<
-    ReturnType<typeof loadProviderPlacementApplication>
-  > | null,
 ): Promise<OperatorResult> {
   const marketingSettings = executeWorkspaceMarketingSettingsCommand(
     command,
@@ -237,29 +228,6 @@ async function execute(
   }
   if (isSequenceCommand(command))
     return executeSequenceCommand(command, client);
-  if (isProviderConnectionCommand(command)) {
-    return executeProviderConnectionCommand(
-      command,
-      client,
-      randomUUID,
-      openUrl,
-      sleep,
-    );
-  }
-  if (isProviderEvidenceCommand(command)) {
-    return executeProviderEvidenceCommand(
-      command,
-      client,
-      providerEvidenceCandidates,
-    );
-  }
-  if (isProviderPlacementCommand(command)) {
-    return executeProviderPlacementCommand(
-      command,
-      client,
-      providerPlacementApplication,
-    );
-  }
   if (isProductionCommand(command)) {
     return executeProductionCommand(command, client, sleep);
   }
@@ -289,24 +257,12 @@ async function execute(
       audienceReuseOverride: command.audienceReuseOverride,
     });
   }
-  if (command.kind === "bridge_resend_preview") {
-    return client.previewResendSegment({
+  if (command.kind === "bridge_contact_import_status")
+    return client.readContactImportStatus({
       workspace: command.workspace,
       environment: command.environment,
-      segmentId: command.segmentId,
+      contactImportBatchId: command.contactImportBatchId,
     });
-  }
-  if (command.kind === "bridge_resend_copy") {
-    return client.copyResendSegment({
-      workspace: command.workspace,
-      environment: command.environment,
-      segmentId: command.segmentId,
-      expectedObservationFingerprint: command.observationFingerprint,
-      idempotencyKey: command.idempotencyKey,
-    });
-  }
-  const providerAudience = executeProviderAudienceCommand(command, client);
-  if (providerAudience) return providerAudience;
   throw new TypeError("operator_command_unmappable");
 }
 async function poll(
@@ -333,16 +289,6 @@ function successReceipt(
       send.outcome,
       send.reason,
       send.coreEffect,
-    );
-  }
-  const providerEvidence = providerEvidenceReceiptDescriptor(command, result);
-  if (providerEvidence) {
-    return currentReceipt(
-      command,
-      result,
-      providerEvidence.outcome,
-      providerEvidence.reason,
-      providerEvidence.coreEffect,
     );
   }
   const production = productionReceiptDescriptor(command, result);
@@ -389,56 +335,14 @@ function successReceipt(
       "none",
     );
   }
-  if (result.kind === "resend_bridge_preview") {
+  if (result.kind === "contact_import_status")
     return currentReceipt(
       command,
       result,
       "completed",
-      `resend_bridge_observation_${result.pagination.status}`,
+      "contact_import_status_completed",
       "none",
     );
-  }
-  if (result.kind === "resend_bridge_copy") {
-    return currentReceipt(
-      command,
-      result,
-      "completed",
-      result.import_receipt.created
-        ? "resend_bridge_copy_completed"
-        : "resend_bridge_copy_idempotent",
-      result.import_receipt.created ? "copied" : "none",
-    );
-  }
-  if (result.kind === "provider_placement_application") {
-    const placement = providerPlacementReceiptDescriptor(command, result);
-    return currentReceipt(
-      command,
-      result,
-      placement.outcome,
-      placement.reason,
-      placement.coreEffect,
-    );
-  }
-  const providerAudience = providerAudienceReceiptDescriptor(command, result);
-  if (providerAudience) {
-    return currentReceipt(
-      command,
-      result,
-      providerAudience.outcome,
-      providerAudience.reason,
-      providerAudience.coreEffect,
-    );
-  }
-  const providerConnection = providerConnectionReceiptDescriptor(result);
-  if (providerConnection) {
-    return currentReceipt(
-      command,
-      result,
-      providerConnection.outcome,
-      providerConnection.reason,
-      providerConnection.coreEffect,
-    );
-  }
   if (result.kind !== "sandbox_test") {
     throw new TypeError("operator_receipt_unmappable");
   }
@@ -498,48 +402,36 @@ function currentAuthority(
 ): OperatorReceipt["authority"] {
   return {
     status: "current",
-    contract_id: command.kind === "broadcast_canonical_send" || command.kind === "broadcast_canonical_status"
-      || command.kind === "broadcast_canonical_control"
-      ? "fonte.core.broadcast_send"
-      : command.kind.startsWith("campaign_")
-      ? "fonte.core.campaign_configuration.v1"
-      : command.kind.startsWith("segment_")
-        ? "fonte.core.native_segment.v1"
-        : command.kind.startsWith("broadcast_send_") ||
-            command.kind === "broadcast_schedule" ||
-            command.kind === "broadcast_schedule_replace" ||
-            command.kind === "broadcast_spend_limit_increase"
-          ? "fonte.core.broadcast_send_instruction.v3"
-          : command.kind === "sequence_activate"
-            ? "fonte.core.sequence_activation.v1"
-            : command.kind.startsWith("sequence_")
-              ? "fonte.core.sequence_authoring.v1"
-              : command.kind === "workspace_marketing_settings_read"
-                ? "fonte.core.workspace_marketing_settings.v1"
-                : command.kind === "broadcast_preflight"
-                  ? "fonte.core.broadcast_preflight.v1"
-                  : command.kind === "broadcast_audience_append"
-                    ? "fonte.core.production_broadcast_audience_append.v1"
-                    : command.kind.startsWith("broadcast_") &&
-                        command.kind !== "broadcast_test_send" &&
-                        command.kind !== "broadcast_test_status"
-                      ? "fonte.core.production_broadcast.v1"
-                      : command.kind === "bridge_contact_import_status"
-                        ? "fonte.core.contact_import.v1"
-                        : command.kind.startsWith("bridge_provider_placement_")
-                          ? "fonte.core.provider_placement_application.v1"
-                          : command.kind.startsWith("bridge_provider_rotation_")
-                            ? "fonte.core.provider_rotation_partition.v1"
-                            : command.kind.startsWith("bridge_resend_")
-                              ? "fonte.core.resend_bridge.v1"
-                              : command.kind.startsWith("bridge_connection_")
-                                ? "fonte.core.provider_connections.v1"
-                                : command.kind.startsWith("bridge_provider_")
-                                  ? "fonte.core.provider_audience.v1"
-                                  : command.kind.startsWith(
-                                        "provider_evidence_candidate_",
-                                      )
-                                    ? "fonte.core.provider_evidence_candidate.v1"
-                                    : "fonte.core.sandbox_canary.v1",
+    contract_id:
+      command.kind === "broadcast_canonical_send" ||
+      command.kind === "broadcast_canonical_status" ||
+      command.kind === "broadcast_canonical_control"
+        ? "fonte.core.broadcast_send"
+        : command.kind.startsWith("campaign_")
+          ? "fonte.core.campaign_configuration.v1"
+          : command.kind.startsWith("segment_")
+            ? "fonte.core.native_segment.v1"
+            : command.kind.startsWith("broadcast_send_") ||
+                command.kind === "broadcast_schedule" ||
+                command.kind === "broadcast_schedule_replace" ||
+                command.kind === "broadcast_spend_limit_increase"
+              ? "fonte.core.broadcast_send_instruction.v3"
+              : command.kind === "sequence_activate"
+                ? "fonte.core.sequence_activation.v1"
+                : command.kind.startsWith("sequence_")
+                  ? "fonte.core.sequence_authoring.v1"
+                  : command.kind === "workspace_marketing_settings_read"
+                    ? "fonte.core.workspace_marketing_settings.v1"
+                    : command.kind === "broadcast_preflight"
+                      ? "fonte.core.broadcast_preflight.v1"
+                      : command.kind === "broadcast_audience_append"
+                        ? "fonte.core.production_broadcast_audience_append.v1"
+                        : command.kind.startsWith("broadcast_") &&
+                            command.kind !== "broadcast_test_send" &&
+                            command.kind !== "broadcast_test_status"
+                          ? "fonte.core.production_broadcast.v1"
+                          : command.kind === "bridge_contact_import_status"
+                            ? "fonte.core.contact_import.v1"
+                            : "fonte.core.sandbox_canary.v1",
   };
 }

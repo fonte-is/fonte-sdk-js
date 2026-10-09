@@ -13,8 +13,8 @@ test("Next server is the exact Core collection primitive", () => {
 });
 
 const validBody = {
-  schemaVersion: "fonte.acquisition.v1",
-  classifierVersion: "source.v2",
+  schemaVersion: "fonte.acquisition.v2",
+  sourceEvidence: { query: [], cookies: [] },
   collectionVersion: "test-v1",
   occurrenceId: "10000000-0000-4000-8000-000000000003",
   occurredAt: "2026-09-17T12:00:00.000Z",
@@ -84,79 +84,45 @@ test("Next accepts only matching browser and route origins", async () => {
   );
 });
 
-test("Next maps an accepted scope to the Core touch payload", async () => {
+test("Next admits bounded source evidence using explicit selected fields", async () => {
+  const input = {
+    ...validBody,
+    sourceEvidence: {
+      query: [
+        { name: "campaign_click", value: "click-1" },
+        { name: "other_click", value: "click-2" },
+      ],
+      cookies: [{ name: "visit_cookie", value: "visit-1" }],
+    },
+  };
   const body = await collect.parse(
     new Request("https://example.test", {
       method: "POST",
-      body: JSON.stringify(validBody),
+      body: JSON.stringify(input),
     }),
   );
   assert.ok(body);
-  assert.deepEqual(collect.classifySourceTouch(body.scope), {
-    channelType: "unknown",
-    channel: "unknown",
-    sourcePlatform: "demo",
-    captureReason: "utm_parameter",
-  });
-  const touch = collect.toTouch(body.scope, body.journeyId);
-  assert.equal(touch.journeyId, body.journeyId);
-  assert.equal(touch.platform, "other");
-  assert.equal(touch.isPaid, false);
-  assert.equal(touch.sourcePlatform, "demo");
-});
-
-test("Core source classification keeps each reported-signal branch explicit", () => {
-  const cases = [
+  const policy = {
+    status: "granted",
+    version: "test-v1",
+    expiresAt: null,
+    storage: "memory",
+    routes: ["*"],
+    clickIds: true,
+    adCookies: false,
+    sourceFields: { query: ["campaign_click"], cookies: [] },
+  };
+  assert.deepEqual(
+    collect.minimizeSourceEvidence(body.sourceEvidence, policy),
     {
-      scope: { gclid: "click-1" },
-      expected: ["paid", "paid_search", "google", "platform_click_id"],
+      query: [{ name: "campaign_click", value: "click-1" }],
+      cookies: [],
     },
-    {
-      scope: { fbclid: "click-2" },
-      expected: ["paid", "paid_social", "meta", "platform_click_id"],
-    },
-    {
-      scope: { fonte: "source-token" },
-      expected: ["unknown", "unknown", "unknown", "fonte_source_identity"],
-    },
-    {
-      scope: { utm_source: "newsletter", utm_medium: "email" },
-      expected: ["owned", "owned_email", "newsletter", "utm_parameter"],
-    },
-    {
-      scope: { utm_source: "google", utm_medium: "organic" },
-      expected: ["organic", "organic_search", "google", "utm_parameter"],
-    },
-    {
-      scope: {
-        current_url: "https://example.test/page",
-        referrer: "https://referrer.example/path",
-      },
-      expected: [
-        "referral",
-        "referral",
-        "referrer.example",
-        "external_referrer",
-      ],
-    },
-    {
-      scope: { current_url: "https://example.test/page" },
-      expected: ["unknown", "unknown", "unknown", "no_referrer"],
-    },
-  ];
-
-  for (const { scope, expected } of cases) {
-    const result = collect.classifySourceTouch(scope);
-    assert.deepEqual(
-      [
-        result.channelType,
-        result.channel,
-        result.sourcePlatform,
-        result.captureReason,
-      ],
-      expected,
-    );
-  }
+  );
+  assert.equal(
+    collect.permitted({ ...policy, sourceFields: undefined }),
+    false,
+  );
 });
 
 test("Next installation metadata stays exact", () => {
@@ -165,11 +131,63 @@ test("Next installation metadata stays exact", () => {
     normalizeInstallationVerificationConfig({
       schemaVersion: "fonte.installation_verification.v2",
       installationAttemptId: "10000000-0000-4000-8000-000000000003",
-      sdkVersion: "0.1.0",
+      sdkVersion: "0.2.0",
       configVersion: "fonte.config.v2",
       adapterId: "next_app_router",
       adapterVersion: "v1",
     })?.adapterId,
     "next_app_router",
   );
+});
+
+const parseInput = (sourceEvidence) =>
+  collect.parse(
+    new Request("https://example.test", {
+      method: "POST",
+      body: JSON.stringify({ ...validBody, sourceEvidence }),
+    }),
+  );
+test("bounded evidence rejects duplicates, excess fields and arbitrary values", async () => {
+  for (const sourceEvidence of [
+    undefined,
+    null,
+    { query: [], cookies: [], raw: {} },
+    {
+      query: [
+        { name: "click", value: "one" },
+        { name: "click", value: "two" },
+      ],
+      cookies: [],
+    },
+    {
+      query: Array.from({ length: 9 }, (_, n) => ({
+        name: `click${n}`,
+        value: "id",
+      })),
+      cookies: [],
+    },
+    {
+      query: [],
+      cookies: Array.from({ length: 3 }, (_, n) => ({
+        name: `cookie${n}`,
+        value: "id",
+      })),
+    },
+    { query: [{ name: "click", value: "person@example.test" }], cookies: [] },
+    { query: [{ name: "click", value: "x".repeat(501) }], cookies: [] },
+    { query: [{ name: "click", value: { arbitrary: "json" } }], cookies: [] },
+    { query: [{ name: "click", value: "id", future: "extra" }], cookies: [] },
+  ])
+    assert.equal(await parseInput(sourceEvidence), null);
+  const parsed = await parseInput({
+    query: [
+      { name: "z_click", value: "z" },
+      { name: "a_click", value: "a" },
+    ],
+    cookies: [],
+  });
+  assert.deepEqual(parsed.sourceEvidence.query, [
+    { name: "a_click", value: "a" },
+    { name: "z_click", value: "z" },
+  ]);
 });

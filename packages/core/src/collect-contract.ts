@@ -1,5 +1,22 @@
 import type { Scope } from "./types.js";
 
+export const collectMaxBytes = 16_384;
+export const scopeValueMaxBytes = 500;
+export const scopeUrlMaxBytes = 2048;
+export function withinUtf8Limit(value: string, limit: number): boolean {
+  return (
+    value.length <= limit && new TextEncoder().encode(value).length <= limit
+  );
+}
+export function boundedScopeValue(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    !/[\u0000-\u001f\u007f]/.test(value) &&
+    withinUtf8Limit(value, scopeValueMaxBytes)
+  );
+}
+
 export const measurementQueryKeys = [
   "utm_source",
   "utm_medium",
@@ -7,26 +24,6 @@ export const measurementQueryKeys = [
   "utm_content",
   "utm_term",
 ] as const;
-
-export const adStorageQueryKeys = [
-  "gclid",
-  "gbraid",
-  "wbraid",
-  "fbclid",
-  "ttclid",
-  "twclid",
-] as const;
-
-export const paidMediums = new Set([
-  "cpc",
-  "ppc",
-  "paid",
-  "paid_search",
-  "paid_social",
-  "display",
-  "affiliate",
-]);
-
 export const scopeKeys = new Set([
   "current_url",
   "canonical_route",
@@ -35,13 +32,9 @@ export const scopeKeys = new Set([
   "fonte",
   "fonte_click",
   ...measurementQueryKeys,
-  ...adStorageQueryKeys,
-  "fbc",
-  "fbp",
   "fonte_device_id",
   "fonte_journey_id",
 ]);
-
 export const clean = (value: unknown, maxLength = 2048): string =>
   typeof value === "string"
     ? value
@@ -49,27 +42,14 @@ export const clean = (value: unknown, maxLength = 2048): string =>
         .trim()
         .slice(0, maxLength)
     : "";
-
 export function canonicalizeCurrentUrl(scope: Scope): Scope {
   if (!scope.current_url) return scope;
   try {
     const source = new URL(scope.current_url);
     const accepted = new URL(`${source.origin}${source.pathname}`);
-    if (scope.fonte && source.searchParams.get("fonte") === scope.fonte) {
-      accepted.searchParams.set("fonte", scope.fonte);
-    }
-    if (scope.fonte_click && source.searchParams.get("fonte_click") === scope.fonte_click) {
-      accepted.searchParams.set("fonte_click", scope.fonte_click);
-    }
-    for (const key of measurementQueryKeys) {
-      if (scope[key] && source.searchParams.get(key) === scope[key]) {
+    for (const key of ["fonte", "fonte_click", ...measurementQueryKeys]) {
+      if (scope[key] && source.searchParams.get(key) === scope[key])
         accepted.searchParams.set(key, scope[key]);
-      }
-    }
-    for (const key of adStorageQueryKeys) {
-      if (scope[key] && source.searchParams.get(key) === scope[key]) {
-        accepted.searchParams.set(key, scope[key]);
-      }
     }
     return { ...scope, current_url: accepted.href };
   } catch {

@@ -146,8 +146,7 @@ async function resolveScope(
     throw new CoreOperatorError("workspace_selection_required", null, "none");
   return result.data;
 }
-/** Root composes this once in the authenticated MCP session, replacing the existing normal
- * fonte_prepare_broadcast/send/read registrations. Never duplicate tool names or retired now. */
+/** Register the Broadcast review, Send, recovery and status tools. */
 export function registerMcpBroadcastBgTools(
   server: McpServer,
   provider: BroadcastMcpProvider,
@@ -178,25 +177,25 @@ export function registerMcpBroadcastBgTools(
     {
       title: "Send approved Broadcast",
       inputSchema: broadcastBgSendToolInput,
-      description:
-        options.callerCustody
-          ? "Submits the caller's complete immutable approved Send input. Retain and replay exactly this input after response loss; Core enforces durable idempotency. Core reports business acceptance and execution readiness separately."
-          : "Durably saves and submits the exact approved review references. Core reports business acceptance and execution readiness separately.",
+      description: options.callerCustody
+        ? "Submits the caller's complete immutable approved Send input. Retain and replay exactly this input after response loss; Core enforces durable idempotency. Core reports business acceptance and execution readiness separately."
+        : "Durably saves and submits the exact approved review references. Core reports business acceptance and execution readiness separately.",
       annotations: sendMutation,
     },
     async (input) => result(await handlers.send(input)),
   );
-  if (!options.callerCustody) server.registerTool(
-    MCP_BROADCAST_BG_TOOLS.recover,
-    {
-      title: "Recover saved Broadcast request",
-      inputSchema: broadcastBgRecoverToolInput,
-      description:
-        "Replays the same saved input and request key after response loss; never creates a new approval.",
-      annotations: sendMutation,
-    },
-    async (input) => result(await handlers.recover(input)),
-  );
+  if (!options.callerCustody)
+    server.registerTool(
+      MCP_BROADCAST_BG_TOOLS.recover,
+      {
+        title: "Recover saved Broadcast request",
+        inputSchema: broadcastBgRecoverToolInput,
+        description:
+          "Replays the same saved input and request key after response loss; never creates a new approval.",
+        annotations: sendMutation,
+      },
+      async (input) => result(await handlers.recover(input)),
+    );
   server.registerTool(
     MCP_BROADCAST_BG_TOOLS.read,
     {

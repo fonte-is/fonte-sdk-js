@@ -5,8 +5,8 @@ import { createServer } from "node:http";
 import { performance } from "node:perf_hooks";
 import test from "node:test";
 import ts from "typescript";
-import { createFonte } from "@fonte-is/core/results";
-import { createFonteApplicationSource } from "@fonte-is/core/application";
+import { createFonte } from "../packages/core/dist/results.js";
+import { createFonteApplicationSource } from "../packages/core/dist/application.js";
 
 const at = "2026-10-06T10:00:00.000Z",
   time = Date.parse(at);
@@ -1027,7 +1027,7 @@ test("invalid native construction and server-only use expose only constant error
   }
 });
 
-test("strict public type consumer permits named success and denies browser trigger or arbitrary properties", () => {
+test("strict built type consumer permits confirmed success and rejects unknown fields and browser authority", () => {
   const file = new URL("./native-types-consumer.ts", import.meta.url).pathname;
   const fixture = `import {createFonte, type AuthenticatedAppUser, type FonteIdentityHandle} from '@fonte-is/core/results';
 import {recordFonteReturn, type FonteBrowserIdentity} from '@fonte-is/core/results-browser';
@@ -1035,6 +1035,14 @@ export function use(user: AuthenticatedAppUser, handle: FonteIdentityHandle, bro
   const fonte = createFonte({installationId: 'synthetic-installation', serverKey: 'synthetic-only-native-key-123456789'});
   fonte.identify(user, {measurementAllowed: true}); handle.trigger('project_created', {eventId: 'original', occurredAt: 'original'});
   handle.returned(); fonte.retract({targetId: 'original', reason: 'correction'}, {measurementAllowed: true}); recordFonteReturn(browser);
+  const confirmation: string | null = handle.confirmTrigger('project_created', {eventId: 'original', occurredAt: 'original', sourceRevision: 1});
+  void confirmation;
+  // @ts-expect-error confirmation requires an explicit original UUID and time
+  handle.confirmTrigger('project_created', {});
+  // @ts-expect-error confirmation accepts only its declared fields
+  handle.confirmTrigger('project_created', {eventId: 'original', occurredAt: 'original', unexpected: true});
+  // @ts-expect-error actor claims belong to the original authenticated identity
+  handle.confirmTrigger('project_created', {eventId: 'original', occurredAt: 'original', userId: 'caller'});
   // @ts-expect-error browser cannot supply authoritative success
   recordFonteReturn(browser, {trigger: 'project_created'});
   // @ts-expect-error no generic properties or Contact graph
@@ -1052,6 +1060,13 @@ export function use(user: AuthenticatedAppUser, handle: FonteIdentityHandle, bro
     noUnusedParameters: true,
     exactOptionalPropertyTypes: true,
     skipLibCheck: true,
+    baseUrl: new URL("..", import.meta.url).pathname,
+    paths: {
+      "@fonte-is/core/results": ["packages/core/dist/results.d.ts"],
+      "@fonte-is/core/results-browser": [
+        "packages/core/dist/results-browser.d.ts",
+      ],
+    },
   };
   const host = ts.createCompilerHost(options),
     oldGet = host.getSourceFile.bind(host),

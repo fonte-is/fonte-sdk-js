@@ -48,18 +48,28 @@ const dependencies = (store) => ({
 
 test("hosted caller custody replays the complete exact input without a server request file", async () => {
   const posts = [];
-  const make = () => createBroadcastClient({ coreApiBaseUrl: coreOrigin,
-    requestCustody: "caller", resolveWorkspaceId: async () => workspaceId,
-    request: async (path, options) => { posts.push({ path, body: options.body }); return executable; } });
+  const make = () =>
+    createBroadcastClient({
+      coreApiBaseUrl: coreOrigin,
+      requestCustody: "caller",
+      resolveWorkspaceId: async () => workspaceId,
+      request: async (path, options) => {
+        posts.push({ path, body: options.body });
+        return executable;
+      },
+    });
   assert.equal((await make().send(scope, sendRequest)).outcome, "executable");
   assert.equal((await make().send(scope, sendRequest)).outcome, "executable");
   assert.deepEqual(posts[0], posts[1]);
   assert.equal(posts[0].body.requestId, requestId);
-  await assert.rejects(make().recover(requestId), error => error.reason === "broadcast_saved_input_required");
+  await assert.rejects(
+    make().recover(requestId),
+    (error) => error.reason === "broadcast_saved_input_required",
+  );
   assert.equal(posts.length, 2);
 });
 
-test("fixed FON-807 compact receipts preserve execution authority and immutable workspace identity", () => {
+test("compact receipts preserve execution authority and immutable workspace identity", () => {
   assert.notEqual(scope.workspace, workspaceId);
   assert.deepEqual(
     parseBroadcastReviewReceipt(ready, coreOrigin, resolved, "none", 1),
@@ -120,20 +130,34 @@ test("fixed FON-807 compact receipts preserve execution authority and immutable 
 });
 
 test("bounded direct Send is durable without a recipient review", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon845-direct-send-"));
+  const directory = await mkdtemp(
+    join(tmpdir(), "fonte-broadcast-direct-send-"),
+  );
   try {
-    const input = boundedDirectBroadcastSendInput(resolved, coreOrigin, requestId, 1, "1000000");
+    const input = boundedDirectBroadcastSendInput(
+      resolved,
+      coreOrigin,
+      requestId,
+      1,
+      "1000000",
+    );
     assert.equal(input.request.reviewId, undefined);
     assert.equal(input.request.maximumGrossChargeMicros, "1000000");
     for (const invalid of [
       { ...input.request, maximumGrossChargeMicros: undefined },
       { ...input.request, maximumGrossChargeMicros: "-1" },
       { ...input.request, reviewId: review.reviewId },
-      { ...input.request, reviewId: review.reviewId, reviewDigest: review.reviewDigest },
-    ]) assert.throws(() => parseBroadcastSendRequest(invalid));
+      {
+        ...input.request,
+        reviewId: review.reviewId,
+        reviewDigest: review.reviewDigest,
+      },
+    ])
+      assert.throws(() => parseBroadcastSendRequest(invalid));
     const store = createBroadcastFileStore(directory);
     const receipt = { ...processing, reviewId: null };
-    const client = createBroadcastClient({ ...dependencies(store),
+    const client = createBroadcastClient({
+      ...dependencies(store),
       fetch: async (_url, init) => {
         assert.deepEqual(JSON.parse(init.body), input.request);
         return json(receipt);
@@ -141,18 +165,34 @@ test("bounded direct Send is durable without a recipient review", async () => {
     });
     assert.deepEqual(await client.send(scope, input.request), receipt);
     assert.deepEqual((await store.read(requestId)).request, input.request);
-    assert.deepEqual(parseBroadcastSendReceipt({ ...executable, reviewId: null,
-      selectedRecipientCount: 2048 }, coreOrigin).selectedRecipientCount, 2048);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+    assert.deepEqual(
+      parseBroadcastSendReceipt(
+        { ...executable, reviewId: null, selectedRecipientCount: 2048 },
+        coreOrigin,
+      ).selectedRecipientCount,
+      2048,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("lost direct Send acknowledgement replays the same capped command", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon845-direct-recovery-"));
+  const directory = await mkdtemp(
+    join(tmpdir(), "fonte-broadcast-direct-recovery-"),
+  );
   try {
-    const input = boundedDirectBroadcastSendInput(resolved, coreOrigin, requestId, 1, "1000000");
+    const input = boundedDirectBroadcastSendInput(
+      resolved,
+      coreOrigin,
+      requestId,
+      1,
+      "1000000",
+    );
     const receipt = { ...processing, reviewId: null };
     let attempts = 0;
-    const client = createBroadcastClient({ ...dependencies(createBroadcastFileStore(directory)),
+    const client = createBroadcastClient({
+      ...dependencies(createBroadcastFileStore(directory)),
       fetch: async (_url, init) => {
         assert.deepEqual(JSON.parse(init.body), input.request);
         if (++attempts === 1) throw new Error("synthetic lost response");
@@ -162,11 +202,13 @@ test("lost direct Send acknowledgement replays the same capped command", async (
     await assert.rejects(client.send(scope, input.request));
     assert.deepEqual(await client.recover(requestId), receipt);
     assert.equal(attempts, 2);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("canonical saved input rejects legacy arrays and same-key changes before any POST", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon813-store-"));
+  const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-store-"));
   try {
     const store = createBroadcastFileStore(directory);
     let calls = 0;
@@ -234,7 +276,7 @@ test("canonical saved input rejects legacy arrays and same-key changes before an
 });
 
 test("injected current-custody requester preserves explicit ceilings and rejects a different resumed operation", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon813-injected-"));
+  const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-injected-"));
   try {
     const seen = [];
     const client = createBroadcastClient({
@@ -272,7 +314,7 @@ test("injected current-custody requester preserves explicit ceilings and rejects
 });
 
 test("one explicit request ceiling applies to review POST/read, Send POST/read and fresh recovery", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon813-timeout-"));
+  const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-timeout-"));
   const timeouts = new Map();
   const original = AbortSignal.timeout;
   AbortSignal.timeout = (milliseconds) => {
@@ -321,7 +363,7 @@ test("one explicit request ceiling applies to review POST/read, Send POST/read a
 });
 
 test("off-origin, oversized and stalled response bodies cannot transfer credentials or imply no effect", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "fon813-boundary-"));
+  const directory = await mkdtemp(join(tmpdir(), "fonte-broadcast-boundary-"));
   try {
     let calls = 0;
     const store = createBroadcastFileStore(directory);

@@ -20,6 +20,7 @@ export function initPlanFromManifest(
     createInitMaterial(
       ids.has("sdk_dependency"),
       ids.has("local_state_ignore"),
+      manifest.sdk_version,
     ),
   );
 }

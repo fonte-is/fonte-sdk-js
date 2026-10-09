@@ -1,3 +1,4 @@
+import { validSourceFields } from "../source-evidence.js";
 import { measurementQueryKeys } from "../collect-contract.js";
 import type { CollectionPolicy } from "../collection-policy.js";
 import {
@@ -108,6 +109,15 @@ function policy(value: unknown): Omit<CollectionPolicy, "status"> | null {
   };
   for (const key of ["clickIds", "adCookies", "sourceTokens"] as const)
     if (p[key] !== undefined) result[key] = boolean(p[key], `policy.${key}`);
+  if (p.sourceFields !== undefined) {
+    const selected = p.sourceFields;
+    if (validSourceFields(selected)) {
+      result.sourceFields = {
+        query: [...selected.query],
+        cookies: [...selected.cookies],
+      };
+    } else fail("policy.sourceFields");
+  }
   if (p.campaignValues === true) result.campaignValues = true;
   else if (p.campaignValues !== undefined) {
     const campaigns = object(p.campaignValues, "policy.campaignValues");

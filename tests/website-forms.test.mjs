@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createServer } from "node:http";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium } from "playwright";
 import { createWebsiteForms } from "../packages/core/dist/website/forms.js";
 import { createFormSubmission } from "../packages/core/dist/website/form-submit.js";
@@ -54,8 +56,7 @@ test("frozen intent retries by identity and changed intent gets a fresh UUID", a
   assert.equal(results.length, 2);
 });
 
-let server, browser, origin;
-const evidence = "/private/tmp/fon822-website-forms-evidence";
+let server, browser, origin, evidence;
 before(async () => {
   server = createServer(async (req, res) => {
     try {
@@ -91,7 +92,7 @@ before(async () => {
     headless: true,
     ...(existsSync(chromium.executablePath()) ? {} : { channel: "chrome" }),
   });
-  await mkdir(evidence, { recursive: true });
+  evidence = await mkdtemp(join(tmpdir(), "fonte-website-forms-"));
   await writeFile(
     `${evidence}/profile.json`,
     JSON.stringify(
@@ -109,9 +110,13 @@ before(async () => {
   );
 });
 after(async () => {
-  await browser?.close();
-  server?.closeAllConnections();
-  if (server) await new Promise((done) => server.close(done));
+  try {
+    await browser?.close();
+    server?.closeAllConnections();
+    if (server) await new Promise((done) => server.close(done));
+  } finally {
+    if (evidence) await rm(evidence, { recursive: true, force: true });
+  }
 });
 async function fixture(t) {
   const page = await browser.newPage();

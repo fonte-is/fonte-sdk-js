@@ -350,7 +350,7 @@ test("Send submits once and does not retry an ambiguous response", async () => {
     JSON.stringify(sendValidation.success ? [] : sendValidation.error.issues));
 });
 
-test("MCP registration exports only the two FON-740 tools with strict inputs", async () => {
+test("broadcast MCP registration exports its two tools with strict inputs", async () => {
   const fakes = createFakes({ existingDraft: readyDraft() });
   const operator = createBroadcastPavedOperator(fakes.dependencies);
   const registrations = [];

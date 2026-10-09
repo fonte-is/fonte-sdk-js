@@ -22,7 +22,7 @@ const selected =
 const coreDocs = [
   "results.md",
   "results-reference.md",
-  "posthog-selected-actions.md",
+  "action-confirmations.md",
   "website-tracking.md",
   "application-outcomes.md",
 ];
@@ -76,7 +76,7 @@ for (const name of selected) {
   }
   const allowedEntry =
     name === "cli"
-      ? /^package\/(package\.json|LICENSE|README\.md|OPERATOR_CONTRACT\.md|dist\/)/
+      ? /^package\/(package\.json|LICENSE|README\.md|MCP_CONTRACT\.md|OPERATOR_CONTRACT\.md|dist\/|native\/)/
       : /^package\/(package\.json|README\.md|OPERATOR_CONTRACT\.md|dist\/)/;
   for (const entry of entries) {
     assert.ok(
@@ -86,7 +86,9 @@ for (const name of selected) {
       `${manifest.name} packed unexpected file ${entry}`,
     );
     assert.ok(
-      !/\/src\//.test(entry),
+      !/\/src\//.test(entry) ||
+        (name === "cli" &&
+          entry.startsWith("package/native/client-auth-store/")),
       `${manifest.name} leaked source: ${entry}`,
     );
     assert.ok(

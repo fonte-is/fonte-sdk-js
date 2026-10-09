@@ -1,9 +1,11 @@
+import { runConnectionProgram } from "./connection-program.js";
 import { parseArguments } from "./arguments.js";
 import {
   AUTHORIZATION_ERROR_TEXT,
   EXECUTION_ERROR_TEXT,
   HELP_TEXT,
   LOCAL_MANIFEST_PATH,
+  SDK_VERSION,
   ROLLBACK_ERROR_TEXT,
   USAGE_TEXT,
   VERSION_TEXT,
@@ -31,7 +33,6 @@ import type { CommandResult, ProgramDependencies } from "./runtime-types.js";
 import type { AnyCliReceipt, CommandName, ParsedArguments } from "./types.js";
 import { runOperatorCommand } from "./operator-run.js";
 import { runFonteSetup } from "./local-setup.js";
-import { runReleaseProgram } from "./release-program.js";
 import { runBroadcastProgram } from "./broadcast-program.js";
 
 /** Execute one parsed CLI request; never write directly to stdout or stderr. */
@@ -39,6 +40,8 @@ export async function runProgram(
   argv: readonly string[],
   dependencies: ProgramDependencies,
 ): Promise<CommandResult> {
+  const connection = await runConnectionProgram(argv, dependencies);
+  if (connection) return connection;
   const broadcast = await runBroadcastProgram(argv, dependencies);
   if (broadcast) return broadcast;
   let parsed: ParsedArguments;
@@ -84,18 +87,6 @@ export async function runProgram(
         stdout: `${JSON.stringify(readiness)}\n`,
         stderr: "",
       };
-    } catch {
-      return executionFailure();
-    }
-  }
-  if (parsed.command === "release") {
-    if (!dependencies.releaseRunner) return executionFailure();
-    try {
-      return await runReleaseProgram(
-        argv,
-        dependencies.cwd,
-        dependencies.releaseRunner,
-      );
     } catch {
       return executionFailure();
     }
@@ -205,7 +196,10 @@ async function executeCommand(
 ): Promise<AnyCliReceipt> {
   if (parsed.command === "init") {
     if (await manifestExists(profile.root)) {
-      return verifyInstallation(profile, await readManifest(profile.root));
+      const manifest = await readManifest(profile.root);
+      if (manifest.sdk_version !== SDK_VERSION)
+        throw new CliBlockedError("dependency_version_conflict");
+      return verifyInstallation(profile, manifest);
     }
     const plan = await createInitPlan(profile);
     return parsed.apply

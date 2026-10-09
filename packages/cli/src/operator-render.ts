@@ -2,13 +2,9 @@ import { renderProductionOperatorHuman } from "./operator-production-render.js";
 import { renderBroadcastSendInstructionHuman } from "./operator-broadcast-send-instruction-render.js";
 import { renderWorkspaceMarketingSettings } from "./operator-marketing-settings-render.js";
 import { renderBlockedOperator } from "./operator-blocked-render.js";
-import { renderProviderRotation } from "./operator-provider-rotation-render.js";
+
 import { renderSequenceOperatorHuman } from "./operator-sequence-render.js";
-import type {
-  ProviderAudienceUnavailableInputResult as UnavailableInput,
-  ProviderAudienceSourceReferenceResult,
-  ProviderAudienceReconciliationResult,
-} from "./operator-provider-audience-types.js";
+
 import type { OperatorReceipt } from "./operator-types.js";
 
 export function renderOperatorJson(receipt: OperatorReceipt): string {
@@ -41,112 +37,6 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
       "",
     ].join("\n");
   }
-  if (result.kind === "resend_bridge_preview") {
-    return [
-      `Fonte Resend Bridge preview: ${result.pagination.status}.`,
-      `Connection: ${result.connection_id}.`,
-      `Segment: ${result.segment.name} (${result.segment.id}).`,
-      `Observed/protected/unknown contacts: ${result.contacts_observed}/${result.protected.contacts}/${result.unknown.contacts}.`,
-      `Pages: contacts ${coverage(result.pagination.contacts)}, suppressions ${coverage(result.pagination.suppressions)}.`,
-      `Fingerprint: ${result.observation_fingerprint}.`,
-      "Core effect: none.",
-      "",
-    ].join("\n");
-  }
-  if (result.kind === "resend_bridge_copy") {
-    const reconciliation = result.reconciliation;
-    return [
-      `Fonte Resend Bridge copy: ${result.import_receipt.created ? "completed" : "idempotent"}.`,
-      `Import receipt: ${result.import_receipt.contact_import_batch_id}.`,
-      `Accepted/created/updated/unchanged: ${reconciliation.accepted}/${reconciliation.created}/${reconciliation.updated ?? "unknown"}/${reconciliation.unchanged ?? "unknown"}.`,
-      `Protected/conflict/unknown: ${reconciliation.protected}/${reconciliation.conflict ?? "unknown"}/${reconciliation.unknown}.`,
-      `Fingerprint: ${result.observation_fingerprint}.`,
-      `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
-  if (result.kind === "provider_collections") {
-    return [
-      "Fonte Bridge collections: complete.",
-      `Provider/connection: ${result.provider}/${result.connection_id}.`,
-      `Observed: ${result.observed_at}; coverage: ${result.completeness}.`,
-      `Collections (${result.collections.length}):`,
-      ...(result.collections.length === 0
-        ? ["- none"]
-        : result.collections.map(
-            (item) => `- ${item.display_name} (${item.collection_id})`,
-          )),
-      "Core effect: none.",
-      "",
-    ].join("\n");
-  }
-  if (result.kind === "provider_audience_reconciliation") {
-    return renderProviderAudienceReconciliation(result);
-  }
-  if (result.kind === "provider_audience_freeze") {
-    return [
-      `Fonte Bridge audience freeze: ${result.created ? "created" : "idempotent"}.`,
-      `Frozen audience: ${result.frozen_audience_id}.`,
-      `Label: ${result.label}.`,
-      `Source/excluded/protected/unknown/final: ${audienceCounts(result.counts)}.`,
-      `Fingerprint: ${result.observation_fingerprint}.`,
-      `Recipient import batch: ${result.contact_import_batch_id}.`,
-      `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
-  if (result.kind === "provider_placement_application") {
-    return [
-      `Fonte provider placement application: ${result.status}.`,
-      `Reason: ${result.reason_code ?? "none"}.`,
-      `Application: ${result.idempotency_key}; connection: ${result.connection_id}.`,
-      `Outgoing confirmed/remaining: ${result.outgoing.confirmed}/${result.outgoing.remaining}.`,
-      `Incoming confirmed/remaining: ${result.incoming.confirmed}/${result.incoming.remaining}.`,
-      `Provider population/target/headroom: ${result.readback.provider_population_count ?? "unavailable"}/${result.operating_targets.provider_contact_count}/${result.readback.provider_target_headroom ?? "unavailable"}.`,
-      `Fonte population/minimum: ${result.readback.fonte_population_count ?? "unavailable"}/${result.operating_targets.minimum_fonte_contact_count}.`,
-      `Provider observation: ${result.readback.provider_observation_fingerprint_sha256 ?? "unavailable"}.`,
-      result.retirement_certificate
-        ? `Certificate: ${result.retirement_certificate.certificate_id} (${result.retirement_certificate.certificate_checksum_sha256}).`
-        : "Certificate: not applicable (refill-only).",
-      `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
-  if (result.kind === "provider_rotation_partition") {
-    return renderProviderRotation(receipt, result);
-  }
-  if (result.kind === "provider_connections") {
-    return [
-      `Fonte ${providerName(result.provider)} connections (${result.connections.length}):`,
-      ...(result.connections.length === 0
-        ? ["- none"]
-        : result.connections.map(
-            (connection) =>
-              `- ${connection.display_name} (${connection.connection_id}); version ${connection.credential_version}; ${connection.status}.`,
-          )),
-      "Core effect: none.",
-      "",
-    ].join("\n");
-  }
-  if (result.kind === "provider_connection_oauth") {
-    return [
-      `Fonte ${providerName(result.provider)} connection: ${result.status}.`,
-      `Reason: ${result.reason}.`,
-      ...(result.provider === "resend"
-        ? [
-            "Provider scope: full_access; Fonte uses it for read-only Bridge operations.",
-          ]
-        : []),
-      ...(result.authorization_url
-        ? [`Authorize in your browser: ${result.authorization_url}`]
-        : []),
-      ...(result.connection
-        ? [`Connection: ${result.connection.connection_id}.`]
-        : [`Connection: ${result.connection_id}.`]),
-      `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
   if (result.kind !== "sandbox_test") {
     throw new TypeError("operator_receipt_unrenderable");
   }
@@ -159,87 +49,9 @@ export function renderOperatorHuman(receipt: OperatorReceipt): string {
   ].join("\n");
 }
 
-function providerName(provider: "resend" | "kit"): "Resend" | "Kit" {
-  return provider === "resend" ? "Resend" : "Kit";
-}
-
-function renderProviderAudienceReconciliation(
-  result: ProviderAudienceReconciliationResult,
-): string {
-  return [
-    `Fonte Bridge audience reconciliation: ${result.ready ? "ready" : "unavailable"}.`,
-    `Source: ${result.source ? referenceLabel(result.source.reference) : "unavailable"}.`,
-    `Exclusions (${result.exclusions.length}):`,
-    ...(result.exclusions.length === 0
-      ? ["- none"]
-      : result.exclusions.map(
-          (item) =>
-            `- ${item.index}: ${referenceLabel(item.reference)}; overlap ${item.overlap_count ?? "unknown"}.`,
-        )),
-    ...(result.counts
-      ? [
-          `Source/excluded/protected/unknown/final: ${audienceCounts(result.counts)}.`,
-        ]
-      : ["Counts: unavailable."]),
-    `Fingerprint: ${result.observation_fingerprint ?? "unavailable"}.`,
-    ...(result.unavailable_inputs.length === 0
-      ? []
-      : [
-          "Unavailable inputs:",
-          ...result.unavailable_inputs.map(
-            (item) =>
-              `- ${item.role}${item.index === null ? "" : ` ${item.index}`}: ${item.reason}; ${referenceLabel(item.reference)}${unavailableDiagnostics(item)}.`,
-          ),
-        ]),
-    "Core effect: none.",
-    "",
-  ].join("\n");
-}
-
-function unavailableDiagnostics(item: UnavailableInput): string {
-  const fields = Object.entries({
-    provider_response_invalid_stage: item.provider_response_invalid_stage,
-    provider_response_invalid_reason: item.provider_response_invalid_reason,
-    provider_unavailable_stage: item.provider_unavailable_stage,
-    provider_unavailable_reason: item.provider_unavailable_reason,
-  }).flatMap(([key, value]) => (value ? [`${key}=${value}`] : []));
-  return fields.length === 0 ? "" : `; ${fields.join("; ")}`;
-}
-
-function referenceLabel(value: ProviderAudienceSourceReferenceResult): string {
-  if ("kind" in value) {
-    return `Fonte audience ${value.contact_import_batch_id} (${value.identity_set_sha256})`;
-  }
-  return `${value.provider}/${value.connection_id}/${value.collection_type}/${value.display_name} (${value.collection_id})`;
-}
-
-function audienceCounts(value: {
-  readonly source: number;
-  readonly exclusion_union: number;
-  readonly protected: number;
-  readonly unknown: number;
-  readonly final: number;
-}): string {
-  return [
-    value.source,
-    value.exclusion_union,
-    value.protected,
-    value.unknown,
-    value.final,
-  ].join("/");
-}
-
 function counts(result: NonNullable<OperatorReceipt["result"]>): string {
   if (result.kind !== "sandbox_test") return "unavailable";
   return [result.accepted_count, result.refused_count, result.unknown_count]
     .map((value) => value ?? "pending")
     .join("/");
-}
-
-function coverage(value: {
-  readonly status: "complete" | "partial";
-  readonly pages_observed: number;
-  readonly has_more: boolean;
-}): string {
-  return `${value.pages_observed} (${value.status}${value.has_more ? ", more available" : ""})`;
 }

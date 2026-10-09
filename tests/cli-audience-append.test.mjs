@@ -414,7 +414,7 @@ function appendSegment() {
     frozenAudienceId,
     canonicalIdentitySetSha256: identitySetSha256,
     sourceProvenance: {
-      source: { provider: "resend", collectionId: "synthetic-segment" },
+      source: { sourceRef: "fs_10000000-0000-4000-8000-000000000050" },
       exclusions: [],
       providerSecret: "synthetic-provider-secret",
       contact: { email: "hidden@example.test" },

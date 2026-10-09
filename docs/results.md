@@ -4,8 +4,9 @@ This guide connects one real signed-in visit and one saved report to a
 Broadcast. At the end, you can compare Fonte's Results with the user and
 saved record your application already knows.
 
-Already using PostHog? Use the [PostHog setup](./posthog-selected-actions.md)
-for actions, and the browser visit example below for Returns.
+To carry saved actions through an existing event pipeline, use
+[action confirmations](./action-confirmations.md). Record Returns with the
+browser visit example below.
 
 ## 1. Connect your app
 
@@ -18,7 +19,7 @@ FONTE_APPLICATION_SOURCE_ID=your-connection-id
 FONTE_APPLICATION_SERVER_KEY=your-server-key
 ```
 
-**Version 0.2 is a preview.** Install the explicit version:
+**Version 0.2 is an unpublished preview.** When released, install the explicit version:
 
 ```sh
 npm install @fonte-is/core@0.2.0
@@ -221,7 +222,7 @@ retrying an old operation or testing restarts.
 
 ## Payments and existing integrations
 
-Payment and refund Results require Fonte's verified Stripe connection and
+Payment and refund Results require Fonte's verified payment connection and
 actual provider records. A `purchase_completed` action cannot establish that
 money was collected.
 

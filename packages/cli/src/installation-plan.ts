@@ -44,7 +44,8 @@ export async function createRemovePlan(
     throw new CliBlockedError("installation_manifest_invalid");
   }
   try {
-    if (dependencyPosture(profile) !== "exact") throw new Error("absent");
+    if (dependencyPosture(profile, manifest.sdk_version) !== "exact")
+      throw new Error("absent");
   } catch {
     throw new CliBlockedError("managed_code_drifted");
   }
@@ -104,5 +105,5 @@ export async function createRemovePlan(
     path: LOCAL_MANIFEST_PATH,
     action: "remove" as const,
   });
-  return sealPlan(createRemoveMaterial(operations));
+  return sealPlan(createRemoveMaterial(operations, manifest.sdk_version));
 }

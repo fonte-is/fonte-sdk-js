@@ -14,29 +14,32 @@ import { prepareBroadcastHtmlSource } from "../packages/cli/dist/operator-broadc
 
 const sourcePath = "/synthetic/source.html";
 const referencePath = "/synthetic/reference.png";
-const providerHtml =
-  "<!doctype html><!--$--><html><body " +
+const originalHtml =
+  "<!doctype html><!--layout:start--><html><body " +
   'style="font-family:Arial,sans-serif"><p>Hi ' +
   "{{{contact.first_name|Friend}}}</p>" +
   '<img src="https://assets.example.test/hero.png">' +
-  '<a data-id="__react-email-column" ' +
-  'href="{{{RESEND_UNSUBSCRIBE_URL}}}">Leave</a>' +
-  "<p>1 Example Street</p><!--/$--></body></html>";
+  '<a data-layout="column" ' +
+  'href="{{{legacy_opt_out}}}">Leave</a>' +
+  "<p>1 Example Street</p><!--layout:end--></body></html>";
 
 test("source intake preserves bytes and reports only explicit conversions", async () => {
   const source = await prepareBroadcastHtmlSource(
     sourceInput({
       postalAddressLiteral: "1 Example Street",
-      literalFallbacks: { "{{{contact.first_name|Friend}}}": "Friend" },
+      literalFallbacks: {
+        "{{{contact.first_name|Friend}}}": "Friend",
+        "{{{legacy_opt_out}}}": "{{{unsubscribe_url}}}",
+      },
     }),
     reader({
-      [sourcePath]: bytes(providerHtml),
+      [sourcePath]: bytes(originalHtml),
       [referencePath]: bytes("reference bytes"),
     }),
   );
 
-  assert.equal(source.report.source_bytes, bytes(providerHtml).byteLength);
-  assert.equal(source.report.source_sha256, digest(bytes(providerHtml)));
+  assert.equal(source.report.source_bytes, bytes(originalHtml).byteLength);
+  assert.equal(source.report.source_sha256, digest(bytes(originalHtml)));
   assert.equal(
     source.report.reference.sha256,
     digest(bytes("reference bytes")),
@@ -48,15 +51,18 @@ test("source intake preserves bytes and reports only explicit conversions", asyn
   assert.deepEqual(source.report.blockers, []);
   assert.deepEqual(source.report.unsupported_tokens, [
     "{{{contact.first_name|Friend}}}",
+    "{{{legacy_opt_out}}}",
   ]);
   assert.match(source.html, /Hi Friend/);
   assert.match(source.html, /\{\{\{unsubscribe_url\}\}\}/);
   assert.match(source.html, /\{\{\{postal_address\}\}\}/);
-  assert.doesNotMatch(source.html, /RESEND_|data-id|<!--\$-->/);
+  assert.doesNotMatch(source.html, /legacy_opt_out/);
+  assert.match(source.html, /data-layout="column"/);
+  assert.match(source.html, /<!--layout:start-->/);
   assert.equal(source.report.prepared_sha256, digest(bytes(source.html)));
   assert.deepEqual(
     [...new Set(source.report.conversions.map(({ kind }) => kind))].sort(),
-    ["literal_fallback", "provider_artifact", "provider_token"],
+    ["literal_fallback", "recipient_slot"],
   );
 });
 
@@ -66,12 +72,13 @@ test("unsupported personalization blocks until its exact fallback is selected", 
       literalFallbacks: {},
     }),
     reader({
-      [sourcePath]: bytes(providerHtml),
+      [sourcePath]: bytes(originalHtml),
       [referencePath]: bytes("reference"),
     }),
   );
   assert.deepEqual(blocked.report.unsupported_tokens, [
     "{{{contact.first_name|Friend}}}",
+    "{{{legacy_opt_out}}}",
   ]);
   assert.ok(
     blocked.report.blockers.includes("broadcast_recipient_slot_unsupported"),
@@ -82,7 +89,7 @@ test("unsupported personalization blocks until its exact fallback is selected", 
       literalFallbacks: { "{{{contact.first_name|Other}}}": "Other" },
     }),
     reader({
-      [sourcePath]: bytes(providerHtml),
+      [sourcePath]: bytes(originalHtml),
       [referencePath]: bytes("reference"),
     }),
   );

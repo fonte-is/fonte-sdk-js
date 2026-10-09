@@ -24,6 +24,29 @@ const valid = {
 
 test("local manifest accepts compatible exact nonsecret schemas", () => {
   assert.deepEqual(parseManifest(valid), valid);
+  assert.deepEqual(parseManifest({ ...valid, sdk_version: "0.2.0" }), {
+    ...valid,
+    sdk_version: "0.2.0",
+  });
+  assert.equal(parseManifest({ ...valid, sdk_version: "0.3.0" }), null);
+  assert.equal(
+    parseManifest({
+      ...valid,
+      sdk_version: "0.2.0",
+      managed_operations: [
+        {
+          id: "sdk_dependency",
+          kind: "dependency",
+          path: "package.json",
+          package: "@fonte-is/nextjs",
+          version: "0.1.0",
+          previous: "absent",
+        },
+        ...valid.managed_operations,
+      ],
+    }),
+    null,
+  );
   assert.deepEqual(parseManifest({ ...valid, cli_version: "0.1.1" }), {
     ...valid,
     cli_version: "0.1.1",
@@ -44,7 +67,7 @@ test("local manifest accepts compatible exact nonsecret schemas", () => {
     ...valid,
     cli_version: "0.2.0",
   });
-  for (const version of ["0.3.2", "0.3.3", "0.3.4"])
+  for (const version of ["0.3.2", "0.3.3", "0.3.4", "0.3.5", "0.4.0"])
     assert.deepEqual(parseManifest({ ...valid, cli_version: version }), {
       ...valid,
       cli_version: version,

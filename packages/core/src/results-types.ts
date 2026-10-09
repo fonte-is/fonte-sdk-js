@@ -60,25 +60,12 @@ export interface FonteObservationOptions {
   readonly eventId?: string;
   readonly occurredAt?: string;
 }
-export interface FontePostHogTriggerOptions {
-  readonly projectId: string;
-  readonly event: string;
+export interface FonteTriggerConfirmationOptions {
   /** Optional compatibility assertion. Must match this identity's acknowledged Source revision. */
   readonly sourceRevision?: number;
-  /** Original committed operation UUID and time; retain both for provider retries. */
+  /** Original committed operation UUID and time; retain both for delivery retries. */
   readonly eventId: string;
   readonly occurredAt: string;
-}
-/** Server capture input. No Source key, email, person profile or browser authority. */
-export interface FontePostHogWitness {
-  readonly fonte_commit: string;
-}
-export interface FontePostHogCapture {
-  readonly event: string;
-  readonly uuid: string;
-  readonly distinctId: string;
-  readonly timestamp: Date;
-  readonly properties: FontePostHogWitness;
 }
 export interface FonteIdentifyOptions extends FonteObservationOptions {
   readonly measurementAllowed: boolean;
@@ -100,10 +87,11 @@ export interface FonteOptions extends Omit<
 export interface FonteIdentityHandle {
   /** After commit. Late server replay requires the original UUID/time and this original identity's durable ACK. */
   trigger(key: string, options?: FonteObservationOptions): boolean;
-  /** After commit and this identity's durable ACK. Original UUID/time can recover within 30 days; no native trigger enqueue. */
-  postHogTrigger(key: string, options: FontePostHogTriggerOptions): FontePostHogCapture | null;
-  /** Add proof to the original committed capture, including acknowledged original-fact recovery. No native Action enqueue. */
-  postHogWitness(key: string, options: FontePostHogTriggerOptions): FontePostHogWitness | null;
+  /** Opaque server confirmation after commit and this identity's exact ACK. Original UUID/time can recover within 30 days; no Action is enqueued. */
+  confirmTrigger(
+    key: string,
+    options: FonteTriggerConfirmationOptions,
+  ): string | null;
   /** Current authenticated foreground activity. */
   returned(options?: FonteObservationOptions): boolean;
   readonly browserIdentity: FonteBrowserIdentity | null;

@@ -1,7 +1,7 @@
 # Results API and delivery reference
 
 Start with the [setup guide](./results.md) or
-[PostHog guide](./posthog-selected-actions.md). This page covers the API,
+[action confirmation guide](./action-confirmations.md). This page covers the API,
 delivery limits, and recovery of an original saved action.
 
 ## Server API
@@ -9,24 +9,30 @@ delivery limits, and recovery of an original saved action.
 Import from `@fonte-is/core/results`. Keep this entry point and the server key
 out of browser bundles.
 
-| Call                                                 | Use                                                   | Return value                                |
-| ---------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
-| `createFonte({ installationId, serverKey })`         | Create the server client                              | A client; invalid configuration throws      |
-| `fonte.identify(user, { measurementAllowed: true })` | Identify the current authenticated user               | An identity handle, or `null` when rejected |
-| `identity.trigger(key, { eventId, occurredAt })`     | Report an original committed action                   | `true` when queued locally                  |
-| `identity.returned({ eventId, occurredAt })`         | Report authenticated foreground activity              | `true` when queued locally                  |
-| `identity.browserIdentity`                           | Supply short-lived identity to the same user's page   | Browser identity, or `null`                 |
-| `identity.postHogWitness(key, options)`              | Add confirmation to the original PostHog server event | `{ fonte_commit }`, or `null`               |
-| `identity.postHogTrigger(key, options)`              | Construct a PostHog capture with that confirmation    | Capture input, or `null`                    |
-| `fonte.retract(input, { measurementAllowed: true })` | Correct or withdraw an original observation           | `true` when queued locally                  |
-| `fonte.status()`                                     | Inspect delivery state without private payloads       | Delivery status                             |
-| `fonte.flush()`                                      | Drain in a supported background or process lifecycle  | A promise of delivery status; never rejects |
-| `fonte.close()`                                      | End this client and discard pending work              | Delivery status                             |
+| Call                                                    | Use                                                        | Return value                                |
+| ------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| `createFonte({ installationId, serverKey })`            | Create the server client                                   | A client; invalid configuration throws      |
+| `fonte.identify(user, { measurementAllowed: true })`    | Identify the current authenticated user                    | An identity handle, or `null` when rejected |
+| `identity.trigger(key, { eventId, occurredAt })`        | Report an original committed action                        | `true` when queued locally                  |
+| `identity.returned({ eventId, occurredAt })`            | Report authenticated foreground activity                   | `true` when queued locally                  |
+| `identity.browserIdentity`                              | Supply short-lived identity to the same user's page        | Browser identity, or `null`                 |
+| `identity.confirmTrigger(key, { eventId, occurredAt })` | Confirm an original committed action for external delivery | An opaque signed string, or `null`          |
+| `fonte.retract(input, { measurementAllowed: true })`    | Correct or withdraw an original observation                | `true` when queued locally                  |
+| `fonte.status()`                                        | Inspect delivery state without private payloads            | Delivery status                             |
+| `fonte.flush()`                                         | Drain in a supported background or process lifecycle       | A promise of delivery status; never rejects |
+| `fonte.close()`                                         | End this client and discard pending work                   | Delivery status                             |
 
 `user` contains exactly `{ id, email, emailVerified }`. Verification and
 measurement permission come from your existing server authorities. Each
 handle belongs to that user's request; never keep a shared mutable current
 user. Recheck current identity and permission before later activity.
+
+`confirmTrigger()` requires explicit original `eventId` and `occurredAt`. Its
+opaque string can travel through any event metadata. It does not enqueue an
+action or prove delivery. Fonte must first acknowledge that exact identity
+with a stored or replayed disposition and its Source revision. An optional
+`sourceRevision` is an assertion of that acknowledged revision, not an override.
+The method cannot discover a later session or permission change in your app.
 
 ## IDs and times
 
@@ -63,7 +69,7 @@ Fonte has not confirmed.
 
 The server queue holds at most 1,000 records. Delivery sends at most 100
 records and 64 KiB per request, with one active request. Requests are bounded
-to 750 ms and up to three attempts per cycle. Custom `fetch` implementations
+to 750 ms and up to three retries after the first attempt. Custom `fetch` implementations
 must honor their AbortSignal. Redirects are refused and cookies are omitted.
 
 An acknowledgement must name the exact source and every submitted UUID with
@@ -101,12 +107,12 @@ or invent missing facts.
 3. Call `identify()` with those exact original identity fields. Confirm that
    Fonte stored or replayed that identity in a supported background lifecycle.
 4. Replay the original action with its original UUID and time using
-   `trigger()`, or add `postHogWitness()` to its original PostHog capture.
+   `trigger()`, or carry `confirmTrigger()` with its original external event.
 
 The action must have happened inside the original identity's validity
 interval and remain within the 30-day intake limit. The current installation,
-key, selected PostHog mapping, and permissions still govern acceptance.
-PostHog confirmation requires that exact identity's stored or replayed
+key, selected action, and permissions still govern acceptance.
+Action confirmation requires that exact identity's stored or replayed
 acknowledgement and acknowledged source revision.
 
 Calling default `identify()` creates a new identity ID. Reusing an old action

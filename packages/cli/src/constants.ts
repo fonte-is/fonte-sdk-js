@@ -1,6 +1,6 @@
-export const CLI_VERSION = "0.3.4";
+export const CLI_VERSION = "0.4.0";
 export const SDK_PACKAGE = "@fonte-is/nextjs";
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.2.0";
 export const ADAPTER_ID = "next_app_router";
 export const ADAPTER_VERSION = "v1";
 
@@ -62,10 +62,11 @@ export const USAGE_TEXT = [
   "  fonte auth login [--switch-account] [--json]",
   "  fonte auth status [--json]",
   "  fonte auth logout [--json]",
-  "  fonte release --source <remote-sha>",
+  "  fonte connections <command> ... [--json]",
+  "  fonte contacts <command> ... [--json]",
+  "  fonte audience <reconcile|freeze> ... [--json]",
   "  fonte broadcast <command> ... [--json]",
-  "  fonte bridge <command> ... [--json]",
-  "  fonte provider-evidence resend <command> ... --json",
+  "  fonte bridge import status ... [--json]",
   "  fonte campaign <list|read|create|update|receipt> ... [--json]",
   "  fonte segment <list|read|create|update|archive|restore|receipt> ... [--json]",
   "  fonte remove [--yes] [--json]",
@@ -87,19 +88,12 @@ export const HELP_TEXT = [
   "Run fonte <command> --help for each command's admitted flags and authority.",
   "broadcast test help distinguishes the sandbox canary from production tests.",
   "broadcast production commands consume Core's draft, audience, test, preflight, authorization, control, and result authority.",
-  "bridge observe/copy resend use Core's admitted Resend Bridge authority.",
-  "bridge connections list/connect/reconnect use native Resend or Kit OAuth through Core.",
-  "bridge collections/reconcile/freeze use Core's provider-audience authority.",
-  "provider-evidence resend commands use Core's candidate-scoped GET-only acquisition authority.",
-  "All other broadcast and Bridge declarations have no Core effect.",
+  "connections manages Fonte connections and authorization.",
+  "contacts discovers, previews, imports, and reads connected contact sources.",
+  "audience reconciles sources and freezes an explicitly reviewed audience.",
+  "bridge import status reads a completed Contact import and its identity hash.",
+  "Unsupported broadcast declarations have no Core effect.",
   "Transactional application email remains locked.",
-  "",
-].join("\n");
-
-export const RELEASE_HELP_TEXT = [
-  "Usage: fonte release --source <remote-sha>",
-  "",
-  "The source must be a full commit SHA fetchable from origin.",
   "",
 ].join("\n");
 
