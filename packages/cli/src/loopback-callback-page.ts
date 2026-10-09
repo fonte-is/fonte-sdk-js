@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 export type CallbackPageOutcome = "pending" | "complete" | "failed" | "expired";
 
 export const callbackCompleteScript = "try { window.close(); } catch {}";
@@ -43,22 +41,10 @@ const fonteFavicon = fonteMark
 
 const fonteFaviconHref = `data:image/svg+xml,${encodeURIComponent(fonteFavicon)}`;
 
-// Embed the packaged font so the loopback page needs no network requests.
-const geistFont = readFileSync(
-  new URL("../assets/geist-latin.woff2", import.meta.url),
-).toString("base64");
-
 const styles = `
-  @font-face {
-    font-family: "Geist";
-    src: url("data:font/woff2;base64,${geistFont}") format("woff2");
-    font-style: normal;
-    font-weight: 100 900;
-    font-display: swap;
-  }
   :root {
     color-scheme: light dark;
-    font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --canvas: #ffffff;
     --text: #171717;
     --text-secondary: #737373;

@@ -1,3 +1,7 @@
+import type {
+  ContactImportOperatorCommand,
+  ContactImportStatusResult,
+} from "./contact-import-types.js";
 import type { BroadcastPreflightResult } from "./operator-preflight-types.js";
 import type {
   BroadcastSendInstructionOperatorCommand,
@@ -6,31 +10,7 @@ import type {
 import type { CanonicalSendStatus } from "./operator-broadcast-canonical-send.js";
 import type { BroadcastPavedSendInput } from "./operator-broadcast-paved.js";
 import type { OperatorNextAction } from "./operator-broadcast-recovery.js";
-import type {
-  ContactImportStatusResult,
-  ProviderAudienceFreezeResult,
-  ProviderAudienceOperatorCommand,
-  ProviderAudienceReconciliationResult,
-  ProviderCollectionListResult,
-} from "./operator-provider-audience-types.js";
-import type {
-  ProviderPlacementApplicationResult,
-  ProviderPlacementOperatorCommand,
-} from "./operator-provider-audience-placement-types.js";
-import type {
-  ProviderConnectionListResult,
-  ProviderConnectionOAuthResult,
-  ProviderConnectionOperatorCommand,
-} from "./operator-provider-connection-types.js";
-import type {
-  ProviderEvidenceCandidateGenerationResult,
-  ProviderEvidenceCandidateOperationResult,
-  ProviderEvidenceOperatorCommand,
-} from "./operator-provider-evidence-types.js";
-import type {
-  ProviderRotationOperatorCommand,
-  ProviderRotationResult,
-} from "./operator-provider-rotation-types.js";
+
 import type {
   AudienceReuseOverrideInput,
   ProductionAudienceInput,
@@ -61,13 +41,25 @@ import type {
 } from "./operator-segment-types.js";
 
 export type OperatorCommand =
-  | { readonly kind: "broadcast_canonical_send"; readonly workspace: string;
-      readonly sendInput: BroadcastPavedSendInput }
-  | { readonly kind: "broadcast_canonical_status"; readonly workspace: string;
-      readonly draftId: string }
-  | { readonly kind: "broadcast_canonical_control"; readonly workspace: string;
-      readonly draftId: string; readonly operationId: string; readonly requestId: string;
-      readonly expectedGeneration: number; readonly action: "pause" | "resume" | "cancel" }
+  | {
+      readonly kind: "broadcast_canonical_send";
+      readonly workspace: string;
+      readonly sendInput: BroadcastPavedSendInput;
+    }
+  | {
+      readonly kind: "broadcast_canonical_status";
+      readonly workspace: string;
+      readonly draftId: string;
+    }
+  | {
+      readonly kind: "broadcast_canonical_control";
+      readonly workspace: string;
+      readonly draftId: string;
+      readonly operationId: string;
+      readonly requestId: string;
+      readonly expectedGeneration: number;
+      readonly action: "pause" | "resume" | "cancel";
+    }
   | WorkspaceMarketingSettingsOperatorCommand
   | SequenceOperatorCommand
   | BroadcastSendInstructionOperatorCommand
@@ -183,26 +175,8 @@ export type OperatorCommand =
       readonly appendAuthorizationId: string;
       readonly idempotencyKey: string;
     }
-  | {
-      readonly kind: "bridge_resend_preview";
-      readonly workspace: string;
-      readonly environment: "sandbox" | "production";
-      readonly segmentId: string;
-    }
-  | {
-      readonly kind: "bridge_resend_copy";
-      readonly workspace: string;
-      readonly environment: "sandbox" | "production";
-      readonly segmentId: string;
-      readonly observationFingerprint: string;
-      readonly idempotencyKey: string;
-    }
-  | ProviderAudienceOperatorCommand
-  | ProviderPlacementOperatorCommand
-  | ProviderConnectionOperatorCommand
-  | ProviderEvidenceOperatorCommand
-  | ProviderRotationOperatorCommand
-  | { readonly kind: "unsupported" };
+  | { readonly kind: "unsupported" }
+  | ContactImportOperatorCommand;
 
 export interface ParsedOperatorArguments {
   readonly command: OperatorCommand;
@@ -219,32 +193,6 @@ export interface SandboxTestResult {
   readonly unknown_count: number | null;
   readonly accepted_email_usage_quantity: number | null;
   readonly poll_after_milliseconds: number | null;
-}
-
-export interface ResendBridgePreviewResult {
-  readonly kind: "resend_bridge_preview";
-  readonly provider: "resend";
-  readonly connection_id: string;
-  readonly segment: { readonly id: string; readonly name: string };
-  readonly observed_at: string;
-  readonly observation_fingerprint: string;
-  readonly pagination: {
-    readonly status: "complete" | "partial";
-    readonly contacts: ResendBridgeCoverage;
-    readonly suppressions: ResendBridgeCoverage;
-  };
-  readonly contacts_observed: number;
-  readonly protected: {
-    readonly contacts: number;
-    readonly provider_unsubscribed: number;
-    readonly provider_suppressed: number;
-  };
-  readonly unknown: {
-    readonly contacts: number;
-    readonly property_observations: number;
-    readonly suppression_observations: number;
-    readonly automation_dependency: "unknown";
-  };
 }
 
 export interface BroadcastCanaryResult {
@@ -270,38 +218,15 @@ export interface BroadcastCanaryResult {
   readonly final: ProductionBroadcastProgressResult | null;
 }
 
-export interface ResendBridgeCoverage {
-  readonly status: "complete" | "partial";
-  readonly pages_observed: number;
-  readonly has_more: boolean;
-}
-
-export interface ResendBridgeCopyResult extends Omit<
-  ResendBridgePreviewResult,
-  "kind"
-> {
-  readonly kind: "resend_bridge_copy";
-  readonly import_receipt: {
-    readonly contact_import_batch_id: string;
-    readonly created: boolean;
-  };
-  readonly reconciliation: {
-    readonly accepted: number;
-    readonly created: number;
-    readonly updated: number | null;
-    readonly unchanged: number | null;
-    readonly protected: number;
-    readonly conflict: number | null;
-    readonly unknown: number;
-  };
-}
-
 export type OperatorResult =
   | WorkspaceMarketingSettingsResult
   | SequenceOperatorResult
   | BroadcastSendOperationResult
-  | { readonly kind: "executable_broadcast_operation"; readonly status: "accepted";
-      readonly operation: CanonicalSendStatus }
+  | {
+      readonly kind: "executable_broadcast_operation";
+      readonly status: "accepted";
+      readonly operation: CanonicalSendStatus;
+    }
   | SandboxTestResult
   | BroadcastCanaryResult
   | ProductionAudienceAppendResult
@@ -313,18 +238,7 @@ export type OperatorResult =
   | QueuedBroadcastResult
   | ProductionTestResult
   | ProductionBroadcastProgressResult
-  | ProductionBroadcastResult
-  | ResendBridgePreviewResult
-  | ResendBridgeCopyResult
-  | ProviderCollectionListResult
-  | ProviderAudienceReconciliationResult
-  | ProviderAudienceFreezeResult
-  | ProviderPlacementApplicationResult
-  | ProviderConnectionListResult
-  | ProviderConnectionOAuthResult
-  | ProviderEvidenceCandidateOperationResult
-  | ProviderEvidenceCandidateGenerationResult
-  | ProviderRotationResult;
+  | ProductionBroadcastResult;
 
 export type OperatorReceiptResult =
   | OperatorResult
@@ -347,18 +261,12 @@ export interface OperatorReceipt {
       | "fonte.core.broadcast_send_instruction.v3"
       | "fonte.core.broadcast_send"
       | "fonte.core.production_broadcast_audience_append.v1"
-      | "fonte.core.resend_bridge.v1"
       | "fonte.core.contact_import.v1"
-      | "fonte.core.provider_audience.v1"
-      | "fonte.core.provider_placement_application.v1"
-      | "fonte.core.provider_connections.v1"
-      | "fonte.core.provider_evidence_candidate.v1"
       | "fonte.core.workspace_marketing_settings.v1"
       | "fonte.core.sequence_authoring.v1"
       | "fonte.core.sequence_activation.v1"
       | "fonte.core.campaign_configuration.v1"
       | "fonte.core.native_segment.v1"
-      | "fonte.core.provider_rotation_partition.v1"
       | "unavailable";
   };
   readonly core_effect:

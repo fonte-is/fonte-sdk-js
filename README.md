@@ -26,9 +26,4 @@ package has no runtime dependencies.
 - [React bindings](./packages/react/README.md)
 - [Next.js bindings](./packages/nextjs/README.md)
 
-## Contributing
-
-Read the [development rules](./docs/INTERNAL_INVARIANTS.md) before changing
-identifiers, delivery, origin checks, or client lifecycle behavior.
-
 Licensed under [Apache-2.0](./LICENSE).

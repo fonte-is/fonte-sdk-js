@@ -4,41 +4,19 @@ import { isLoginFailure, loginRecovery } from "./auth-commands.js";
 import { HostedTestBlockedError } from "./hosted-errors.js";
 
 export function renderBlockedOperator(receipt: OperatorReceipt): string {
-  if (receipt.reason === "resend_bridge_unavailable") {
-    return [
-      "Fonte Resend Bridge could not continue.",
-      "Core returned 503: Resend Bridge credential custody is unavailable.",
-      `Reason: ${receipt.reason}.`,
-      `Core effect: ${receipt.core_effect}.`,
-      "",
-    ].join("\n");
-  }
-  if (receipt.reason === "provider_collection_discovery_unavailable") {
-    return [
-      "Fonte Bridge collection discovery could not continue.",
-      "Core returned 503: provider collection discovery or credential custody is unavailable.",
-      `Reason: ${receipt.reason}.`,
-      "Core effect: none.",
-      "",
-    ].join("\n");
-  }
   return [
-    receipt.command.startsWith("provider_evidence_")
-      ? "Fonte provider evidence operation could not continue."
-      : receipt.command.startsWith("campaign_")
-        ? "Fonte Campaign metadata operation could not continue."
-        : receipt.command.startsWith("segment_")
-          ? "Fonte Segment metadata operation could not continue."
-          : receipt.command.startsWith("bridge_provider_rotation_")
-            ? "Fonte Bridge rotation operation could not continue."
-            : receipt.command.startsWith("bridge_")
-              ? "Fonte Bridge operation could not continue."
-              : receipt.command === "broadcast_preflight"
-                ? "Fonte broadcast preflight could not be observed."
-                : receipt.command === "broadcast_test_send" ||
-                    receipt.command === "broadcast_test_status"
-                  ? "Fonte sandbox test could not continue."
-                  : "Fonte production broadcast operation could not continue.",
+    receipt.command.startsWith("campaign_")
+      ? "Fonte Campaign metadata operation could not continue."
+      : receipt.command.startsWith("segment_")
+        ? "Fonte Segment metadata operation could not continue."
+        : receipt.command === "bridge_contact_import_status"
+          ? "Fonte Contact import could not be read."
+          : receipt.command === "broadcast_preflight"
+            ? "Fonte broadcast preflight could not be observed."
+            : receipt.command === "broadcast_test_send" ||
+                receipt.command === "broadcast_test_status"
+              ? "Fonte sandbox test could not continue."
+              : "Fonte production broadcast operation could not continue.",
     ...(receipt.command === "broadcast_preflight"
       ? ["Readiness: unknown."]
       : []),

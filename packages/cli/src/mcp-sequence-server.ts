@@ -1,3 +1,5 @@
+import { createConnectionClient, type ConnectionClient } from "./connection-client.js";
+import { registerMcpConnectionTools } from "./mcp-connection-tools.js";
 import { McpServer } from "@modelcontextprotocol/server";
 
 import { CLI_VERSION } from "./constants.js";
@@ -71,6 +73,7 @@ export type SequenceMcpSessionOptions = McpClientAuthOptions;
 export type BroadcastRecipientSetClientProvider =
   () => Promise<BroadcastRecipientSetClient>;
 export interface FonteMcpClientProviders {
+  readonly connections: () => Promise<ConnectionClient>;
   readonly broadcastBg: BroadcastMcpProvider;
   readonly workspaceCatalog: WorkspaceCatalogClientProvider;
   readonly sequence: SequenceMcpClientProvider;
@@ -121,6 +124,7 @@ export function createDurableFonteMcpSession(
     render,
   });
   return {
+    connections: async () => createConnectionClient((await authenticated()).request),
     broadcastBg: createAuthenticatedBroadcastProvider(options),
     workspaceCatalog: async () =>
       createWorkspaceCatalogClient((await authenticated()).request),
@@ -194,6 +198,7 @@ export function createFonteMcpServer(
 ): McpServer {
   const server = mcpServer(fonteInstructions);
   registerFonteStatusTool(server, readinessReader);
+  registerMcpConnectionTools(server, providers.connections);
   registerMcpBroadcastBgTools(server, async () => ({
     ...(await providers.broadcastBg()),
     readSelectedWorkspace: () => readinessReader.readSelectedWorkspace(),

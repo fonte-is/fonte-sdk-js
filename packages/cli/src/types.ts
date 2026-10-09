@@ -7,7 +7,6 @@ export type ParsedCommand =
   | "auth-exec"
   | "auth-session"
   | "operator"
-  | "release"
   | "help"
   | "version";
 
@@ -18,7 +17,6 @@ export interface ParsedArguments {
   helpText?: string;
   workspaceSlug?: string;
   consumerCommand?: string;
-  releaseSource?: string;
   consumerArguments?: readonly string[];
   authAction?: "login" | "status" | "logout";
   switchAccount?: boolean;
@@ -120,7 +118,9 @@ export interface LocalManifest {
     | "0.3.1"
     | "0.3.2"
     | "0.3.3"
-    | "0.3.4";
+    | "0.3.4"
+    | "0.3.5"
+    | "0.4.0";
   adapter_id: "next_app_router";
   adapter_version: "v1";
   sdk_package: "@fonte-is/nextjs";

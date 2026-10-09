@@ -1,3 +1,4 @@
+import { MCP_CONNECTION_TOOLS } from "./mcp-connection-tools.js";
 import {
   MCP_BROADCAST_DRAFT_CREATE_TOOL,
   MCP_BROADCAST_DRAFT_READ_TOOL,
@@ -64,6 +65,7 @@ export const MCP_BROADCAST_TOOLS = [
 /** Canonical registration and setup/status inventory for the one local host. */
 export const MCP_FONTE_TOOLS = [
   MCP_FONTE_STATUS_TOOL,
+  ...MCP_CONNECTION_TOOLS,
   MCP_BROADCAST_BG_TOOLS.review,
   MCP_BROADCAST_BG_TOOLS.send,
   MCP_BROADCAST_BG_TOOLS.recover,

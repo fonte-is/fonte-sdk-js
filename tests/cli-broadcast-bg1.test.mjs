@@ -59,7 +59,7 @@ test("hosted caller custody replays the complete exact input without a server re
   assert.equal(posts.length, 2);
 });
 
-test("fixed FON-807 compact receipts preserve execution authority and immutable workspace identity", () => {
+test("compact receipts preserve execution authority and immutable workspace identity", () => {
   assert.notEqual(scope.workspace, workspaceId);
   assert.deepEqual(
     parseBroadcastReviewReceipt(ready, coreOrigin, resolved, "none", 1),

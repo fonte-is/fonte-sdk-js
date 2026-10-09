@@ -64,7 +64,7 @@ rejected, unavailable, or bare HTTP success responses do not confirm storage.
 
 The server must enforce idempotency within the installation and environment
 and reject conflicting observations. Browser occurrence time is reported
-evidence, not authoritative ordering. The contract is `fonte.acquisition.v1`.
+evidence, not authoritative ordering. The contract is `fonte.acquisition.v2`.
 
 ## Collected fields
 
@@ -73,14 +73,36 @@ route. Campaign values require a configured allowlist or the explicit
 `campaignValues: true` option. Omitting the category collects none of them.
 These are installation choices; they do not establish visitor permission.
 
-Cookie history does not create a new Meta encounter. X referrers use exact
-hostname boundaries. A presented source token does not authenticate its
-issued placement; the runtime must retain that versioned context separately.
-Old attribution caches are not reused as history.
+Click identifiers and cookie values use `sourceEvidence`, a bounded list of
+selected names and values. The approved policy must provide `sourceFields`:
+up to eight query names and two cookie names. Values are limited to 500
+letters, digits, underscores, dots, tildes, or hyphens. No arbitrary query
+strings or cookie objects are transmitted.
 
-`@fonte-is/core/server` provides bounded parsing, scope minimization, and the
-existing `/v1/touches` client. Contact creation, identity decisions, billing,
-and conversion exports remain in their existing services.
+```js
+const selectedFields = {
+  query: ["campaign_click"],
+  cookies: ["visit_cookie"],
+};
+// Include this selection in an approved collection policy.
+const policy = { ...approvedPolicy, sourceFields: selectedFields };
+```
+
+`clickIds` permits the selected query fields; `adCookies` separately permits
+the selected cookie fields. Enabling either category without its explicit
+field selection disables capture. Existing sites with those categories enabled
+need to publish updated Website settings before using this SDK version.
+
+A presented Fonte link token does not authenticate its issued context or
+identify its visitor. Fonte resolves the link separately; signing in identifies
+the person. Missing referrers and campaign values remain missing evidence.
+
+`@fonte-is/core/server` provides bounded parsing, scope minimization, and
+`collect.minimizeSourceEvidence`. An application collector must apply its own
+approved server policy, preserve the event and occurrence IDs, and return a
+durable receipt after the existing storage path accepts the observation.
+These primitives do not provide a transport to a Fonte server. The hosted
+Website runtime uses the endpoint supplied by its published settings.
 
 The [application v1 adapter](./application-outcomes.md) is also retained for
 existing integrations.

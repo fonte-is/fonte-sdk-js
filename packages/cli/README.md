@@ -27,30 +27,19 @@ npx @fonte-is/cli broadcast send --send-input '<exact reviewed send_input JSON>'
 npx @fonte-is/cli broadcast send status --workspace my-workspace --environment production --draft-id <uuid> --json
 npx @fonte-is/cli broadcast status --workspace my-workspace --environment production --broadcast-id <uuid> --watch
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
-npx @fonte-is/cli bridge observe <provider> --workspace my-workspace --environment sandbox --segment-id <provider-id>
-npx @fonte-is/cli bridge copy <provider> --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
-npx @fonte-is/cli bridge connections list <provider> --workspace my-workspace --environment production
-npx @fonte-is/cli bridge connections connect <provider> --workspace my-workspace --environment production --display-name "Primary connection"
-npx @fonte-is/cli bridge collections <provider> --workspace my-workspace --environment sandbox --connection-id <uuid>
-npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider <provider> --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
+npx @fonte-is/cli connections choices --workspace my-workspace --environment sandbox
+npx @fonte-is/cli connections list --workspace my-workspace --environment sandbox
+npx @fonte-is/cli connections authorize --workspace my-workspace --environment sandbox --choice-ref <ref> --attempt-id <uuid> --display-name "Primary account"
+npx @fonte-is/cli contacts sources --workspace my-workspace --environment sandbox --connection-ref <ref>
+npx @fonte-is/cli contacts preview --workspace my-workspace --environment sandbox --source-ref <ref>
+npx @fonte-is/cli contacts import --workspace my-workspace --environment sandbox --source-ref <ref> --idempotency-key <key>
+npx @fonte-is/cli contacts import-status --workspace my-workspace --environment sandbox --operation-ref <ref>
+npx @fonte-is/cli audience reconcile --workspace my-workspace --environment sandbox --source-ref <ref>
+npx @fonte-is/cli audience freeze --workspace my-workspace --environment sandbox --source-ref <ref> --fingerprint <sha256> --idempotency-key <key>
 npx @fonte-is/cli bridge import status --workspace my-workspace --environment sandbox --contact-import-batch-id <uuid>
-npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-import-batch-id <uuid> --source-identity-set-sha256 <64-lower-hex> --max-age-seconds 300 --exclude-provider <provider> --exclude-connection-id <uuid> --exclude-collection-id <provider-id> --exclude-display-name "Protected"
-npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider <provider> --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
-npx @fonte-is/cli provider-evidence <provider> --help
-npx @fonte-is/cli bridge rotation --help
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
 ```
-
-## Release launcher
-
-After the matching Core executor and this CLI package are activated, run
-`fonte release --source <remote-core-commit-sha>` with a full 40-character
-commit SHA. The CLI resolves Core `main` to one exact tooling commit per
-invocation, checks out the requested remote application source separately, and
-invokes Core's single release executor with `--source` and `--source-root`.
-It waits for that executor's final result and forwards its output and failure. Core
-owns artifact qualification, deployment, and live verification.
 
 `init` without `--yes` prints a deterministic plan and makes no changes. The
 CLI supports Node.js 20.9 or newer and npm projects with exactly one regular
@@ -72,10 +61,24 @@ retrying. A `rollback_failed` result means automatic restoration could not be
 proved; stop and inspect `package.json`, the lockfile, `.gitignore`, `fonte/`,
 and `.fonte/` rather than rerunning the command blindly.
 
+## Connected contacts
+
+Choose an account type from `connections choices`, authorize it, then use the
+connection and source references returned by Fonte. Preview a source before
+importing it. Fonte imports into Contacts and preserves current protection and
+permission evidence. Importing does not establish consent or send email.
+
+If an import response is uncertain, reuse its original idempotency key. Fonte
+resumes the retained input; it does not replace it with a later source snapshot.
+Use `import-status` to read an operation. Audience reconciliation is a separate
+observation; freezing requires its exact fingerprint and an idempotency key.
+Run `fonte connections --help`, `fonte contacts --help` or
+`fonte audience --help` for the full command syntax.
+
 ## Persistent sign-in
 
-Run `fonte auth login` once. Later `auth exec`, broadcast, Bridge and hosted test
-commands reuse that sign-in and refresh silently. `fonte auth status` reports
+Run `fonte auth login` once. Later authenticated commands reuse that sign-in and
+refresh silently. `fonte auth status` reports
 local custody without discovery or server validation; `fonte auth logout` removes this machine's
 stored CLI credential, including when the identity service is unreachable.
 All three commands support `--json`. Use `fonte auth login --switch-account`
@@ -150,26 +153,35 @@ authentication boundary.
 ## Workspace invitation client
 
 `@fonte-is/cli/operator-client` exports `createCoreOperatorClient` for the
-existing owner-create and invited-subject claim journey:
+workspace invitation journey. The owner creates an invitation for an email
+address; the invited person claims it while signed in with that verified email:
 
 ```js
 import { createCoreOperatorClient } from "@fonte-is/cli/operator-client";
 
-const client = createCoreOperatorClient({ coreApiBaseUrl, bearer, fetch });
-const created = await client.createWorkspaceInvitation({
+const owner = createCoreOperatorClient({
+  coreApiBaseUrl,
+  bearer: ownerBearer,
+  fetch,
+});
+const created = await owner.createWorkspaceInvitation({
   workspace: "my-workspace",
   environment: "production",
-  intendedSupabaseSubject: "verified-subject",
   intendedEmail: "invitee@example.test",
   role: "operator",
   expiresAt: "2099-01-01T00:00:00.000Z",
 });
-const claimed = await client.claimWorkspaceInvitation({
+const invitee = createCoreOperatorClient({
+  coreApiBaseUrl,
+  bearer: inviteeBearer,
+  fetch,
+});
+const claimed = await invitee.claimWorkspaceInvitation({
   workspace: "my-workspace",
   environment: "production",
   invitationToken: created.invitation_token,
 });
-const contexts = await client.listWorkspaceContexts();
+const contexts = await invitee.listWorkspaceContexts();
 ```
 
 The owner transfers `invitation_token` to the intended verified subject through

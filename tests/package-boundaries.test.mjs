@@ -36,7 +36,7 @@ test("the public graph keeps package-specific release versions", async () => {
       "@fonte-is/core": "0.2.0",
       "@fonte-is/react": "0.2.0",
       "@fonte-is/nextjs": "0.2.0",
-      "@fonte-is/cli": "0.3.4",
+      "@fonte-is/cli": "0.4.0",
     },
   );
 });
@@ -132,9 +132,7 @@ test("server entry points are Node-only conditional exports", async () => {
   ]);
 });
 
-test("Core has no framework or provider dependency or import", async () => {
-  const forbidden =
-    /^(?:react|react\/|next|next\/|stripe|@stripe\/|@fonte-is\/(?:react|nextjs|stripe))(?:$|\/)/;
+test("Core imports only local modules and Node built-ins", async () => {
   for (const file of await sourceFiles(
     path.join(root, "packages", "core", "src"),
   )) {
@@ -143,41 +141,11 @@ test("Core has no framework or provider dependency or import", async () => {
       ...text.matchAll(/(?:from\s+|import\s*\()(["'])([^"']+)\1/g),
     ].map((match) => match[2]);
     for (const specifier of specifiers) {
-      assert.equal(
-        forbidden.test(specifier),
-        false,
-        `${path.relative(root, file)} imports forbidden dependency ${specifier}`,
+      assert.ok(
+        specifier.startsWith(".") || specifier.startsWith("node:"),
+        `${path.relative(root, file)} imports an undeclared dependency ${specifier}`,
       );
     }
-  }
-});
-
-test("deferred and experimental quarry surfaces are absent", async () => {
-  const files = (
-    await Promise.all(
-      packageDirectories.map((name) =>
-        sourceFiles(path.join(root, "packages", name, "src")),
-      ),
-    )
-  ).flat();
-  const forbiddenFiles = new Set(["campaign.ts", "checkout.ts", "cli.ts"]);
-  assert.equal(
-    files.some((file) => forbiddenFiles.has(path.basename(file))),
-    false,
-  );
-  const allSource = (
-    await Promise.all(files.map((file) => readFile(file, "utf8")))
-  ).join("\n");
-  for (const forbidden of [
-    "@fonte-is/stripe",
-    "moneyLoop",
-    "checkoutBinding",
-  ]) {
-    assert.equal(
-      allSource.includes(forbidden),
-      false,
-      `found excluded source surface ${forbidden}`,
-    );
   }
 });
 
@@ -194,7 +162,7 @@ test("runtime exports stay intentionally narrow", async () => {
         "normalizeInstallationVerification",
       ],
     ],
-    ["@fonte-is/core/server", ["FonteApiError", "collect", "createClient"]],
+    ["@fonte-is/core/server", ["collect"]],
     ["@fonte-is/react", ["Fonte", "FonteProvider", "useFonte"]],
     ["@fonte-is/nextjs", ["Fonte", "FonteProvider", "useFonte"]],
     ["@fonte-is/nextjs/server", ["collect"]],

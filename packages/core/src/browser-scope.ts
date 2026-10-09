@@ -1,15 +1,13 @@
 import { createClientAttemptId } from "./ids.js";
-import {
-  adStorageQueryKeys,
-  measurementQueryKeys,
-  clean,
-} from "./collect-contract.js";
+import { measurementQueryKeys, clean } from "./collect-contract.js";
 import {
   minimizeScope,
+  minimizeSourceEvidence,
   routePermitted,
   type CollectionPolicy,
 } from "./collection-policy.js";
 import type { Scope } from "./types.js";
+import type { SourceEvidence } from "./source-evidence.js";
 export const compactScope = (value: unknown): Scope | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return Object.fromEntries(
@@ -25,7 +23,10 @@ export function createScopeReader(config: {
 }) {
   let usedPersistentStorage = false;
   let continuity: { id: string; expiresAt: number } | null = null;
-  const read = (policy: CollectionPolicy, referrer?: string): Scope | null => {
+  const read = (
+    policy: CollectionPolicy,
+    referrer?: string,
+  ): { scope: Scope; sourceEvidence: SourceEvidence } | null => {
     if (typeof window === "undefined" || typeof document === "undefined")
       return null;
     const url = new URL(window.location.href);
@@ -71,27 +72,41 @@ export function createScopeReader(config: {
       referrer: referrer ?? document.referrer,
       fonte_journey_id: continuity.id,
     };
-    for (const key of [
-      ...measurementQueryKeys,
-      ...adStorageQueryKeys,
-      "fonte",
-      "fonte_click",
-    ]) {
+    for (const key of [...measurementQueryKeys, "fonte", "fonte_click"]) {
       const value = url.searchParams.get(key);
       if (value) scope[key] = value;
     }
+    const sourceEvidence: {
+      query: { name: string; value: string }[];
+      cookies: { name: string; value: string }[];
+    } = { query: [], cookies: [] };
+    if (policy.clickIds)
+      for (const name of policy.sourceFields!.query) {
+        const value = url.searchParams.get(name);
+        if (value && /^[a-zA-Z0-9_.~-]{1,500}$/.test(value))
+          sourceEvidence.query.push({ name, value });
+      }
     if (policy.adCookies) {
       try {
         for (const part of document.cookie.split(";")) {
-          const [key, ...value] = part.trim().split("=");
-          if (key === "_fbc" || key === "_fbp")
-            scope[key.slice(1)] = decodeURIComponent(value.join("="));
+          const [name, ...encoded] = part.trim().split("=");
+          if (!policy.sourceFields!.cookies.includes(name)) continue;
+          const value = decodeURIComponent(encoded.join("="));
+          if (
+            /^[a-zA-Z0-9_.~-]{1,500}$/.test(value) &&
+            !sourceEvidence.cookies.some((entry) => entry.name === name)
+          )
+            sourceEvidence.cookies.push({ name, value });
         }
       } catch {
         /* cookie unavailable */
       }
     }
-    return minimizeScope(scope, policy);
+    const minimized = minimizeScope(scope, policy);
+    const evidence = minimizeSourceEvidence(sourceEvidence, policy);
+    return minimized && evidence
+      ? { scope: minimized, sourceEvidence: evidence }
+      : null;
   };
   const reset = (explicitErasure = false) => {
     continuity = null;

@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { runProgram } from "./program.js";
 import { spawnAuthorizedConsumer } from "./authorized-consumer.js";
 import { createClientAuthRuntime } from "./client-auth-runtime.js";
 import { withLoginLock } from "./login-lock.js";
-import { releaseRunner, systemRunner } from "./runner.js";
+import { systemRunner } from "./runner.js";
 import { openBrowser } from "./browser.js";
 import { createDurableFonteMcpSession } from "./mcp-sequence-server.js";
 import { createLocalFonteSetupDependencies } from "./local-readiness-adapter.js";
@@ -63,7 +62,6 @@ const result = await runProgram(process.argv.slice(2), {
   cwd: process.cwd(),
   randomUUID,
   runner: systemRunner,
-  releaseRunner,
   auth: {
     session: login,
     signal: cancellation.signal,
@@ -82,8 +80,6 @@ const result = await runProgram(process.argv.slice(2), {
     renewAuthorization: login.renewAuthorization,
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
-    readProviderEvidenceCandidateFile: (path) => readFile(path, "utf8"),
-    readProviderPlacementApplicationFile: (path) => readFile(path, "utf8"),
     openUrl: openBrowser,
     signal: cancellation.signal,
   },

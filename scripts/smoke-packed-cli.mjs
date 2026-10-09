@@ -40,27 +40,19 @@ try {
     run(process.execPath, [cli, "--version"], { cwd: fixture, capture: true }),
     `@fonte-is/cli ${cliVersion}\n`,
   );
-  for (const operation of ["connect", "reconnect"]) {
-    const resendHelp = run(
-      process.execPath,
-      [cli, "bridge", "connections", operation, "resend", "--help"],
-      { cwd: fixture, capture: true },
-    );
-    assert.match(resendHelp, /native Resend OAuth/);
-    const kitHelp = run(
-      process.execPath,
-      [cli, "bridge", "connections", operation, "kit", "--help"],
-      { cwd: fixture, capture: true },
-    );
-    assert.match(kitHelp, /Kit OAuth is currently unavailable/);
-  }
+  const connectionHelp = run(process.execPath, [cli, "connections", "--help"], {
+    cwd: fixture,
+    capture: true,
+  });
+  assert.match(connectionHelp, /--choice-ref <ref>/);
+  assert.match(connectionHelp, /--connection-ref <ref>/);
   const reconcileHelp = run(
     process.execPath,
-    [cli, "bridge", "reconcile", "--help"],
+    [cli, "audience", "reconcile", "--help"],
     { cwd: fixture, capture: true },
   );
-  assert.match(reconcileHelp, /--source-import-batch-id <uuid>/);
-  assert.match(reconcileHelp, /--source-identity-set-sha256 <sha256>/);
+  assert.match(reconcileHelp, /--contact-import-batch-id <uuid>/);
+  assert.match(reconcileHelp, /--identity-set-sha256 <sha256>/);
   await assertFonteAudienceSource(fixture);
   assert.equal(
     receipt(cli, fixture, ["init", "--yes", "--json"]).outcome,
@@ -76,6 +68,8 @@ try {
     "0.1.2",
     "0.1.3",
     "0.1.4",
+    "0.3.4",
+    "0.3.5",
   ]) {
     localManifest.cli_version = compatibleVersion;
     await writeFile(
@@ -118,9 +112,17 @@ try {
       lifecycle: ["version", "init", "doctor", "remove"],
       manifestVersions: {
         created: cliVersion,
-        compatible: ["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4"],
+        compatible: [
+          "0.1.0",
+          "0.1.1",
+          "0.1.2",
+          "0.1.3",
+          "0.1.4",
+          "0.3.4",
+          "0.3.5",
+        ],
       },
-      packedProviderOAuthCommands: true,
+      packedConnectionCommands: true,
       packedFonteAudienceSource: true,
       nodeFloor: "20.9.0",
     }),
@@ -131,31 +133,21 @@ try {
 
 async function assertFonteAudienceSource(fixture) {
   const installed = path.join(fixture, "node_modules/@fonte-is/cli/dist");
-  const { parseArguments } = await import(
-    pathToFileURL(path.join(installed, "arguments.js")).href
-  );
   const { createCoreOperatorClient } = await import(
     pathToFileURL(path.join(installed, "operator-client.js")).href
   );
   const contactImportBatchId = "10000000-0000-4000-8000-000000000503";
   const identitySetSha256 = "b".repeat(64);
-  const operator = parseArguments([
-    "bridge",
-    "reconcile",
-    "--workspace",
-    "northstar",
-    "--environment",
-    "sandbox",
-    "--source-import-batch-id",
-    contactImportBatchId,
-    "--source-identity-set-sha256",
-    identitySetSha256,
-  ]).operator;
-  assert.deepEqual(operator.source, {
-    kind: "fonte_audience",
-    contactImportBatchId,
-    identitySetSha256,
-  });
+  const input = {
+    workspace: "northstar",
+    environment: "sandbox",
+    source: {
+      kind: "fonte_audience",
+      contactImportBatchId,
+      identitySetSha256,
+    },
+    exclusionSourceRefs: [],
+  };
 
   const requests = [];
   const client = createCoreOperatorClient({
@@ -165,16 +157,8 @@ async function assertFonteAudienceSource(fixture) {
       requests.push({ url: String(url), init });
       return new Response(
         JSON.stringify({
-          workspaceId: "10000000-0000-4000-8000-000000000504",
-          environment: "sandbox",
           ready: true,
           observationFingerprint: "a".repeat(64),
-          source: {
-            reference: operator.source,
-            observedAt: "2026-08-21T09:55:00.000Z",
-            contactsObserved: 1,
-            coverage: { status: "complete", pagesObserved: 1 },
-          },
           exclusions: [],
           unavailableInputs: [],
           counts: {
@@ -190,12 +174,12 @@ async function assertFonteAudienceSource(fixture) {
       );
     },
   });
-  await client.reconcileProviderAudience(operator);
+  await client.reconcileAudience(input);
   assert.equal(
     requests[0].url,
-    "https://api.example.test/v1/workspaces/northstar/bridge/audience/reconcile?environment=sandbox",
+    "https://api.example.test/v1/workspaces/northstar/connected-audience/reconcile?environment=sandbox",
   );
-  assert.deepEqual(JSON.parse(requests[0].init.body).source, operator.source);
+  assert.deepEqual(JSON.parse(requests[0].init.body).source, input.source);
 }
 
 function receipt(cli, cwd, arguments_) {

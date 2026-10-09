@@ -1,7 +1,7 @@
 {
   "name": "@fonte-is/cli",
-  "version": "0.3.4",
-  "description": "Manage Fonte production broadcast operator journeys and local installations",
+  "version": "0.4.0",
+  "description": "Send broadcasts and manage Fonte from your terminal",
   "license": "Apache-2.0",
   "homepage": "https://fonte.is",
   "repository": {
@@ -37,7 +37,6 @@
   },
   "files": [
     "dist",
-    "assets",
     "native",
     "LICENSE",
     "MCP_CONTRACT.md",
@@ -49,7 +48,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prepack": "npm run build",
+    "prepack": "node ../../scripts/clean-package.mjs cli && npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
   },

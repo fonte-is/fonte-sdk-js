@@ -236,8 +236,6 @@ test("normal broadcast pause command reaches canonical Core control, not legacy 
     },
     authorize: async () => "synthetic-token",
     sleep: async () => {},
-    readProviderEvidenceCandidateFile: async () => { throw new Error("unused"); },
-    readProviderPlacementApplicationFile: async () => { throw new Error("unused"); },
   }, () => commandId);
   assert.equal(receipt.command, "broadcast_canonical_control");
   assert.equal(receipt.core_effect, "controlled", JSON.stringify(receipt));

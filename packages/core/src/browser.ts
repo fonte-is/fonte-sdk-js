@@ -24,11 +24,14 @@ export function createCapture(config: CaptureConfig): Capture {
   const engine = createCaptureEngine(config);
   return { page: engine.page, retry: engine.retry, reset: engine.reset };
 }
-/** Internal supplier shared by the unchanged legacy wrapper and website port. */
+/** Capture lifecycle shared by the browser entry point and Website runtime. */
 export function createCaptureEngine(
   config: CaptureConfig,
   transport?: BrowserObservationTransport,
-): Capture & { resetContext(): void; landing(evidence: BrowserLandingEvidence): Promise<CapturePageResult> } {
+): Capture & {
+  resetContext(): void;
+  landing(evidence: BrowserLandingEvidence): Promise<CapturePageResult>;
+} {
   const storage = clean(config.storage, 120).replace(/:+$/g, "");
   if (!storage) throw Error("fonte_storage_key_required");
   const collectPath = config.collect ?? "/api/fonte/collect";
@@ -98,17 +101,18 @@ export function createCaptureEngine(
         !options?.navigation
       )
         return skipped("duplicate");
-      const scope = scopeReader.read(
+      const captured = scopeReader.read(
         approved,
         currentDocument === document ? currentHref : undefined,
       );
-      if (!scope) return skipped("route_not_permitted");
+      if (!captured) return skipped("route_not_permitted");
+      const { scope, sourceEvidence } = captured;
       currentHref = href;
       currentDocument = document;
       const occurrenceId = createClientAttemptId();
       const occurredAt = new Date().toISOString();
       // Both views refer to one arrival. The source view also records no-referrer coverage.
-      const selectedEvents = shouldCaptureSourceTouch(scope, null, {
+      const selectedEvents = shouldCaptureSourceTouch(scope, sourceEvidence, {
         mode: config.capturePolicy?.mode ?? "source_touch",
         captureDirectLanding: config.capturePolicy?.captureDirectLanding,
       })
@@ -117,12 +121,14 @@ export function createCaptureEngine(
       const snapshots = observations(
         selectedEvents,
         scope,
+        sourceEvidence,
         approved,
         verification,
         occurrenceId,
         occurredAt,
       );
-      pageSnapshot = snapshots.find(body => body.eventType === "page_view") ?? null;
+      pageSnapshot =
+        snapshots.find((body) => body.eventType === "page_view") ?? null;
       landingSent = false;
       for (const body of snapshots)
         try {
@@ -141,14 +147,26 @@ export function createCaptureEngine(
     },
     async landing(browserEvidence) {
       const approved = policy();
-      if (!pageSnapshot || landingSent || !permitted(approved) ||
-        approved.version !== pageSnapshot.collectionVersion || typeof document === "undefined" ||
-        currentDocument !== document || currentHref !== window.location.href ||
-        document.visibilityState !== "visible") return { deliveries: [] };
+      if (
+        !pageSnapshot ||
+        landingSent ||
+        !permitted(approved) ||
+        approved.version !== pageSnapshot.collectionVersion ||
+        typeof document === "undefined" ||
+        currentDocument !== document ||
+        currentHref !== window.location.href ||
+        document.visibilityState !== "visible"
+      )
+        return { deliveries: [] };
       landingSent = true;
-      const body: CollectBody = { ...pageSnapshot, eventType: "browser_landing",
-        eventId: createClientAttemptId(), occurredAt: new Date().toISOString(),
-        pageEventId: pageSnapshot.eventId, browserEvidence };
+      const body: CollectBody = {
+        ...pageSnapshot,
+        eventType: "browser_landing",
+        eventId: createClientAttemptId(),
+        occurredAt: new Date().toISOString(),
+        pageEventId: pageSnapshot.eventId,
+        browserEvidence,
+      };
       return { deliveries: [await delivery.submit(body, approved)] };
     },
     reset() {
@@ -183,14 +201,14 @@ export type { Scope } from "./types.js";
 function observations(
   events: readonly CaptureEventType[],
   scope: Scope,
+  sourceEvidence: CollectBody["sourceEvidence"],
   policy: CollectionPolicy,
   verification: CaptureConfig["verification"] | null,
   occurrenceId: string,
   occurredAt: string,
 ): CollectBody[] {
   return events.map((eventType) => ({
-    schemaVersion: "fonte.acquisition.v1",
-    classifierVersion: "source.v2",
+    schemaVersion: "fonte.acquisition.v2",
     collectionVersion: policy.version,
     occurrenceId,
     occurredAt,
@@ -198,6 +216,7 @@ function observations(
     eventType,
     journeyId: scope.fonte_journey_id,
     scope,
+    sourceEvidence,
     ...(eventType === "source_touch" && verification ? { verification } : {}),
   }));
 }

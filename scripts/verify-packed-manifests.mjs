@@ -76,7 +76,7 @@ for (const name of selected) {
   }
   const allowedEntry =
     name === "cli"
-      ? /^package\/(package\.json|LICENSE|README\.md|OPERATOR_CONTRACT\.md|dist\/)/
+      ? /^package\/(package\.json|LICENSE|README\.md|MCP_CONTRACT\.md|OPERATOR_CONTRACT\.md|dist\/|native\/)/
       : /^package\/(package\.json|README\.md|OPERATOR_CONTRACT\.md|dist\/)/;
   for (const entry of entries) {
     assert.ok(

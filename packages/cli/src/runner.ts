@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import type { CapturedCommandRunner, CommandRunner } from "./runtime-types.js";
+import type { CommandRunner } from "./runtime-types.js";
 
 export const systemRunner: CommandRunner = {
   run(command, args, cwd) {
@@ -12,34 +12,6 @@ export const systemRunner: CommandRunner = {
       });
       child.once("error", reject);
       child.once("exit", (code) => resolve(code ?? 1));
-    });
-  },
-};
-
-export const releaseRunner: CapturedCommandRunner = {
-  run(command, args, cwd, output) {
-    return new Promise((resolve, reject) => {
-      const child = spawn(command, [...args], {
-        cwd,
-        env: process.env,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.setEncoding("utf8");
-      child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => {
-        if (output?.stdout) output.stdout(chunk);
-        else stdout += chunk;
-      });
-      child.stderr.on("data", (chunk: string) => {
-        if (output?.stderr) output.stderr(chunk);
-        else stderr += chunk;
-      });
-      child.once("error", reject);
-      child.once("close", (code) =>
-        resolve({ exitCode: code ?? 1, stdout, stderr }),
-      );
     });
   },
 };

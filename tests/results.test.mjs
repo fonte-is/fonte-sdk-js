@@ -1027,7 +1027,7 @@ test("invalid native construction and server-only use expose only constant error
   }
 });
 
-test("strict built type consumer permits confirmed success and rejects provider options, old aliases and browser authority", () => {
+test("strict built type consumer permits confirmed success and rejects unknown fields and browser authority", () => {
   const file = new URL("./native-types-consumer.ts", import.meta.url).pathname;
   const fixture = `import {createFonte, type AuthenticatedAppUser, type FonteIdentityHandle} from '@fonte-is/core/results';
 import {recordFonteReturn, type FonteBrowserIdentity} from '@fonte-is/core/results-browser';
@@ -1039,12 +1039,10 @@ export function use(user: AuthenticatedAppUser, handle: FonteIdentityHandle, bro
   void confirmation;
   // @ts-expect-error confirmation requires an explicit original UUID and time
   handle.confirmTrigger('project_created', {});
-  // @ts-expect-error provider capture options are not generic action facts
-  handle.confirmTrigger('project_created', {eventId: 'original', occurredAt: 'original', projectId: '123', event: 'Project created'});
+  // @ts-expect-error confirmation accepts only its declared fields
+  handle.confirmTrigger('project_created', {eventId: 'original', occurredAt: 'original', unexpected: true});
   // @ts-expect-error actor claims belong to the original authenticated identity
   handle.confirmTrigger('project_created', {eventId: 'original', occurredAt: 'original', userId: 'caller'});
-  // @ts-expect-error unpublished provider-specific helper is removed, not aliased
-  handle.postHogWitness('project_created', {eventId: 'original', occurredAt: 'original'});
   // @ts-expect-error browser cannot supply authoritative success
   recordFonteReturn(browser, {trigger: 'project_created'});
   // @ts-expect-error no generic properties or Contact graph

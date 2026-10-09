@@ -1,5 +1,3 @@
-import { providerAudienceHelpEntries } from "./operator-provider-audience-help.js";
-import { providerEvidenceHelpEntries } from "./operator-provider-evidence-help.js";
 import { workspaceMarketingSettingsHelpEntries } from "./operator-marketing-settings-help.js";
 import { CAMPAIGN_OPERATOR_HELP } from "./operator-campaign-help.js";
 import { SEGMENT_OPERATOR_HELP } from "./operator-segment-help.js";
@@ -426,66 +424,6 @@ const entries: readonly HelpEntry[] = [
       "Reads final counts, billing facts, and frozen audience provenance.",
     json: true,
   },
-  {
-    command: ["bridge", "observe", "resend"],
-    usage: [
-      [
-        "--workspace <slug> --environment <sandbox|production> --segment-id <id>",
-      ],
-    ],
-    detail: "Observes one Resend segment without mutating provider state.",
-    json: true,
-  },
-  {
-    command: ["bridge", "copy", "resend"],
-    usage: [
-      [
-        "--workspace <slug> --environment <sandbox|production> --segment-id <id>",
-        "--fingerprint <sha256> --idempotency-key <key>",
-      ],
-    ],
-    detail: "Copies one fingerprint-bound Resend observation through Core.",
-    json: true,
-  },
-  ...(["resend", "kit"] as const).flatMap((provider) => [
-    {
-      command: ["bridge", "connections", "list", provider],
-      usage: [["--workspace <slug> --environment <sandbox|production>"]],
-      detail: `Lists Core's sanitized ${provider} connection metadata.`,
-      json: true as const,
-    },
-    {
-      command: ["bridge", "connections", "connect", provider],
-      usage: [
-        [
-          "--workspace <slug> --environment <sandbox|production>",
-          "--display-name <name>",
-        ],
-      ],
-      detail:
-        provider === "resend"
-          ? "Starts native Resend OAuth and waits when the authorization page opens."
-          : "Kit OAuth is currently unavailable and fails closed until its application and scope authority exists.",
-      json: true as const,
-    },
-    {
-      command: ["bridge", "connections", "reconnect", provider],
-      usage: [
-        [
-          "--workspace <slug> --environment <sandbox|production>",
-          "--connection-id <uuid> --display-name <name>",
-          "--expected-credential-version <n>",
-        ],
-      ],
-      detail:
-        provider === "resend"
-          ? "Reauthorizes one existing connection through native Resend OAuth."
-          : "Kit OAuth is currently unavailable and fails closed until its application and scope authority exists.",
-      json: true as const,
-    },
-  ]),
-  ...providerAudienceHelpEntries,
-  ...providerEvidenceHelpEntries,
   ...(["prepare", "reconcile", "watch", "duplicate"] as const).map(
     (operation) => ({
       command: ["broadcast", operation],
@@ -495,25 +433,15 @@ const entries: readonly HelpEntry[] = [
       json: true,
     }),
   ),
-  ...(["status", "diff", "placement-plan"] as const).map((operation) => ({
-    command: ["bridge", operation],
-    usage: [[]],
-    detail:
-      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
-    json: true,
-  })),
   {
-    command: ["bridge", "observe", "kit"],
-    usage: [[]],
-    detail:
-      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
-    json: true,
-  },
-  {
-    command: ["bridge", "copy", "kit"],
-    usage: [[]],
-    detail:
-      "No current Core authority admits this declaration; it returns unsupported_authority before OAuth or network access.",
+    command: ["bridge", "import", "status"],
+    usage: [
+      [
+        "--workspace <slug> --environment <sandbox|production>",
+        "--contact-import-batch-id <uuid>",
+      ],
+    ],
+    detail: "Reads a completed Contact import and its identity set.",
     json: true,
   },
 ];

@@ -26,7 +26,7 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     await readFile(path.join(root, "packages/cli/package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fonte-is/cli");
-  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.version, "0.4.0");
   assert.deepEqual(manifest.bin, {
     fonte: "./dist/main.js",
     "fonte-mcp": "./dist/mcp-main.js",
@@ -37,6 +37,18 @@ test("CLI package identity stays independent from the fonte binary", async () =>
     zod: "4.4.3",
   });
   assert.deepEqual(manifest.exports, {
+    "./mcp-core-handler": {
+      types: "./dist/mcp-core-handler.d.ts",
+      import: "./dist/mcp-core-handler.js",
+    },
+    "./mcp-core-server": {
+      types: "./dist/mcp-core-server.d.ts",
+      import: "./dist/mcp-core-server.js",
+    },
+    "./broadcast-client": {
+      types: "./dist/broadcast-operator-client.d.ts",
+      import: "./dist/broadcast-operator-client.js",
+    },
     "./operator-client": {
       types: "./dist/operator-client.d.ts",
       import: "./dist/operator-client.js",
@@ -106,7 +118,8 @@ test("help, version, and usage bytes are literal public contracts", async () => 
   );
   assert.equal(VERSION_TEXT, `@fonte-is/cli ${manifest.version}\n`);
   assert.match(USAGE_TEXT, /fonte auth exec -- <command> \[args\.\.\.\]/);
-  assert.match(USAGE_TEXT, /fonte provider-evidence resend <command>/);
+  assert.match(USAGE_TEXT, /fonte connections <command>/);
+  assert.match(USAGE_TEXT, /fonte audience <reconcile\|freeze>/);
 });
 
 test("program renders help, version, and invalid invocation exactly", async () => {
@@ -156,7 +169,7 @@ test("broadcast close and cancel help compose with the shared operator CLI", asy
       result.stdout,
       new RegExp(`Usage: fonte broadcast ${operation}`),
     );
-    assert.match(result.stdout, /state-idempotent/);
+    assert.match(result.stdout, /Core/);
   }
 
   assert.equal(calls, 0);
@@ -192,7 +205,7 @@ test("invalid JSON calls stay private and every current command help matches its
   for (const argv of [
     ["test", "untrusted-secret-token", "--json"],
     ["broadcast", "draft", "create", "/private/credential", "--json"],
-    ["bridge", "observe", "resend", "token-like-value", "--json"],
+    ["bridge", "import", "status", "token-like-value", "--json"],
   ]) {
     const result = await runProgram(argv, dependencies);
     const receipt = JSON.parse(result.stdout);
@@ -217,8 +230,7 @@ test("invalid JSON calls stay private and every current command help matches its
     [["broadcast", "audience", "preview", "--help"], "eligible counts"],
     [["broadcast", "test", "send", "--help"], "--environment sandbox"],
     [["broadcast", "test", "status", "--help"], "--environment production"],
-    [["broadcast", "send", "--help"], "broadcast send now --help"],
-    [["broadcast", "send", "now", "--help"], "one explicit Send effect"],
+    [["broadcast", "send", "--help"], "--send-input"],
     [["broadcast", "send", "schedule", "--help"], "future time"],
     [["broadcast", "send", "status", "--help"], "GET only"],
     [
@@ -228,39 +240,18 @@ test("invalid JSON calls stay private and every current command help matches its
     [["broadcast", "preflight", "--help"], "--expected-version <n>"],
     [["broadcast", "authorize", "--help"], "--idempotency-key <key>"],
     [["broadcast", "status", "--help"], "[--watch]"],
-    [["broadcast", "pause", "--help"], "state-idempotent"],
-    [["broadcast", "resume", "--help"], "state-idempotent"],
-    [["broadcast", "cancel", "--help"], "state-idempotent"],
+    [["broadcast", "pause", "--help"], "canonical Send operation"],
+    [["broadcast", "resume", "--help"], "canonical Send operation"],
+    [["broadcast", "cancel", "--help"], "canonical Send operation"],
     [["broadcast", "result", "--help"], "frozen audience provenance"],
-    [["bridge", "observe", "resend", "--help"], "Resend segment"],
-    [["bridge", "copy", "resend", "--help"], "fingerprint-bound"],
-    [["bridge", "--help"], "bridge observe resend --help"],
-    [["bridge", "observe", "--help"], "bridge observe kit --help"],
-    [["bridge", "copy", "--help"], "bridge copy kit --help"],
+    [
+      ["bridge", "import", "status", "--help"],
+      "--contact-import-batch-id <uuid>",
+    ],
+    [["connections", "--help"], "--choice-ref <ref>"],
+    [["contacts", "--help"], "--source-ref <ref>"],
+    [["audience", "--help"], "--fingerprint <sha256>"],
     [["broadcast", "prepare", "--help"], "unsupported_authority"],
-    [["bridge", "status", "--help"], "unsupported_authority"],
-    [["provider-evidence", "--help"], "provider-evidence resend start --help"],
-    [["provider-evidence", "resend", "--help"], "generation read --help"],
-    [
-      ["provider-evidence", "resend", "start", "--help"],
-      "--candidates-file <json-file>",
-    ],
-    [
-      ["provider-evidence", "resend", "read", "--help"],
-      "Read this before every advance",
-    ],
-    [
-      ["provider-evidence", "resend", "advance", "--help"],
-      "never retries automatically",
-    ],
-    [
-      ["provider-evidence", "resend", "seal", "--help"],
-      "--generation-id <uuid>",
-    ],
-    [
-      ["provider-evidence", "resend", "generation", "read", "--help"],
-      "seal checksums",
-    ],
   ]) {
     const result = await runProgram(argv, dependencies);
     assert.equal(result.exitCode, 0, argv.join(" "));
@@ -303,8 +294,11 @@ test("invalid JSON calls stay private and every current command help matches its
     operatorContract,
     /authoritative audience\n+preview, verified-account test, and exact-revision preflight/,
   );
-  assert.match(operatorContract, /Candidate-scoped Resend evidence/);
-  assert.match(operatorContract, /CLI adds no retry loop/);
+  assert.match(operatorContract, /Connected contacts and audiences/);
+  assert.match(
+    operatorContract,
+    /Importing contacts does not establish permission/,
+  );
 });
 
 test("plan sealing uses recursively canonical compact JSON", () => {

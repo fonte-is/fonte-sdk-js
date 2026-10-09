@@ -1,6 +1,4 @@
-/** Synthetic fixed FON-807 fixture projection from Core f9669b03:
- * test/fixtures/break-glass-conformance.ts. reviewDigest is actual Core helper output.
- * The client-facing workspace code intentionally differs from the immutable Core ID. */
+/** The public workspace code differs from the immutable workspace identity. */
 export const coreOrigin = "https://core.example.test";
 export const scope = {
   workspace: "bg1-fixture",

@@ -1,4 +1,4 @@
-> FON-377 update: human CLI identity may persist only as a refresh credential in
+> Human CLI identity may persist only as a refresh credential in
 > native OS custody, bound to the exact issuer/client/scopes/user. Each operation
 > still obtains current Core authority. Provider credentials remain Core-owned.
 
@@ -8,7 +8,7 @@
 
 Operator commands reuse the existing browser OAuth flow and only call bounded
 Core routes. The bearer remains in memory and appears only in the Authorization
-header. The CLI has no database, provider, queue, AWS, provider-credential-storage,
+header. The CLI has no database, provider, queue, provider-credential-storage,
 eligibility, billing, consent, sender, freeze, or dispatch authority.
 
 Every production command requires `--environment production`. Core still
@@ -240,97 +240,7 @@ Core's broadcast-scoped state-idempotent control operation. Each command binds
 the exact `control_version` returned by an authoritative status read. A stale
 opposing command fails with Core's typed conflict and is never retried.
 
-## Candidate-scoped provider evidence
-
-The installed binary exposes five fixed JSON-only commands:
-
-```text
-fonte provider-evidence <provider> start ... --candidates-file <json-file> --json
-fonte provider-evidence <provider> read ... --operation-id <uuid> --json
-fonte provider-evidence <provider> advance ... --operation-id <uuid> --expected-request-number <n> --json
-fonte provider-evidence <provider> seal ... --operation-id <uuid> --generation-id <uuid> --json
-fonte provider-evidence <provider> generation read ... --generation-id <uuid> --json
-```
-
-Every command binds workspace, environment, connection ID, selector ID,
-selector-generation ID, artifact SHA-256, identity-set SHA-256, candidate
-count, and candidate-manifest SHA-256. Start additionally binds operation ID,
-schema and normalization versions, the tenant-HMAC fingerprint version,
-identity-custody key/version, and a strict JSON object containing only the
-candidate array. Candidate rows and provider record IDs never enter arguments,
-help, stdout, stderr, or receipts.
-
-Read the operation before each advance. Advance accepts exactly the
-`next_request_number` from that aggregate read and issues one logical request;
-the CLI adds no retry loop. A lost start, advance, or seal response remains
-unknown until same-identity operation or generation readback resolves it.
-The structured ambiguous receipt preserves `core_effect: "unknown"`, sets
-`retry_mutation: false`, and gives the complete guarded read or generation-read
-command in `next_action`. Human rendering prints that same command, prints
-`Retry mutation: false`, and says not to retry. For a frozen-CSV start, Core
-derives the candidate-manifest hash. If that start response is lost before the
-hash is observed, the CLI cannot truthfully construct the strict read command;
-`next_action` is therefore a typed `candidate_manifest_unavailable` stop with
-`retry_mutation: false`, never a guessed guard or repeated start.
-Core alone owns the stored provider credential, cursor, rate/retry/throttle
-accounting, and candidate-scoped GET construction. The commands grant neither
-provider nor contact mutation authority and emit only Core's aggregate
-operation or generation receipt.
-
-## Fresh rotation partition journey
-
-The four fixed commands are one closed, Core-authoritative journey:
-
-```text
-fonte bridge rotation start <exact iteration and evidence flags> [--json]
-fonte bridge rotation read --workspace <slug> --environment <environment> \
-  --iteration-id <uuid> [--json]
-fonte bridge rotation advance --workspace <slug> --environment <environment> \
-  --iteration-id <uuid> --expected-page-number <latest-read-value> [--json]
-fonte bridge rotation seal <exact iteration and generation flags> [--json]
-```
-
-Run `start`, then `read`. While the read receipt supplies another population or
-broadcast page, run exactly one `advance` with its `nextPageNumber`, then
-`read` again. When Core reports the evidence ready, run `seal`, followed by a
-final `read`. Start, advance, and seal are never automatically retried. An
-ambiguous response preserves `core_effect: "unknown"`, includes the exact
-`rotation read` command with `retry_mutation: false`, and plainly says not to
-retry the mutation.
-
-Core—not the CLI—creates an exhaustive disjoint partition whose four private
-sealed selector sets have union equality with the fresh live population root:
-
-- `E` (eligible now): current unsubscribe/protection checks pass; the named
-  qualifying broadcast has an exact opened or clicked outcome; provider
-  `created_at` is known; portability is complete; and Fonte
-  custody is either eligible (`retirement_evidence_complete`) or absent
-  (`canonical_import_not_completed`).
-- `W` (warm first): the identity has only accepted/delivered evidence
-  (`no_positive_signal`) or was not a recipient of the named qualifying
-  broadcast (`no_message_history`), and must remain at the sending provider
-  for warming.
-- `X` (excluded): current provider unsubscribe, bounce, complaint, suppression,
-  or protected/ineligible Fonte custody applies.
-- `U` (unknown): Fonte custody is unknown, qualifying-broadcast evidence is
-  unknown or refused, provider `created_at` is missing, or portability evidence
-  is unknown. Missing, incoherent, future, or stale population, suppression,
-  broadcast, positive-signal, or candidate-generation timestamps are also
-  `U`. Any nonzero `U` blocks effects and the outgoing selector.
-
-Core evaluates a fixed policy at seal time: population, suppression, broadcast,
-and candidate-generation windows may be at most 86,400 seconds old; the named
-positive signal may be at most 7,776,000 seconds old. The exact evaluation time
-and limits are included in the aggregate partition receipt. `rotation seal`
-creates the outgoing evidence selector but grants no Contact mutation and
-performs no Contact intake. Any later promotion requires a separate sanctioned
-Contact import journey and exact operation-specific authority.
-
-Human and JSON receipts expose only aggregate progress, category/reason counts,
-private selector/generation identities, and union/partition checksums. They do
-not expose contact rows, email addresses, provider record IDs, or credentials.
-Successful and blocked partition receipts are both human-renderable; an
-already-attempted Core operation never becomes an output-format failure.
+## Broadcast canary and readback
 
 `broadcast canary` is one declared ten-minute operation under one Authorization
 Code + S256 PKCE grant and one in-memory bearer. It reads Core's production
@@ -371,100 +281,66 @@ billing availability, communication purpose, recipient expression, source
 collection/import provenance, frozen audience counts, and bounded prior-use
 evidence. Legacy missing audience evidence remains null, never zero.
 
-## Other implemented commands
+## Connected contacts and audiences
 
-The fixed sandbox canary and Bridge copy commands remain unchanged.
-Sandbox test status and production test status use different admitted Core
-routes. Audience preview remains observation-only; copy remains a separate
-fingerprint-bound action. Neither command mutates provider state.
+Connections, contact imports and audience preparation use the same Fonte
+operations through the operator client, CLI and MCP. Choose a connection from
+Fonte's current choices; use the references returned by Fonte in later calls.
+The client does not contain a fixed catalog of external services or accept
+external account credentials.
 
-Provider connections are established through Core-owned native OAuth:
+`fonte connections choices` lists available choices and requested permissions.
+`list` and `read` show existing connections. `authorize` starts an attempt
+using a choice reference, a caller-owned attempt UUID and a display name. To
+reconnect, also supply the existing connection reference and expected credential
+version. `authorization` reads that attempt; `disconnect` checks the expected
+credential version. All commands require `--workspace` and `--environment`.
+Complete consent through the returned authorization URL. Tokens remain in
+Fonte's custody.
+
+`fonte contacts sources` lists contact sources for a connection reference.
+`preview` reads one source reference and reports its current coverage,
+protection and unknown counts. `import` takes that source reference and an
+idempotency key; `import-status` reads the returned operation reference.
+Importing contacts does not establish permission to email them or send a
+Broadcast. Fonte preserves existing protection and permission evidence, and
+imports into the ordinary Contacts and audience selection path.
+
+Reuse the original request key after an uncertain import. Fonte retains the
+original input before acknowledging the operation, so a resumed import does
+not substitute a changed external source. A different source with the same key
+is a conflict. Incomplete source observation fails closed.
+
+Advanced audience preparation is explicit:
 
 ```text
-fonte bridge connections list <provider> --workspace <slug> \
-  --environment <sandbox|production>
+fonte audience reconcile --workspace <slug> --environment <sandbox|production> \
+  --source-ref <ref> [--exclude-source-ref <ref>] [--json]
 
-fonte bridge connections connect <provider> --workspace <slug> \
-  --environment <sandbox|production> --display-name <name>
-
-fonte bridge connections reconnect <provider> --workspace <slug> \
-  --environment <sandbox|production> --connection-id <uuid> \
-  --display-name <name> --expected-credential-version <n>
+fonte audience freeze --workspace <slug> --environment <sandbox|production> \
+  --source-ref <ref> [--exclude-source-ref <ref>] \
+  --fingerprint <sha256> --idempotency-key <key> [--json]
 ```
 
-Connect and reconnect start a short-lived Core attempt, open or return the
-provider authorization URL, and poll sanitized status after the browser opens.
-The user enters credentials only on the selected provider's consent page.
-Choose an available connection in Fonte and review its requested permissions
-there. Provider access and refresh tokens never enter CLI input, arguments,
-environment, output, logs, files, or receipts. A lost or unfinished completion
-remains unknown until Core readback. An unavailable connection fails closed as
-`provider_oauth_unavailable` until its application and scope configuration is
-admitted.
+Reconcile observes the exact source and exclusions without importing or
+sending. Its receipt preserves the observation fingerprint, source, excluded,
+protected, unknown and final counts, and unavailable-input reasons. Unavailable
+counts remain null. The client discards contact rows from this receipt.
+Freeze repeats the same source and exclusions with that fingerprint and a new
+idempotency key. It creates an immutable Fonte audience through the existing
+freeze operation. Import and freeze are separate operations. Neither mutates
+an external collection or sends email.
 
-Core's provider-audience boundary also supports this CLI-only operator journey:
+For a completed Fonte import, replace `--source-ref` with
+`--contact-import-batch-id <uuid> --identity-set-sha256 <sha256>`.
+`fonte bridge import status --workspace <slug> --environment <sandbox|production>
+--contact-import-batch-id <uuid> [--json]` reads those exact values from Fonte.
+The equivalent client method is `readContactImportStatus`. It returns only a
+completed batch and its canonical identity hash. Pending, failed, incomplete,
+unavailable or malformed readback remains blocked with no hash. The client
+never calculates an audience identity from a file, count or name.
 
-```text
-fonte bridge collections <provider> --workspace <slug> \
-  --environment <sandbox|production> --connection-id <uuid>
-
-fonte bridge import status --workspace <slug> \
-  --environment <sandbox|production> --contact-import-batch-id <uuid>
-
-fonte bridge reconcile --workspace <slug> \
-  --environment <sandbox|production> \
-  (--source-provider <provider> --source-connection-id <uuid> \
-   --source-collection-id <id> --source-display-name <name> | \
-   --source-import-batch-id <uuid> --source-identity-set-sha256 <sha256>) \
-  --max-age-seconds <1..86400> \
-  [--exclude-provider <provider> --exclude-connection-id <uuid> \
-   --exclude-collection-id <id> --exclude-display-name <name>]...
-
-fonte bridge freeze <the exact reconcile source, exclusions, and max-age flags> \
-  --fingerprint <64-lower-hex> --idempotency-key <key>
-```
-
-Collection discovery is a read through Core's credential custody. Reconcile is
-an authoritative, observation-only Core operation. Its CLI receipt contains
-only source/exclusion provenance, freshness/coverage, unavailable-input reasons,
-aggregate source/excluded/protected/unknown/final counts, and the exact
-observation fingerprint; contact rows and provider payloads are discarded.
-
-Contact-import status projects only a terminal completed batch UUID and Core's
-canonical identity-set SHA-256. Supply those exact two values as
-`--source-import-batch-id` and `--source-identity-set-sha256`; the CLI never
-hashes contacts or infers identity from a file or count. Pending, failed,
-incomplete, unavailable, or malformed readback remains blocked with no hash.
-
-The source is either the unchanged provider collection reference or one exact
-Core-owned immutable import-batch UUID plus its canonical identity-set SHA-256;
-the forms cannot be combined. Up to 24 provider exclusions are forwarded in
-the operator's exact order without name matching or omission.
-
-Freeze is a separate explicit mutation. It repeats the exact source and
-exclusions, requires the reconciliation fingerprint and an idempotency key,
-and returns Core's immutable frozen-audience/import-batch reference. A lost
-freeze response is `core_effect: unknown`; the CLI never infers success or
-reconciles eligibility itself. None of these commands deletes or mutates a
-provider collection.
-
-Certificate-bound retirement and refill are two distinct placement
-applications. The retirement application carries the exact Core-owned
-certificate and an empty incoming cohort. Its terminal `placement progress`
-receipt supplies the settled `provider_population_count` (`P`). Only after that
-terminal readback may the operator freeze the freshly requalified incoming
-prefix of `147000 - P` and submit a refill-only application. That file carries
-the expected workspace UUID as `workspaceId`, an empty outgoing cohort, and no
-`retirementCertificate`; the CLI uses `workspaceId` only to verify Core's
-aggregate receipt and never forwards it. Both applications have distinct
-durable idempotency keys. A partial, unknown, mismatched, or unavailable
-retirement readback grants no refill authority.
-
-All other broadcast or Bridge declarations return `unsupported_authority`
-before OAuth or network access. There is no generic HTTP command, provider
-credential input, browser UI fallback, generic segment language, local
-eligibility engine, automatic retry after an ambiguous mutation, or generic
-MCP layer.
-The fixed Sequence and Broadcast MCP allowlist is defined in
-`MCP_CONTRACT.md`; it has no Bridge, recipient preparation, enrollment,
-provider dispatch, delivery mutation, or generic runtime authority.
+Missing broadcast declarations return `unsupported_authority` before sign-in
+or network access. The CLI has no generic HTTP command, external credential
+input or local eligibility engine. The MCP tools and their individual effects
+are listed in `MCP_CONTRACT.md`.

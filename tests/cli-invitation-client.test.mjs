@@ -19,13 +19,10 @@ const workspace = {
 const invitation = {
   invitationId,
   workspace,
-  intendedIdentity: {
-    supabaseSubject: "subject_synthetic_invitee",
-    email: "invitee@example.test",
-  },
+  intendedEmail: "invitee@example.test",
   role: "operator",
   status: "pending",
-  issuedBySupabaseSubject: "subject_synthetic_owner",
+  grantId: null,
   createdAt: "2026-08-27T09:00:00.000Z",
   expiresAt: "2026-08-28T09:00:00.000Z",
   revokedAt: null,
@@ -44,14 +41,13 @@ test("official client completes owner create, response-loss claim replay, and re
       assert.equal(url.search, "?environment=sandbox");
       assert.equal(bearer, "Bearer owner.synthetic.bearer");
       assert.deepEqual(JSON.parse(init.body), {
-        intendedSupabaseSubject: "subject_synthetic_invitee",
         intendedEmail: "invitee@example.test",
         role: "operator",
         expiresAt: "2026-08-28T09:00:00.000Z",
       });
       return json(
         {
-          schemaVersion: "workspace-invitation.v0",
+          schemaVersion: "workspace-invitation.v1",
           invitation,
           invitationToken,
         },
@@ -83,7 +79,6 @@ test("official client completes owner create, response-loss claim replay, and re
   const created = await owner.createWorkspaceInvitation({
     workspace: "fonte",
     environment: "sandbox",
-    intendedSupabaseSubject: "subject_synthetic_invitee",
     intendedEmail: " Invitee@Example.Test ",
     role: "operator",
     expiresAt: "2026-08-28T09:00:00.000Z",
@@ -188,6 +183,24 @@ test("invalid inputs and receipt drift fail before authority is widened", async 
   assert.equal(requests, 2);
 });
 
+test("create receipts must retain the requested email and an unclaimed grant", async () => {
+  const variants = [
+    { ...invitation, intendedEmail: "another@example.test" },
+    { ...invitation, grantId },
+    { ...invitation, unexpectedIdentity: "unrequested-value" },
+  ];
+  for (const candidate of variants) {
+    const connector = client("owner.synthetic.bearer", async () => json({
+      schemaVersion: "workspace-invitation.v1", invitation: candidate, invitationToken,
+    }, 201));
+    await assert.rejects(() => connector.createWorkspaceInvitation({
+      workspace: "fonte", environment: "sandbox", intendedEmail: "invitee@example.test",
+      role: "operator", expiresAt: invitation.expiresAt,
+    }), (error) => error instanceof CoreOperatorError
+      && error.reason === "core_operator_receipt_invalid" && error.coreEffect === "unknown");
+  }
+});
+
 function client(bearer, fetcher) {
   return createCoreOperatorClient({
     coreApiBaseUrl: "https://api.example.test",
@@ -206,7 +219,7 @@ function claimInput() {
 
 function claimReceipt(replayed) {
   return {
-    schemaVersion: "workspace-invitation.v0",
+    schemaVersion: "workspace-invitation.v1",
     invitationId,
     workspace,
     role: "operator",

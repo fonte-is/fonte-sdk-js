@@ -1,9 +1,4 @@
-import type {
-  ResendBridgeCopyResult,
-  ResendBridgeCoverage,
-  ResendBridgePreviewResult,
-  SandboxTestResult,
-} from "./operator-types.js";
+import type { SandboxTestResult } from "./operator-types.js";
 
 export function queuedSandboxTest(value: unknown): SandboxTestResult {
   const body = object(value);
@@ -50,101 +45,6 @@ export function sandboxTest(value: unknown): SandboxTestResult {
   };
 }
 
-export function resendBridgePreview(value: unknown): ResendBridgePreviewResult {
-  const body = object(value);
-  if (body.provider !== "resend") invalid();
-  const segment = object(body.segment);
-  const pagination = object(body.pagination);
-  const contacts = coverage(pagination.contacts);
-  const suppressions = coverage(pagination.suppressions);
-  const status = coverageStatus(pagination.status);
-  if (
-    status !==
-    (contacts.status === "complete" && suppressions.status === "complete"
-      ? "complete"
-      : "partial")
-  )
-    invalid();
-  const protectedObservations = object(body.protectedObservations);
-  const unknowns = object(body.unknowns);
-  const contactsObserved = count(body.contactsObserved);
-  const protectedContacts = count(protectedObservations.contacts);
-  const providerUnsubscribed = count(
-    protectedObservations.providerUnsubscribed,
-  );
-  const providerSuppressed = count(protectedObservations.providerSuppressed);
-  const unknownContacts = count(unknowns.contacts);
-  if (
-    protectedContacts > contactsObserved ||
-    providerUnsubscribed > contactsObserved ||
-    providerSuppressed > contactsObserved ||
-    unknownContacts > contactsObserved ||
-    unknowns.automationDependency !== "unknown"
-  )
-    invalid();
-  return {
-    kind: "resend_bridge_preview",
-    provider: "resend",
-    connection_id: safeText(body.connectionId, 200),
-    segment: {
-      id: safeText(segment.id, 500),
-      name: safeText(segment.name, 500),
-    },
-    observed_at: instant(body.observedAt),
-    observation_fingerprint: sha256(body.observationFingerprint),
-    pagination: { status, contacts, suppressions },
-    contacts_observed: contactsObserved,
-    protected: {
-      contacts: protectedContacts,
-      provider_unsubscribed: providerUnsubscribed,
-      provider_suppressed: providerSuppressed,
-    },
-    unknown: {
-      contacts: unknownContacts,
-      property_observations: count(unknowns.propertyObservations),
-      suppression_observations: count(unknowns.suppressionObservations),
-      automation_dependency: "unknown",
-    },
-  };
-}
-
-export function resendBridgeCopy(value: unknown): ResendBridgeCopyResult {
-  const preview = resendBridgePreview(value);
-  const body = object(value);
-  const importReceipt = object(body.importReceipt);
-  const reconciliation = object(body.reconciliation);
-  sha256(importReceipt.sourceChecksumSha256);
-  safeText(importReceipt.idempotencyKey, 500);
-  const accepted = count(reconciliation.accepted);
-  const created = count(reconciliation.created);
-  const protectedContacts = count(reconciliation.protected);
-  const unknownContacts = count(reconciliation.unknown);
-  if (
-    accepted > preview.contacts_observed ||
-    created > accepted ||
-    protectedContacts > preview.contacts_observed ||
-    unknownContacts > preview.contacts_observed
-  )
-    invalid();
-  return {
-    ...preview,
-    kind: "resend_bridge_copy",
-    import_receipt: {
-      contact_import_batch_id: uuid(importReceipt.contactImportBatchId),
-      created: boolean(importReceipt.created),
-    },
-    reconciliation: {
-      accepted,
-      created,
-      updated: nullableCount(reconciliation.updated),
-      unchanged: nullableCount(reconciliation.unchanged),
-      protected: protectedContacts,
-      conflict: nullableCount(reconciliation.conflict),
-      unknown: unknownContacts,
-    },
-  };
-}
-
 export function coreError(value: unknown, status: number): string {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const error = (value as Record<string, unknown>).error;
@@ -158,20 +58,6 @@ export function coreError(value: unknown, status: number): string {
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
   return value as Record<string, unknown>;
-}
-
-function coverage(value: unknown): ResendBridgeCoverage {
-  const body = object(value);
-  return {
-    status: coverageStatus(body.status),
-    pages_observed: count(body.pagesObserved),
-    has_more: boolean(body.hasMore),
-  };
-}
-
-function coverageStatus(value: unknown): "complete" | "partial" {
-  if (value !== "complete" && value !== "partial") invalid();
-  return value;
 }
 
 function text(value: unknown): string {

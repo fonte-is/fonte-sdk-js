@@ -10,6 +10,10 @@ const policy = () => ({
   routes: ["/"],
   clickIds: true,
   adCookies: true,
+  sourceFields: {
+    query: ["campaign_click", "alternate_click"],
+    cookies: ["visit_cookie", "session_cookie"],
+  },
 });
 const storage = () => {
   const m = new Map();
@@ -80,8 +84,8 @@ test("lost response and unavailable storage preserve direct snapshot ID payload 
         collectionPolicy: policy,
       });
       await capture.page();
-      window.location = new URL("https://example.test/?twclid=changed");
-      document.cookie = "_fbc=changed";
+      window.location = new URL("https://example.test/?campaign_click=changed");
+      document.cookie = "visit_cookie=changed";
       await capture.retry();
       assert.equal(requests.length, 4);
       assert.deepEqual(requests.slice(0, 2), requests.slice(2));
@@ -119,35 +123,6 @@ test("unknown policy touches no storage cookies or transport", () =>
     },
     { blockedStorage: true },
   ));
-test("X referral outranks inherited Meta cookies; missing referrer stays unknown", () => {
-  const x = collect.classifySourceTouch({
-    current_url: "https://example.test/",
-    referrer: "https://t.co/link",
-    fbc: "old",
-    fbp: "old",
-  });
-  assert.equal(x.sourcePlatform, "x");
-  assert.equal(x.channelType, "organic");
-  assert.notEqual(
-    collect.classifySourceTouch({
-      current_url: "https://example.test/",
-      referrer: "https://x.com.attacker.test/",
-    }).sourcePlatform,
-    "x",
-  );
-  assert.equal(
-    collect.classifySourceTouch({ current_url: "https://example.test/" })
-      .sourcePlatform,
-    "unknown",
-  );
-  const touch = collect.toTouch(
-    { twclid: "x-click", ttclid: "tiktok-click" },
-    "browser",
-  );
-  assert.equal(touch.twclid, "x-click");
-  assert.equal(touch.ttclid, "tiktok-click");
-});
-
 test("policy withdrawal prevents pending replay and clears memory identity", () =>
   browser(
     async (requests) => {
@@ -175,9 +150,10 @@ test("policy withdrawal prevents pending replay and clears memory identity", () 
 test("frozen snapshot has only admitted fields and referral origin", () =>
   browser(async (requests) => {
     window.location = new URL(
-      "https://example.test/?utm_source=fake-secret@example.test&twclid=ok-click&access_token=planted-secret",
+      "https://example.test/?utm_source=fake-secret@example.test&campaign_click=ok-click&access_token=planted-secret",
     );
-    document.referrer = "https://x.com/private/path?token=planted-secret";
+    document.referrer =
+      "https://referrer.example/private/path?token=planted-secret";
     await createCapture({
       storage: "redaction",
       collectionPolicy: policy,
@@ -186,8 +162,10 @@ test("frozen snapshot has only admitted fields and referral origin", () =>
     assert.ok(!serialized.includes("planted-secret"));
     assert.ok(!serialized.includes("fake-secret"));
     assert.ok(!serialized.includes("/private/path"));
-    assert.equal(requests[0].scope.twclid, "ok-click");
-    assert.equal(requests[0].scope.referrer, "https://x.com");
+    assert.deepEqual(requests[0].sourceEvidence.query, [
+      { name: "campaign_click", value: "ok-click" },
+    ]);
+    assert.equal(requests[0].scope.referrer, "https://referrer.example");
   }));
 test("retry stops after the bounded number of attempts", () =>
   browser(
@@ -233,15 +211,17 @@ test("bounded parser cancels an oversized streaming request before reading the r
   assert.ok(cancelled);
   assert.ok(reads <= 2);
 });
-test("source link identity does not replace observed referrer", () => {
-  const c = collect.classifySourceTouch({
-    fonte: "opaque-issued-link",
-    current_url: "https://example.test/",
-    referrer: "https://elsewhere.example.test",
-  });
-  assert.equal(c.sourcePlatform, "elsewhere.example.test");
-  assert.equal(c.channelType, "referral");
-});
+test("source link identity and observed referrer remain separate facts", () =>
+  browser(async (requests) => {
+    window.location = new URL("https://example.test/?fonte=opaque-issued-link");
+    document.referrer = "https://elsewhere.example.test/private";
+    await createCapture({
+      storage: "link-evidence",
+      collectionPolicy: () => ({ ...policy(), sourceTokens: true }),
+    }).page();
+    assert.equal(requests[0].scope.fonte, "opaque-issued-link");
+    assert.equal(requests[0].scope.referrer, "https://elsewhere.example.test");
+  }));
 
 test("renewing policy expiry cannot extend an existing pending snapshot", () =>
   browser(
@@ -334,13 +314,48 @@ test("explicit reset after a document reload erases owned persistent continuity"
   }));
 
 test("installation can select all routes and campaigns without an automatic expiry", () => {
-  const rich = { status: "granted", version: "synthetic-rich-v1", expiresAt: null, storage: "persistent", routes: ["*"], campaignValues: true, clickIds: true, sourceTokens: true };
+  const rich = {
+    status: "granted",
+    version: "synthetic-rich-v1",
+    expiresAt: null,
+    storage: "persistent",
+    routes: ["*"],
+    campaignValues: true,
+    clickIds: true,
+    sourceFields: { query: ["campaign_click"], cookies: [] },
+    sourceTokens: true,
+  };
   assert.equal(collect.permitted(rich), true);
-  const scope = collect.minimizeScope({ current_url: "https://example.test/workspace/home?secret=excluded", utm_campaign: "new-campaign", twclid: "new-click" }, rich);
+  const scope = collect.minimizeScope(
+    {
+      current_url: "https://example.test/workspace/home?secret=excluded",
+      utm_campaign: "new-campaign",
+      campaign_click: "new-click",
+    },
+    rich,
+  );
   assert.equal(scope.utm_campaign, "new-campaign");
-  assert.equal(scope.twclid, "new-click");
+  assert.deepEqual(
+    collect.minimizeSourceEvidence(
+      { query: [{ name: "campaign_click", value: "new-click" }], cookies: [] },
+      rich,
+    ).query,
+    [{ name: "campaign_click", value: "new-click" }],
+  );
   assert.equal(scope.current_url, "https://example.test/workspace/home");
-  assert.equal(collect.minimizeScope({ current_url: "https://example.test/docs/start" }, { ...rich, routes: ["/docs/*"] }).canonical_route, "/docs/start");
-  assert.equal(collect.minimizeScope({ current_url: "https://example.test/not-docs/start" }, { ...rich, routes: ["/docs/*"] }), null);
+  assert.equal(
+    collect.minimizeScope(
+      { current_url: "https://example.test/docs/start" },
+      { ...rich, routes: ["/docs/*"] },
+    ).canonical_route,
+    "/docs/start",
+  );
+  assert.equal(
+    collect.minimizeScope(
+      { current_url: "https://example.test/not-docs/start" },
+      { ...rich, routes: ["/docs/*"] },
+    ),
+    null,
+  );
   assert.equal(collect.permitted({ ...rich, status: "denied" }), false);
 });

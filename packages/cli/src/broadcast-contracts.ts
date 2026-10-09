@@ -1,4 +1,4 @@
-/** Wire projection of FON-807 break-glass-contracts.ts, fixed BG-1 sections 4/12.
+/** Server-owned Broadcast review and Send receipts.
  * Digests are opaque producer commitments, never client execution authority. */
 export type BroadcastEnvironment = "sandbox" | "production";
 export interface BroadcastScope {

@@ -1,3 +1,4 @@
+import { createConnectionClient } from "./connection-client.js";
 import { z } from "zod";
 import { createFonteMcpServer, type FonteMcpClientProviders } from "./mcp-sequence-server.js";
 import { MCP_FONTE_TOOLS } from "./mcp-tool-inventory.js";
@@ -38,6 +39,7 @@ export function createCoreFonteMcpServer(request: CoreRequester, coreApiBaseUrl:
     throw new CoreOperatorError("hosted_local_file_unsupported", null, "none");
   };
   const providers: FonteMcpClientProviders = {
+    connections: async () => createConnectionClient(request),
     broadcastBg: async () => ({ coreApiBaseUrl, request, requestCustody: "caller",
       resolveWorkspaceId: (workspace, timeoutMs) => resolveAuthorizedWorkspaceId(request, workspace, timeoutMs),
       sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) }),

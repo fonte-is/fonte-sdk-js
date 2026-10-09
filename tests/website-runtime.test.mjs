@@ -39,6 +39,7 @@ test("maximum declared settings and existing policy allowances validate", () => 
     routes: Array(32).fill("/news/*"),
     clickIds: true,
     adCookies: true,
+    sourceFields: { query: ["campaign_click"], cookies: ["visit_cookie"] },
     sourceTokens: true,
     campaignValues: {
       utm_source: Array.from({ length: 64 }, (_, i) => `source${i}`),

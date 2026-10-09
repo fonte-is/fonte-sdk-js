@@ -55,12 +55,7 @@ test("OAuth status page keeps failure and expiry generic", () => {
 
 test("OAuth page assets are self-contained with only the reviewed completion script", () => {
   const page = renderCallbackPage("complete");
-  const font = page.match(/data:font\/woff2;base64,([A-Za-z0-9+/=]+)/);
-  assert.ok(font, "the page embeds its font instead of depending on a CDN");
-  assert.equal(
-    Buffer.from(font[1], "base64").subarray(0, 4).toString(),
-    "wOF2",
-  );
+  assert.match(page, /font-family: system-ui/);
   const reviewedScript = `<script>${callbackCompleteScript}</script>`;
   assert.equal(page.match(/<script>[\s\S]*?<\/script>/g)?.length, 1);
   assert.equal(page.includes(reviewedScript), true);

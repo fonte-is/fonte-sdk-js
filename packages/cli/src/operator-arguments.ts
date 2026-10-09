@@ -1,11 +1,9 @@
+import { parseContactImportArguments } from "./contact-import-arguments.js";
 import { CliUsageError } from "./errors.js";
 import { parsePreflightArguments } from "./operator-preflight-arguments.js";
 import { parseBroadcastSendInstructionArguments } from "./operator-broadcast-send-instruction-arguments.js";
 import { parseWorkspaceMarketingSettingsArguments } from "./operator-marketing-settings-arguments.js";
-import { parseProviderAudienceArguments } from "./operator-provider-audience-arguments.js";
-import { parseProviderConnectionArguments } from "./operator-provider-connection-arguments.js";
-import { parseProviderEvidenceArguments } from "./operator-provider-evidence-arguments.js";
-import { parseProviderRotationArguments } from "./operator-provider-rotation-arguments.js";
+
 import { parseProductionOperatorArguments } from "./operator-production-arguments.js";
 import { parseSequenceOperatorArguments } from "./operator-sequence-arguments.js";
 import { parseCampaignOperatorArguments } from "./operator-campaign-arguments.js";
@@ -17,18 +15,12 @@ const missingBroadcast = new Set(
     " ",
   ),
 );
-const bridgeDeclarations = new Set([
-  "observe",
-  "status",
-  "diff",
-  "placement-plan",
-  "copy",
-  "reconcile",
-]);
 
 export function parseOperatorArguments(
   argv: readonly string[],
 ): ParsedOperatorArguments {
+  const contactImport = parseContactImportArguments(argv);
+  if (contactImport) return contactImport;
   const campaign = parseCampaignOperatorArguments(argv);
   if (campaign) return campaign;
   const segment = parseSegmentOperatorArguments(argv);
@@ -37,18 +29,10 @@ export function parseOperatorArguments(
   if (sequence) return sequence;
   const marketingSettings = parseWorkspaceMarketingSettingsArguments(argv);
   if (marketingSettings) return marketingSettings;
-  const providerEvidence = parseProviderEvidenceArguments(argv);
-  if (providerEvidence) return providerEvidence;
-  const providerRotation = parseProviderRotationArguments(argv);
-  if (providerRotation) return providerRotation;
   const broadcastSend = parseBroadcastSendInstructionArguments(argv);
   if (broadcastSend) return broadcastSend;
   const production = parseProductionOperatorArguments(argv);
   if (production) return production;
-  const providerConnection = parseProviderConnectionArguments(argv);
-  if (providerConnection) return providerConnection;
-  const providerAudience = parseProviderAudienceArguments(argv);
-  if (providerAudience) return providerAudience;
   if (argv[0] === "broadcast" && argv[1] === "test") {
     if (argv[2] === "send") return testSend(argv.slice(3));
     if (argv[2] === "status") return testStatus(argv.slice(3));
@@ -56,55 +40,10 @@ export function parseOperatorArguments(
   if (argv[0] === "broadcast" && argv[1] === "preflight") {
     return parsePreflightArguments(argv.slice(2));
   }
-  if (argv[0] === "bridge" && argv[2] === "resend") {
-    if (argv[1] === "observe") return resendPreview(argv.slice(3));
-    if (argv[1] === "copy") return resendCopy(argv.slice(3));
-  }
-  if (
-    (argv[0] === "broadcast" && missingBroadcast.has(argv[1] ?? "")) ||
-    (argv[0] === "bridge" && bridgeDeclarations.has(argv[1] ?? ""))
-  ) {
+  if (argv[0] === "broadcast" && missingBroadcast.has(argv[1] ?? "")) {
     return unsupported(argv.slice(2));
   }
   throw new CliUsageError("invalid_operator_command");
-}
-
-function resendPreview(argv: readonly string[]): ParsedOperatorArguments {
-  const options = parseOptions(argv, [
-    "--workspace",
-    "--environment",
-    "--segment-id",
-  ]);
-  return {
-    command: {
-      kind: "bridge_resend_preview",
-      workspace: workspace(options),
-      environment: environment(options),
-      segmentId: providerSegmentId(options),
-    },
-    json: options.json,
-  };
-}
-
-function resendCopy(argv: readonly string[]): ParsedOperatorArguments {
-  const options = parseOptions(argv, [
-    "--workspace",
-    "--environment",
-    "--segment-id",
-    "--fingerprint",
-    "--idempotency-key",
-  ]);
-  return {
-    command: {
-      kind: "bridge_resend_copy",
-      workspace: workspace(options),
-      environment: environment(options),
-      segmentId: providerSegmentId(options),
-      observationFingerprint: fingerprint(options),
-      idempotencyKey: idempotencyKey(options, 100),
-    },
-    json: options.json,
-  };
 }
 
 function testSend(argv: readonly string[]): ParsedOperatorArguments {
@@ -198,25 +137,6 @@ function workspace(options: Options): string {
     !/^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/.test(value)
   )
     invalid();
-  return value;
-}
-
-function environment(options: Options): "sandbox" | "production" {
-  const value = required(options, "--environment");
-  if (value !== "sandbox" && value !== "production") invalid();
-  return value;
-}
-
-function providerSegmentId(options: Options): string {
-  const value = required(options, "--segment-id");
-  if (value.length > 500 || value.includes("/") || /\p{Cc}/u.test(value))
-    invalid();
-  return value;
-}
-
-function fingerprint(options: Options): string {
-  const value = required(options, "--fingerprint");
-  if (!/^[a-f0-9]{64}$/.test(value)) invalid();
   return value;
 }
 

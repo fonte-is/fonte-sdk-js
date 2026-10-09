@@ -1,8 +1,11 @@
 import type { Scope } from "./types.js";
+import { measurementQueryKeys } from "./collect-contract.js";
 import {
-  adStorageQueryKeys,
-  measurementQueryKeys,
-} from "./collect-contract.js";
+  normalizeSourceEvidence,
+  validSourceFields,
+  type SourceEvidence,
+  type SourceFields,
+} from "./source-evidence.js";
 
 /** Installation policy input, never evidence of legal consent by itself. */
 export interface CollectionPolicy {
@@ -14,6 +17,7 @@ export interface CollectionPolicy {
   clickIds?: boolean;
   adCookies?: boolean;
   sourceTokens?: boolean;
+  sourceFields?: SourceFields;
   campaignValues?:
     | true
     | Partial<Record<(typeof measurementQueryKeys)[number], readonly string[]>>;
@@ -39,7 +43,11 @@ export function permitted(
     [policy.clickIds, policy.adCookies, policy.sourceTokens].every(
       (value) => value === undefined || typeof value === "boolean",
     ) &&
-    validCampaignValues(policy.campaignValues),
+    validCampaignValues(policy.campaignValues) &&
+    (policy.sourceFields === undefined ||
+      validSourceFields(policy.sourceFields)) &&
+    (!policy.clickIds || Boolean(policy.sourceFields?.query.length)) &&
+    (!policy.adCookies || Boolean(policy.sourceFields?.cookies.length)),
   );
 }
 function validCampaignValues(value: CollectionPolicy["campaignValues"]) {
@@ -97,21 +105,17 @@ export function minimizeScope(
     )
       result[key] = scope[key];
   }
-  if (policy.clickIds)
-    for (const key of adStorageQueryKeys) {
-      const value = identifier(scope[key]);
-      if (value) result[key] = value;
-    }
-  if (policy.adCookies)
-    for (const key of ["fbc", "fbp"]) {
-      const value = identifier(scope[key]);
-      if (value) result[key] = value;
-    }
   if (policy.sourceTokens) {
     const value = identifier(scope.fonte);
     if (value) result.fonte = value;
     const click = scope.fonte_click;
-    if (value && click && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(click))
+    if (
+      value &&
+      click &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        click,
+      )
+    )
       result.fonte_click = click.toLowerCase();
   }
   return result;
@@ -128,4 +132,25 @@ export function routePermitted(
         ? path.startsWith(route.slice(0, -1))
         : route === path),
   );
+}
+
+export function minimizeSourceEvidence(
+  value: unknown,
+  policy: CollectionPolicy,
+): SourceEvidence | null {
+  if (!permitted(policy)) return null;
+  const evidence = normalizeSourceEvidence(value);
+  if (!evidence) return null;
+  return {
+    query: policy.clickIds
+      ? evidence.query.filter((entry) =>
+          policy.sourceFields!.query.includes(entry.name),
+        )
+      : [],
+    cookies: policy.adCookies
+      ? evidence.cookies.filter((entry) =>
+          policy.sourceFields!.cookies.includes(entry.name),
+        )
+      : [],
+  };
 }

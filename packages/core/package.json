@@ -76,7 +76,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prepack": "node ../../scripts/clean-core-package.mjs && npm run build && node ../../scripts/prepare-core-package.mjs",
+    "prepack": "node ../../scripts/clean-package.mjs core && npm run build && node ../../scripts/prepare-core-package.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters -p tsconfig.json"
   },

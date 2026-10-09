@@ -1,9 +1,6 @@
 # Fonte CLI V0 implementation contract
 
-This file is the implementation authority for the first `@fonte-is/cli`
-candidate. Implementers may fill the declared function bodies. They may not
-change package identity, public behavior, paths, schemas, vocabulary, or
-verification semantics without returning the fork to the parent task.
+This contract describes the CLI commands, receipts and supported installation path.
 
 ## Boundary
 
@@ -34,16 +31,15 @@ V0 supports only:
 - one stdio-only MCP surface over that same closed Sequence-authoring and
   activation
   authority, as frozen in `MCP_CONTRACT.md`; and
-- one thin Bridge collection, completed Contact-import identity read,
-  provider-audience reconciliation, and explicit fingerprint-bound freeze
-  journey over Core-owned authority; and
-- one thin Resend/Kit native-OAuth connection list, connect, and reconnect
-  journey over Core-owned custody; and
+- Fonte connection authorization, source discovery, contact import and readback; and
+- completed Contact-import identity read, audience reconciliation and explicit
+  fingerprint-bound freeze through Core-owned operations; and
 - stable unsupported-authority receipts for the missing contracts frozen in
   `OPERATOR_CONTRACT.md`.
 
-V0 does not create an account, arbitrary recipient, sender identity, domain,
-contact, payment, or transactional application-email request. Production
+V0 does not create an account, arbitrary message recipient, sender identity,
+domain, payment or transactional application-email request. Connected-source
+imports create or update Contacts through Fonte's existing import operation. Production
 broadcast commands only submit explicit operator material to admitted Core
 routes; Core remains the sole authority for eligibility, billing, safety,
 sender readiness, recipient freeze, dispatch, and provider capacity.
@@ -64,7 +60,10 @@ fonte auth status [--json]
 fonte auth logout [--json]
 fonte auth exec -- <command> [args...]
 fonte broadcast <command> ... [--json]
-fonte bridge <command> ... [--json]
+fonte connections <command> ... [--json]
+fonte contacts <command> ... [--json]
+fonte audience <reconcile|freeze> ... [--json]
+fonte bridge import status ... [--json]
 fonte sequence <command> ... [--json]
 fonte remove [--yes] [--json]
 fonte --help
@@ -79,8 +78,8 @@ argument. `--help` is either the only argument or the final argument of a
 current public command with no other command options; it prints that command's
 admitted syntax and authority. In particular, broadcast-test help distinguishes
 the fixed sandbox canary syntax from the verified-account production-test
-syntax, and Bridge help names the admitted Resend copy and provider-audience
-routes.
+syntax. Connection, import and audience help lists the references and flags
+required by those operations.
 There is no terminal prompt. Only explicit `auth login` may open the system
 browser for the registered public CLI client. Ordinary authenticated commands
 never initiate account login. The workspace slug

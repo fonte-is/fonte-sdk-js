@@ -1,9 +1,7 @@
 import { inspectBroadcastHtml } from "./operator-broadcast-html-inspection.js";
 
-const RESEND_UNSUBSCRIBE = "{{{RESEND_UNSUBSCRIBE_URL}}}";
-
 export interface BroadcastHtmlConversion {
-  readonly kind: "provider_token" | "provider_artifact" | "literal_fallback";
+  readonly kind: "recipient_slot" | "literal_fallback";
   readonly source: string;
   readonly replacement: string;
   readonly occurrences: number;
@@ -28,44 +26,15 @@ export function convertBroadcastHtml(
 ): BroadcastHtmlConversionResult {
   let html = original;
   const conversions: BroadcastHtmlConversion[] = [];
-  html = replace(
-    html,
-    RESEND_UNSUBSCRIBE,
-    "{{{unsubscribe_url}}}",
-    "provider_token",
-    conversions,
-  );
   if (input.postalAddressLiteral) {
     html = replace(
       html,
       input.postalAddressLiteral,
       "{{{postal_address}}}",
-      "provider_token",
+      "recipient_slot",
       conversions,
     );
   }
-  for (const artifact of [
-    "<!--$-->",
-    "<!--/$-->",
-    "<!--html-->",
-    "<!--head-->",
-    "<!--body-->",
-    "<!-- -->",
-  ]) {
-    html = replace(html, artifact, "", "provider_artifact", conversions);
-  }
-  html = html.replace(
-    /\sdata-id=(?:"__react-email-column"|'__react-email-column')/giu,
-    (source) => {
-      conversions.push({
-        kind: "provider_artifact",
-        source,
-        replacement: "",
-        occurrences: 1,
-      });
-      return "";
-    },
-  );
   const unsupportedTokens = inspectBroadcastHtml(html).unsupported;
   const unusedFallbacks: string[] = [];
   for (const [token, fallback] of Object.entries(input.literalFallbacks)) {

@@ -1,5 +1,6 @@
 import type { InstallationVerificationMetadata } from "./installation-verification.js";
 import type { Scope } from "./types.js";
+import type { SourceEvidence } from "./source-evidence.js";
 
 export interface Evidence {
   siteUrl: string | null | undefined;
@@ -17,11 +18,10 @@ export type BrowserLandingEvidence = Readonly<{
 }>;
 
 export interface CollectBody {
-  schemaVersion: "fonte.acquisition.v1";
+  schemaVersion: "fonte.acquisition.v2";
   occurrenceId: string;
   occurredAt: string;
   collectionVersion: string;
-  classifierVersion: "source.v2";
   eventId: string;
   eventType: CollectEventType;
   journeyId: string;
@@ -29,60 +29,11 @@ export interface CollectBody {
   pageEventId?: string;
   browserEvidence?: BrowserLandingEvidence;
   scope: Scope;
+  sourceEvidence: SourceEvidence;
 }
 
 export interface ParseOptions {
   maxBytes?: number;
-}
-
-export interface SourceTouchClassification {
-  channelType: "paid" | "owned" | "organic" | "referral" | "direct" | "unknown";
-  channel:
-    | "paid_search"
-    | "paid_social"
-    | "owned_email"
-    | "owned_sms"
-    | "organic_search"
-    | "organic_social"
-    | "referral"
-    | "direct"
-    | "unknown";
-  sourcePlatform: string;
-  captureReason:
-    | "fonte_source_identity"
-    | "platform_click_id"
-    | "platform_cookie_signal"
-    | "utm_parameter"
-    | "external_referrer"
-    | "internal_navigation"
-    | "direct_landing"
-    | "no_referrer"
-    | "unknown";
-}
-
-export interface TouchPayload {
-  journeyId: string;
-  platform: "meta" | "google" | "other";
-  isPaid: boolean;
-  fonteLinkToken?: string;
-  channelType?: SourceTouchClassification["channelType"];
-  sourcePlatform?: string;
-  utmSource?: string;
-  utmMedium?: string;
-  utmCampaign?: string;
-  utmContent?: string;
-  utmTerm?: string;
-  referrer?: string;
-  landingUrl?: string;
-  gclid?: string;
-  gbraid?: string;
-  wbraid?: string;
-  fbclid?: string;
-  twclid?: string;
-  ttclid?: string;
-  fbc?: string;
-  fbp?: string;
-  clientUserAgent?: string;
 }
 
 export interface CollectionReceipt {
