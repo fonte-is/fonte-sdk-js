@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { createApplicationDelivery } from "./application-delivery.js";
-import { postHogCapture } from "./results-posthog.js";
+import { triggerConfirmation } from "./results-trigger-confirmation.js";
 import {
   nativeId,
   nativeInstant,
@@ -18,7 +18,7 @@ import type {
   FonteMeasurementPermission,
   FonteObservationOptions,
   FonteOptions,
-  FontePostHogTriggerOptions,
+  FonteTriggerConfirmationOptions,
   FonteRetractInput,
   IdentityRecord,
 } from "./results-types.js";
@@ -33,9 +33,7 @@ export type {
   FonteIdentityClaims,
   FonteBrowserIdentity,
   FonteObservationOptions,
-  FontePostHogTriggerOptions,
-  FontePostHogCapture,
-  FontePostHogWitness,
+  FonteTriggerConfirmationOptions,
   FonteIdentifyOptions,
   FonteMeasurementPermission,
   FonteRetractInput,
@@ -172,11 +170,13 @@ function fonte(options: FonteOptions): Fonte {
       const valid = (now: number) =>
         !stopped() && now < Date.parse(record.validUntil);
       const acknowledgedOriginal = (input: FonteObservationOptions) =>
-        !stopped()
-        && Object.hasOwn(input, "eventId") && input.eventId !== undefined
-        && Object.hasOwn(input, "occurredAt") && input.occurredAt !== undefined
-        && acknowledgement.sourceRevision !== null
-        && ["stored", "replayed"].includes(acknowledgement.outcome ?? "");
+        !stopped() &&
+        Object.hasOwn(input, "eventId") &&
+        input.eventId !== undefined &&
+        Object.hasOwn(input, "occurredAt") &&
+        input.occurredAt !== undefined &&
+        acknowledgement.sourceRevision !== null &&
+        ["stored", "replayed"].includes(acknowledgement.outcome ?? "");
       const activity = (
         kind: "return" | "trigger",
         key: unknown,
@@ -214,27 +214,39 @@ function fonte(options: FonteOptions): Fonte {
           return delivery.reject("record_invalid");
         }
       };
-      const postHogTrigger = (key: string, input: FontePostHogTriggerOptions) => {
-          if (!delivery.gate(true)) return null;
-          try {
-            const now = delivery.clock();
-            // Like native replay, this can recover only an explicitly retained
-            // original action under its exact identity ACK. The canonical proof
-            // builder still enforces the original witness interval and 30 days.
-            if (!acknowledgedOriginal(input) || acknowledgement.sourceRevision === null) throw 0;
-            return postHogCapture(installationId, signingKey, record, key, input, now,
-              acknowledgement.sourceRevision);
-          } catch {
-            delivery.reject("record_invalid");
-            return null;
-          }
+      const confirmTrigger = (
+        key: string,
+        input: FonteTriggerConfirmationOptions,
+      ) => {
+        if (!delivery.gate(true)) return null;
+        try {
+          const now = delivery.clock();
+          // Like native replay, this can recover only an explicitly retained
+          // original action under its exact identity ACK. The canonical proof
+          // builder still enforces the original witness interval and 30 days.
+          if (
+            !acknowledgedOriginal(input) ||
+            acknowledgement.sourceRevision === null
+          )
+            throw 0;
+          return triggerConfirmation(
+            installationId,
+            signingKey,
+            record,
+            key,
+            input,
+            now,
+            acknowledgement.sourceRevision,
+          );
+        } catch {
+          delivery.reject("record_invalid");
+          return null;
+        }
       };
       return Object.freeze({
         trigger: (key: string, input?: FonteObservationOptions) =>
           activity("trigger", key, input),
-        postHogTrigger,
-        postHogWitness: (key: string, input: FontePostHogTriggerOptions) =>
-          postHogTrigger(key, input)?.properties ?? null,
+        confirmTrigger,
         returned: (input?: FonteObservationOptions) =>
           activity("return", undefined, input),
         get browserIdentity() {

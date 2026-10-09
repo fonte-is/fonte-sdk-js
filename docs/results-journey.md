@@ -41,20 +41,20 @@ interface. Delivery, retries and optional lifecycle drains stay outside the
 successful business response. Configure additional meaningful actions through
 the same interface when qualifying the broader installation.
 
-For **PostHog**, use the application's existing project and identified events.
+For **external events**, use the application's existing event pipeline and identified events.
 Connect the project through the supported customer interface, select an event
 that already means a committed success, and verify its stable user identity
 against the same CSV Contact. Preserve the original operation ID and time.
 An anonymous ID, identified profile flag, click or optimistic button event is
 insufficient. Run the identical cases below through the same Results engine.
-Also observe one real operation through both native Fonte and PostHog: one
+Also observe one real operation through both native Fonte and external delivery: one
 Contact must remain one Return and one action, with both sources disclosed.
 
 Record each setup step, code edit, sign-in, permission, credential installation,
 wait and intervention. A private artifact handoff or operator configuration is
 an intervention. The current native candidate is privately packaged; the
 current guide establishes neither public npm installation nor a released
-Connect PostHog path. Record unavailable interfaces as blockers, not completed
+external-event connection path. Record unavailable interfaces as blockers, not completed
 customer steps.
 
 ## Freeze the answer before Send
@@ -66,14 +66,14 @@ destination and copy identity. Do not manufacture a `fl_*` token.
 
 Freeze this independent ledger before executing the case:
 
-| Input | Record from its ordinary authority |
-| --- | --- |
-| Scope | Application, workspace, environment, source revision, Broadcast and selected trigger key/label. |
-| Recipient | A's existing CSV Contact; X's separately verified identity outside the audience. |
-| Expected sets | Which Contacts should be in Returned and in each selected action, with the reason for each inclusion/exclusion. |
+| Input         | Record from its ordinary authority                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope         | Application, workspace, environment, source revision, Broadcast and selected trigger key/label.                                                 |
+| Recipient     | A's existing CSV Contact; X's separately verified identity outside the audience.                                                                |
+| Expected sets | Which Contacts should be in Returned and in each selected action, with the reason for each inclusion/exclusion.                                 |
 | Send boundary | Original authoritative acceptance for A; Send click, delivery and report time cannot replace it. If unavailable, record a timing-proof blocker. |
-| Operation | Original committed operation UUID/time, independently saved application state, or failed response plus unchanged saved state. |
-| Read boundary | Expected changes and a bounded wait deadline; retain actual Results revision, `asOf`, coverage and all necessary evidence pages. |
+| Operation     | Original committed operation UUID/time, independently saved application state, or failed response plus unchanged saved state.                   |
+| Read boundary | Expected changes and a bounded wait deadline; retain actual Results revision, `asOf`, coverage and all necessary evidence pages.                |
 
 One Contact counts once independently for Returned and each configured action.
 A successful configured action also establishes Return. First identify after
@@ -95,20 +95,20 @@ The table uses fresh single-recipient Broadcasts and no unrelated A activity
 through the selected `asOf`. Empty sets mean observed zero under the source's
 actual coverage; they do not establish complete absence of activity.
 
-| Case | Real customer journey | Independent expected answer |
-| --- | --- | --- |
-| Normal | A opens the received link, signs in, changes and successfully saves the selected product field. Reopen the saved field. | Returned={A}, action={A}; counts 1/1. Exact destination and A's action evidence agree. |
-| Direct return | A enters the app directly and signs in without using the message. Stop before a successful action. | Returned={A}, action={}; counts 1/0. A later genuine selected commit makes 1/1. |
-| Forwarded/wrong person | X opens A's received URL and signs in as X. X completes the same genuine operation. A stays idle. | Returned={}, action={} for this Broadcast; counts 0/0. Link activity may exist, but neither X nor A is falsely credited. |
-| Failed action | A signs in, attempts the selected action and gets a real validation/conflict/save failure. Reopen unchanged saved state. | Returned={A}, action={}; counts 1/0. An optimistic button event is not success. |
-| No change/repeat | A repeats the already saved bytes or reads/polls the saved operation. | No new committed action. Already observed Contact counts remain 1/1; reads never create an action. |
-| Exact replay | The supported host retry redelivers the original acknowledged identity/action body, UUID and original time. | Counts stay 1/1; the original fact and time remain. A new identify handle is not an exact replay. |
-| Late pre-send action | A actually commits before this Send; the host's existing supported delivery is delayed until afterward. | That action contributes no Return or action; counts 0/0 if no other foreground activity occurs. No backdating. |
-| Late post-send action | A actually commits in-window; existing supported delivery arrives later with its original identity and time. | Eventual 1/1 after custody/publication, without retiming. Preserve the earlier partial/stale snapshot. |
-| Restart after ACK | Restart the controlled host or admitted measurement process through its existing lifecycle, then recover/read again. | Acknowledged facts survive; eventual 1/1, no duplicate rows or half publication. |
-| Loss before ACK | A's business commit succeeds, then unacknowledged in-memory observation is lost in the controlled host lifecycle. | Business success remains. Missing Results are partial/unavailable; never manufacture 1/1 or measured zero. |
+| Case                    | Real customer journey                                                                                                                                                             | Independent expected answer                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Normal                  | A opens the received link, signs in, changes and successfully saves the selected product field. Reopen the saved field.                                                           | Returned={A}, action={A}; counts 1/1. Exact destination and A's action evidence agree.                                            |
+| Direct return           | A enters the app directly and signs in without using the message. Stop before a successful action.                                                                                | Returned={A}, action={}; counts 1/0. A later genuine selected commit makes 1/1.                                                   |
+| Forwarded/wrong person  | X opens A's received URL and signs in as X. X completes the same genuine operation. A stays idle.                                                                                 | Returned={}, action={} for this Broadcast; counts 0/0. Link activity may exist, but neither X nor A is falsely credited.          |
+| Failed action           | A signs in, attempts the selected action and gets a real validation/conflict/save failure. Reopen unchanged saved state.                                                          | Returned={A}, action={}; counts 1/0. An optimistic button event is not success.                                                   |
+| No change/repeat        | A repeats the already saved bytes or reads/polls the saved operation.                                                                                                             | No new committed action. Already observed Contact counts remain 1/1; reads never create an action.                                |
+| Exact replay            | The supported host retry redelivers the original acknowledged identity/action body, UUID and original time.                                                                       | Counts stay 1/1; the original fact and time remain. A new identify handle is not an exact replay.                                 |
+| Late pre-send action    | A actually commits before this Send; the host's existing supported delivery is delayed until afterward.                                                                           | That action contributes no Return or action; counts 0/0 if no other foreground activity occurs. No backdating.                    |
+| Late post-send action   | A actually commits in-window; existing supported delivery arrives later with its original identity and time.                                                                      | Eventual 1/1 after custody/publication, without retiming. Preserve the earlier partial/stale snapshot.                            |
+| Restart after ACK       | Restart the controlled host or admitted measurement process through its existing lifecycle, then recover/read again.                                                              | Acknowledged facts survive; eventual 1/1, no duplicate rows or half publication.                                                  |
+| Loss before ACK         | A's business commit succeeds, then unacknowledged in-memory observation is lost in the controlled host lifecycle.                                                                 | Business success remains. Missing Results are partial/unavailable; never manufacture 1/1 or measured zero.                        |
 | Measurement unavailable | Use the host's existing customer configuration to disconnect measurement or make its delivery destination unavailable. Commit a real action. Restore through the supported setup. | App success and admitted Send remain independent. Disclose the gap; recover only facts the supported source can actually recover. |
-| PostHog alternatives | Repeat normal/direct/wrong/failed/replay cases with selected existing events, then native+PostHog for one operation. | Same Contact sets and timing rules; unidentified, wrong-user and unsuccessful events add no action. Dual observation stays 1/1. |
+| External delivery       | Repeat normal/direct/wrong/failed/replay cases with selected existing events, then native+external delivery for one operation.                                                    | Same Contact sets and timing rules; unidentified, wrong-user and unsuccessful events add no action. Dual observation stays 1/1.   |
 
 Use existing customer configuration, lifecycle and retry behavior for faults.
 Do not invoke internal intake with invented observations, edit a database,
@@ -117,7 +117,7 @@ cannot perform a fault/replay, record that case as blocked. Installed service
 fault qualification remains a separate operator exercise through the existing
 release owner; it cannot be reported as a customer step or routine setup repair.
 
-When Stripe is connected, freeze the actual merchant, payment/refund IDs,
+When payments are connected, freeze the actual merchant, payment/refund IDs,
 currency, authoritative collection times and canonical payer match separately.
 Compare Results with the independently read provider records. Exact replay
 must not duplicate an economic payment; a completed refund must correct its
@@ -131,15 +131,15 @@ Record customer steps before they happen so omitted setup/repair is visible.
 Keep server keys, bearer tokens and browser identity tokens out of that record;
 minimize captured application/recipient data and restrict its access.
 
-| Field | Meaning |
-| --- | --- |
-| `runId`, `case`, `setupPath` | Fresh run identity; selected case; native or PostHog. |
-| `expected`, `observed` | Independently frozen Contact sets/counts and actual Results, including coverage/revision/as-of. |
-| `steps[]` | Step name, ordinary interface, start/end UTC, elapsed milliseconds, active milliseconds and wait milliseconds. |
-| `failures[]` | Actual failed step/response, confusing displayed state, independent counterevidence and retry outcome. |
-| `interventions[]` | Who intervened, what they changed, why, elapsed time, and whether an ordinary customer could do it. |
-| `performance` | App commit/readback time, MCP order-to-release time, delivery wait, action-to-visible-Results wait and measured overlap with admitted Send. |
-| `outcome`, `blockers[]` | PASS, FAIL or NOT RUN for this exact case, and unresolved prerequisites. |
+| Field                        | Meaning                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runId`, `case`, `setupPath` | Fresh run identity; selected case; native or external delivery.                                                                             |
+| `expected`, `observed`       | Independently frozen Contact sets/counts and actual Results, including coverage/revision/as-of.                                             |
+| `steps[]`                    | Step name, ordinary interface, start/end UTC, elapsed milliseconds, active milliseconds and wait milliseconds.                              |
+| `failures[]`                 | Actual failed step/response, confusing displayed state, independent counterevidence and retry outcome.                                      |
+| `interventions[]`            | Who intervened, what they changed, why, elapsed time, and whether an ordinary customer could do it.                                         |
+| `performance`                | App commit/readback time, MCP order-to-release time, delivery wait, action-to-visible-Results wait and measured overlap with admitted Send. |
+| `outcome`, `blockers[]`      | PASS, FAIL or NOT RUN for this exact case, and unresolved prerequisites.                                                                    |
 
 Compare the saved app state and authenticated person first, then the canonical
 Send boundary and Results summary/evidence. Preserve every mismatch and

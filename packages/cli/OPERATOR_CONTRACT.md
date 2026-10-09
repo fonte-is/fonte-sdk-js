@@ -240,16 +240,16 @@ Core's broadcast-scoped state-idempotent control operation. Each command binds
 the exact `control_version` returned by an authoritative status read. A stale
 opposing command fails with Core's typed conflict and is never retried.
 
-## Candidate-scoped Resend evidence
+## Candidate-scoped provider evidence
 
 The installed binary exposes five fixed JSON-only commands:
 
 ```text
-fonte provider-evidence resend start ... --candidates-file <json-file> --json
-fonte provider-evidence resend read ... --operation-id <uuid> --json
-fonte provider-evidence resend advance ... --operation-id <uuid> --expected-request-number <n> --json
-fonte provider-evidence resend seal ... --operation-id <uuid> --generation-id <uuid> --json
-fonte provider-evidence resend generation read ... --generation-id <uuid> --json
+fonte provider-evidence <provider> start ... --candidates-file <json-file> --json
+fonte provider-evidence <provider> read ... --operation-id <uuid> --json
+fonte provider-evidence <provider> advance ... --operation-id <uuid> --expected-request-number <n> --json
+fonte provider-evidence <provider> seal ... --operation-id <uuid> --generation-id <uuid> --json
+fonte provider-evidence <provider> generation read ... --generation-id <uuid> --json
 ```
 
 Every command binds workspace, environment, connection ID, selector ID,
@@ -272,7 +272,7 @@ derives the candidate-manifest hash. If that start response is lost before the
 hash is observed, the CLI cannot truthfully construct the strict read command;
 `next_action` is therefore a typed `candidate_manifest_unavailable` stop with
 `retry_mutation: false`, never a guessed guard or repeated start.
-Core alone owns the stored Resend credential, cursor, rate/retry/throttle
+Core alone owns the stored provider credential, cursor, rate/retry/throttle
 accounting, and candidate-scoped GET construction. The commands grant neither
 provider nor contact mutation authority and emit only Core's aggregate
 operation or generation receipt.
@@ -308,7 +308,8 @@ sealed selector sets have union equality with the fresh live population root:
   (`canonical_import_not_completed`).
 - `W` (warm first): the identity has only accepted/delivered evidence
   (`no_positive_signal`) or was not a recipient of the named qualifying
-  broadcast (`no_message_history`), and must remain in Resend for warming.
+  broadcast (`no_message_history`), and must remain at the sending provider
+  for warming.
 - `X` (excluded): current provider unsubscribe, bounce, complaint, suppression,
   or protected/ineligible Fonte custody applies.
 - `U` (unknown): Fonte custody is unknown, qualifying-broadcast evidence is
@@ -372,40 +373,39 @@ evidence. Legacy missing audience evidence remains null, never zero.
 
 ## Other implemented commands
 
-The fixed sandbox canary and Resend Bridge copy commands remain unchanged.
+The fixed sandbox canary and Bridge copy commands remain unchanged.
 Sandbox test status and production test status use different admitted Core
-routes. Resend preview remains observation-only; copy remains a separate
+routes. Audience preview remains observation-only; copy remains a separate
 fingerprint-bound action. Neither command mutates provider state.
 
 Provider connections are established through Core-owned native OAuth:
 
 ```text
-fonte bridge connections list resend|kit --workspace <slug> \
+fonte bridge connections list <provider> --workspace <slug> \
   --environment <sandbox|production>
 
-fonte bridge connections connect resend|kit --workspace <slug> \
+fonte bridge connections connect <provider> --workspace <slug> \
   --environment <sandbox|production> --display-name <name>
 
-fonte bridge connections reconnect resend|kit --workspace <slug> \
+fonte bridge connections reconnect <provider> --workspace <slug> \
   --environment <sandbox|production> --connection-id <uuid> \
   --display-name <name> --expected-credential-version <n>
 ```
 
 Connect and reconnect start a short-lived Core attempt, open or return the
 provider authorization URL, and poll sanitized status after the browser opens.
-The user enters credentials only on Resend or Kit's consent page. Provider
-access and refresh tokens never enter CLI input, arguments, environment,
-output, logs, files, or receipts. Resend's provider grant is `full_access`
-because Resend requires it for non-send routes even though Fonte's Bridge use
-is read-only. A lost or unfinished completion remains unknown until Core
-readback. Kit keeps the same typed command surface but fails closed as
-`provider_oauth_unavailable` until its exact application and scope
-configuration is admitted.
+The user enters credentials only on the selected provider's consent page.
+Choose an available connection in Fonte and review its requested permissions
+there. Provider access and refresh tokens never enter CLI input, arguments,
+environment, output, logs, files, or receipts. A lost or unfinished completion
+remains unknown until Core readback. An unavailable connection fails closed as
+`provider_oauth_unavailable` until its application and scope configuration is
+admitted.
 
 Core's provider-audience boundary also supports this CLI-only operator journey:
 
 ```text
-fonte bridge collections resend|kit --workspace <slug> \
+fonte bridge collections <provider> --workspace <slug> \
   --environment <sandbox|production> --connection-id <uuid>
 
 fonte bridge import status --workspace <slug> \
@@ -413,11 +413,11 @@ fonte bridge import status --workspace <slug> \
 
 fonte bridge reconcile --workspace <slug> \
   --environment <sandbox|production> \
-  (--source-provider <resend|kit> --source-connection-id <uuid> \
+  (--source-provider <provider> --source-connection-id <uuid> \
    --source-collection-id <id> --source-display-name <name> | \
    --source-import-batch-id <uuid> --source-identity-set-sha256 <sha256>) \
   --max-age-seconds <1..86400> \
-  [--exclude-provider <resend|kit> --exclude-connection-id <uuid> \
+  [--exclude-provider <provider> --exclude-connection-id <uuid> \
    --exclude-collection-id <id> --exclude-display-name <name>]...
 
 fonte bridge freeze <the exact reconcile source, exclusions, and max-age flags> \

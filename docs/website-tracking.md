@@ -32,7 +32,7 @@ from a visitor's silence. The server independently checks policy, origin,
 route, and fields.
 
 `page()` records one document or navigation occurrence. Repeating it for
-that occurrence does not resend. Use `page({ navigation: true })` for an
+that occurrence does not send it again. Use `page({ navigation: true })` for an
 actual same-URL navigation; the React bindings do this automatically.
 
 Page and source events have different event IDs and share an occurrence ID.

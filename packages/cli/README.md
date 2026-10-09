@@ -27,17 +27,16 @@ npx @fonte-is/cli broadcast send --send-input '<exact reviewed send_input JSON>'
 npx @fonte-is/cli broadcast send status --workspace my-workspace --environment production --draft-id <uuid> --json
 npx @fonte-is/cli broadcast status --workspace my-workspace --environment production --broadcast-id <uuid> --watch
 npx @fonte-is/cli broadcast result --workspace my-workspace --environment production --broadcast-id <uuid>
-npx @fonte-is/cli bridge observe resend --workspace my-workspace --environment sandbox --segment-id <provider-id>
-npx @fonte-is/cli bridge copy resend --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
-npx @fonte-is/cli bridge connections list resend --workspace my-workspace --environment production
-npx @fonte-is/cli bridge connections connect resend --workspace my-workspace --environment production --display-name "Primary Resend"
-npx @fonte-is/cli bridge connections connect kit --workspace my-workspace --environment production --display-name "Primary Kit"
-npx @fonte-is/cli bridge collections resend --workspace my-workspace --environment sandbox --connection-id <uuid>
-npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
+npx @fonte-is/cli bridge observe <provider> --workspace my-workspace --environment sandbox --segment-id <provider-id>
+npx @fonte-is/cli bridge copy <provider> --workspace my-workspace --environment sandbox --segment-id <provider-id> --fingerprint <64-lower-hex> --idempotency-key <key>
+npx @fonte-is/cli bridge connections list <provider> --workspace my-workspace --environment production
+npx @fonte-is/cli bridge connections connect <provider> --workspace my-workspace --environment production --display-name "Primary connection"
+npx @fonte-is/cli bridge collections <provider> --workspace my-workspace --environment sandbox --connection-id <uuid>
+npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-provider <provider> --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300
 npx @fonte-is/cli bridge import status --workspace my-workspace --environment sandbox --contact-import-batch-id <uuid>
-npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-import-batch-id <uuid> --source-identity-set-sha256 <64-lower-hex> --max-age-seconds 300 --exclude-provider resend --exclude-connection-id <uuid> --exclude-collection-id <provider-id> --exclude-display-name "Protected"
-npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider resend --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
-npx @fonte-is/cli provider-evidence resend --help
+npx @fonte-is/cli bridge reconcile --workspace my-workspace --environment sandbox --source-import-batch-id <uuid> --source-identity-set-sha256 <64-lower-hex> --max-age-seconds 300 --exclude-provider <provider> --exclude-connection-id <uuid> --exclude-collection-id <provider-id> --exclude-display-name "Protected"
+npx @fonte-is/cli bridge freeze --workspace my-workspace --environment sandbox --source-provider <provider> --source-connection-id <uuid> --source-collection-id <provider-id> --source-display-name "Subscribers" --max-age-seconds 300 --fingerprint <64-lower-hex> --idempotency-key <key>
+npx @fonte-is/cli provider-evidence <provider> --help
 npx @fonte-is/cli bridge rotation --help
 npx @fonte-is/cli remove
 npx @fonte-is/cli remove --yes
@@ -203,15 +202,13 @@ draft cheaply and observes the durable operation without recipient-scale work.
 The earlier V1 surface remains for compatible existing operations, including
 the fixed sandbox canary and the bounded production
 draft/audience/test/preflight/authorization/control/result journey,
-Resend preview plus explicit fingerprint-bound copy, and Core-owned provider
+audience preview plus explicit fingerprint-bound copy, and Core-owned provider
 collection discovery, reconciliation, and explicit fingerprint-bound audience
 freeze. Contact-import status returns Core's exact completed batch UUID and
-identity-set SHA-256 for frozen-source reconciliation. Connection commands use
-Resend or Kit's native OAuth consent; provider tokens stay in Core's encrypted
-custody and never enter terminal input, command arguments, environment, files,
-logs, or CLI receipts. Resend requires
-`full_access` for these read-only Bridge operations. Kit OAuth remains
-unavailable until its exact application and scope configuration is admitted.
+identity-set SHA-256 for frozen-source reconciliation. Connection commands
+use the selected provider's OAuth consent. Choose an available connection in Fonte and review its requested permissions there.
+Provider tokens stay in Core's encrypted custody and never enter terminal
+input, command arguments, environment, files, logs, or CLI receipts.
 Reconciliation output contains only provenance and aggregate counts;
 contact rows are never rendered. The CLI selects
 audiences only by Core IDs, never filenames, and never computes eligibility.

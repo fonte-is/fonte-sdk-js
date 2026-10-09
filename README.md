@@ -12,9 +12,9 @@ connecting your app, identifying a signed-in user, recording a saved report,
 and checking Results against the saved record. Your existing authentication
 and measurement permissions decide who can be measured.
 
-Already using PostHog? Follow the [PostHog guide](./docs/posthog-selected-actions.md)
-to connect your existing project and selected server events through Fonte's
-integration. Both paths use the same Broadcast Results.
+To carry a saved action through an existing event pipeline, use the
+[action confirmation guide](./docs/action-confirmations.md). The same Fonte
+confirmation works with any service that can preserve its metadata.
 
 The SDK uses ESM. Server entry points require Node.js 20.9 or later. The Core
 package has no runtime dependencies.

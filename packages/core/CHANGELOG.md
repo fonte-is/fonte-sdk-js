@@ -8,7 +8,8 @@ Broadcast's contacts.
 
 - `@fonte-is/core/results` provides the server client.
 - `@fonte-is/core/results-browser` records visits to a visible signed-in page.
-- Existing PostHog server events can carry confirmation of a saved action.
+- `identity.confirmTrigger()` creates a signed confirmation that any existing
+  event pipeline can carry without changing its event format.
 - Retries retain the original event ID and time. Recovery of an old action
   requires its original saved operation and confirmed identity.
 - The package includes its setup guides and Apache-2.0 license.
