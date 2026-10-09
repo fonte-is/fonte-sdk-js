@@ -159,8 +159,14 @@ test("current-custody BG requester refreshes only proven no-effect 401 and keeps
 test("actual program help describes exact review, recovery and read-only observation", async () => {
   for (const [command, text] of [
     [["broadcast", "review"], /refresh is explicit/u],
-    [["broadcast", "send"], /Processing is not executable/u],
-    [["broadcast", "send", "recover"], /exact durably saved request/u],
+    [
+      ["broadcast", "send"],
+      /Processing is not execution readiness or delivery/u,
+    ],
+    [
+      ["broadcast", "send", "recover"],
+      /exact saved review or Send request.*original request ID/u,
+    ],
   ]) {
     const result = await runProgram([...command, "--help"], {
       cwd: process.cwd(),
