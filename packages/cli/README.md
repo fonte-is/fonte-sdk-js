@@ -132,6 +132,13 @@ await bootstrapLocalCore({ bearer });
 The spawned consumer owns its subsequent API use. This command itself makes
 no Core API, provider, email, or production request.
 
+Contact Delete removes a Contact reversibly while retaining identity, history,
+unsubscribes and suppression restrictions. Reimport restores the same Contact
+without granting consent or clearing restrictions. Permanent erasure is a
+separate authenticated operation with explicit irreversible intent; ordinary
+reimport cannot recreate erased identities. Existing CLI Contact targeting and
+identity-export reads expose active Contacts and grant no erasure authority.
+
 ## Sequence and Broadcast MCP
 
 `fonte-mcp` is a stdio MCP server for the same Core-owned Sequence authoring
