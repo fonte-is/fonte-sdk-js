@@ -191,6 +191,17 @@ separate from application outcomes.
 
 ## Uncertain responses
 
+Contact research tools use native Contacts. Read the workspace configuration
+before assigning field choices; field keys and choice IDs survive label changes.
+People can link to multiple organizations. Organization filters and list
+membership in one query must match the same organization. Research entries retain
+their sources and full imported payloads, with paged history for complete reads.
+Lists, fields and saved views are workspace configuration. Creating a contact,
+recording research or adding a list membership grants no subscription or sending
+permission. Mutations require a stable operation ID; edits also require the
+observed record or configuration revision. Retry the same ID and unchanged input
+after an uncertain response; conflicting edits refuse instead of overwriting.
+
 A mutation that may have reached Core returns `outcome: "ambiguous"` and
 `core_effect: "unknown"`. The client does not automatically resubmit it. Read
 the known operation or resource before deciding what happens next. Repeat a

@@ -16,6 +16,7 @@ import { createProductionDraftClient } from "./operator-production-draft-client.
 import { sequenceMcpFailure } from "./mcp-sequence-failure.js";
 import { MCP_LINK_TOOLS, registerFonteLinkTools } from "./mcp-fonte-link-tools.js";
 import { MCP_APPLICATION_RESULTS_TOOLS, registerApplicationResultsTools } from "./mcp-application-results-tools.js";
+import { MCP_CONTACT_DIRECTORY_TOOLS, registerContactDirectoryTools } from "./mcp-contact-directory-tools.js";
 
 const unhosted = new Set([
   "fonte_recover_broadcast_request", "fonte_prepare_broadcast_html_file", "fonte_revise_broadcast_html_file",
@@ -28,7 +29,7 @@ const extraTools = ["fonte_list_broadcast_options", "fonte_create_broadcast_reci
   "fonte_read_sender_domains", "fonte_migrate_sender_domain", "fonte_reconcile_sender_domain",
   "fonte_read_broadcast_control", "fonte_cancel_broadcast"];
 export const MCP_HOSTED_TOOLS = [...MCP_FONTE_TOOLS.filter(name => !unhosted.has(name)), ...extraTools,
-  ...MCP_LINK_TOOLS, ...MCP_APPLICATION_RESULTS_TOOLS];
+  ...MCP_LINK_TOOLS, ...MCP_APPLICATION_RESULTS_TOOLS, ...MCP_CONTACT_DIRECTORY_TOOLS];
 
 /** Core mounts this registry in its own API runtime. No upstream credential,
  * local login, filesystem, selected-workspace file or shared request store exists. */
@@ -151,6 +152,7 @@ export function createCoreFonteMcpServer(request: CoreRequester, coreApiBaseUrl:
     }));
   registerFonteLinkTools(register, request);
   registerApplicationResultsTools(register, request);
+  registerContactDirectoryTools(register, request);
   return server;
 }
 function draftPath(input: { workspace: string; draft_id: string }) {
