@@ -13,7 +13,8 @@ const workspaceSummarySchema = z
       .max(63)
       .regex(/^(?!.*--)[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/),
     name: z.string().min(1).max(120),
-    role: roleSchema,
+    role: roleSchema.nullable(),
+    billing_access: z.enum(["none", "view", "manage"]).optional(),
     available_environments: z.array(environmentSchema).min(1).max(2),
   })
   .strict();

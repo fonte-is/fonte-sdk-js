@@ -75,3 +75,20 @@ test("workspace discovery uses the same durable auth provider", async () => {
   assert.deepEqual(workspaces, []);
   assert.equal(authorizations, 1);
 });
+
+test("workspace discovery validates billing access without inventing an operational role", async () => {
+  const entry = { workspaceId: "synthetic-workspace", tenantId: "synthetic-workspace", accountId: "synthetic-account",
+    slug: "northstar", workspaceSlug: "northstar", workspaceCode: "NORTHSTAR", displayName: "Northstar",
+    role: "owner", billingAccess: "manage", availableEnvironments: ["production"] };
+  let current = entry;
+  const client = createWorkspaceCatalogClient(async () => ({ workspaces: [current] }));
+  assert.deepEqual(await client.listWorkspaces(), [{ slug: "northstar", name: "Northstar", role: "owner",
+    billing_access: "manage", available_environments: ["production"] }]);
+  current = { ...entry, role: null, billingAccess: "view" };
+  assert.equal((await client.listWorkspaces())[0].role, null);
+  for (const patch of [{ billingAccess: "owner" }, { billingAccess: null },
+    { role: null, billingAccess: "none" }, { unrelatedAuthority: true }]) {
+    current = { ...entry, ...patch };
+    await assert.rejects(client.listWorkspaces(), error => error.reason === "core_operator_receipt_invalid");
+  }
+});

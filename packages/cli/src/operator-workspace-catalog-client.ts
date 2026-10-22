@@ -11,7 +11,8 @@ export type WorkspaceRole = "viewer" | "operator" | "admin" | "owner";
 export interface WorkspaceSummary {
   readonly slug: string;
   readonly name: string;
-  readonly role: WorkspaceRole;
+  readonly role: WorkspaceRole | null;
+  readonly billing_access?: "none" | "view" | "manage";
   readonly available_environments: readonly WorkspaceEnvironment[];
 }
 
@@ -92,6 +93,7 @@ function workspaceSummary(value: unknown): WorkspaceSummary {
     "displayName",
     "role",
     "availableEnvironments",
+    ...(Object.hasOwn(workspace, "billingAccess") ? ["billingAccess"] : []),
     ...(Object.hasOwn(workspace, "localBootstrapIdentity")
       ? ["localBootstrapIdentity"]
       : []),
@@ -105,13 +107,17 @@ function workspaceSummary(value: unknown): WorkspaceSummary {
   }
   const role = workspace.role;
   if (
-    role !== "viewer" &&
+    role !== null && role !== "viewer" &&
     role !== "operator" &&
     role !== "admin" &&
     role !== "owner"
   ) {
     invalidReceipt();
   }
+  const billing = workspace.billingAccess;
+  if (Object.hasOwn(workspace, "billingAccess")
+    && billing !== "none" && billing !== "view" && billing !== "manage") invalidReceipt();
+  if (role === null && billing !== "view" && billing !== "manage") invalidReceipt();
   if (
     !Array.isArray(workspace.availableEnvironments) ||
     workspace.availableEnvironments.length < 1 ||
@@ -138,6 +144,7 @@ function workspaceSummary(value: unknown): WorkspaceSummary {
     slug,
     name: text(workspace.displayName, 120),
     role,
+    ...(billing === undefined ? {} : { billing_access: billing as "none" | "view" | "manage" }),
     available_environments: environments,
   };
 }
