@@ -4,6 +4,7 @@ import {
   CoreOperatorError,
   parseCoreReceipt,
 } from "./operator-core-request.js";
+import { workspaceCatalogReceipt } from "./operator-workspace-catalog-client.js";
 
 export type WorkspaceInvitationEnvironment = "sandbox" | "production";
 export type WorkspaceInvitationRole = "viewer" | "operator" | "admin" | "owner";
@@ -69,7 +70,8 @@ export interface WorkspaceContextResult {
   readonly workspace_slug: string;
   readonly workspace_code: string;
   readonly display_name: string;
-  readonly role: WorkspaceInvitationRole;
+  readonly role: WorkspaceInvitationRole | null;
+  readonly billing_access?: "none" | "view" | "manage";
   readonly available_environments: readonly WorkspaceInvitationEnvironment[];
 }
 
@@ -262,33 +264,15 @@ function parseInvitationWorkspace(
 function parseWorkspaceContexts(
   value: unknown,
 ): readonly WorkspaceContextResult[] {
+  workspaceCatalogReceipt(value);
   const body = exactObject(value, ["workspaces"]);
   if (!Array.isArray(body.workspaces)) invalidReceipt();
   const contexts = body.workspaces.map((value) => {
     const item = object(value);
-    const keys = [
-      "workspaceId",
-      "tenantId",
-      "accountId",
-      "slug",
-      "workspaceSlug",
-      "workspaceCode",
-      "displayName",
-      "role",
-      "availableEnvironments",
-    ];
-    const actual = Object.keys(item);
-    if (actual.includes("localBootstrapIdentity"))
-      keys.push("localBootstrapIdentity");
     if (
-      !sameKeys(actual, keys) ||
       item.tenantId !== item.workspaceId ||
       item.slug !== item.workspaceSlug ||
-      !Array.isArray(item.availableEnvironments) ||
-      new Set(item.availableEnvironments).size !==
-        item.availableEnvironments.length ||
-      ("localBootstrapIdentity" in item &&
-        typeof item.localBootstrapIdentity !== "string")
+      !Array.isArray(item.availableEnvironments)
     ) {
       invalidReceipt();
     }
@@ -298,7 +282,10 @@ function parseWorkspaceContexts(
       workspace_slug: workspaceSlug(item.workspaceSlug),
       workspace_code: boundedText(item.workspaceCode, 200),
       display_name: boundedText(item.displayName, 200),
-      role: workspaceRole(item.role),
+      role: item.role === null ? null : workspaceRole(item.role),
+      ...(item.billingAccess === undefined
+        ? {}
+        : { billing_access: item.billingAccess as "none" | "view" | "manage" }),
       available_environments:
         item.availableEnvironments.map(workspaceEnvironment),
     };

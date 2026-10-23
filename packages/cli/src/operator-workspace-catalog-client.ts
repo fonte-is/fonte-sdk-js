@@ -65,7 +65,9 @@ export async function resolveAuthorizedWorkspaceId(
   return text(matches[0]!.workspaceId, 200);
 }
 
-function workspaceCatalogReceipt(value: unknown): readonly WorkspaceSummary[] {
+export function workspaceCatalogReceipt(
+  value: unknown,
+): readonly WorkspaceSummary[] {
   const root = record(value);
   exactKeys(root, ["workspaces"]);
   if (!Array.isArray(root.workspaces) || root.workspaces.length > 500) {
@@ -107,7 +109,8 @@ function workspaceSummary(value: unknown): WorkspaceSummary {
   }
   const role = workspace.role;
   if (
-    role !== null && role !== "viewer" &&
+    role !== null &&
+    role !== "viewer" &&
     role !== "operator" &&
     role !== "admin" &&
     role !== "owner"
@@ -115,9 +118,15 @@ function workspaceSummary(value: unknown): WorkspaceSummary {
     invalidReceipt();
   }
   const billing = workspace.billingAccess;
-  if (Object.hasOwn(workspace, "billingAccess")
-    && billing !== "none" && billing !== "view" && billing !== "manage") invalidReceipt();
-  if (role === null && billing !== "view" && billing !== "manage") invalidReceipt();
+  if (
+    Object.hasOwn(workspace, "billingAccess") &&
+    billing !== "none" &&
+    billing !== "view" &&
+    billing !== "manage"
+  )
+    invalidReceipt();
+  if (role === null && billing !== "view" && billing !== "manage")
+    invalidReceipt();
   if (
     !Array.isArray(workspace.availableEnvironments) ||
     workspace.availableEnvironments.length < 1 ||
@@ -144,7 +153,9 @@ function workspaceSummary(value: unknown): WorkspaceSummary {
     slug,
     name: text(workspace.displayName, 120),
     role,
-    ...(billing === undefined ? {} : { billing_access: billing as "none" | "view" | "manage" }),
+    ...(billing === undefined
+      ? {}
+      : { billing_access: billing as "none" | "view" | "manage" }),
     available_environments: environments,
   };
 }
