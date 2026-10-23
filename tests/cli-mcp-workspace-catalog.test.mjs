@@ -7,6 +7,7 @@ import {
 } from "../packages/cli/dist/mcp-sequence-server.js";
 import { HOSTED_CONFIG_URL } from "../packages/cli/dist/hosted-config.js";
 import { createWorkspaceCatalogClient } from "../packages/cli/dist/operator-workspace-catalog-client.js";
+import { createWorkspaceInvitationClient } from "../packages/cli/dist/operator-workspace-invitation-client.js";
 
 test("workspace discovery reads the accessible catalog without exposing internal identities", async () => {
   const paths = [];
@@ -77,18 +78,81 @@ test("workspace discovery uses the same durable auth provider", async () => {
 });
 
 test("workspace discovery validates billing access without inventing an operational role", async () => {
-  const entry = { workspaceId: "synthetic-workspace", tenantId: "synthetic-workspace", accountId: "synthetic-account",
-    slug: "northstar", workspaceSlug: "northstar", workspaceCode: "NORTHSTAR", displayName: "Northstar",
-    role: "owner", billingAccess: "manage", availableEnvironments: ["production"] };
+  const entry = {
+    workspaceId: "synthetic-workspace",
+    tenantId: "synthetic-workspace",
+    accountId: "synthetic-account",
+    slug: "northstar",
+    workspaceSlug: "northstar",
+    workspaceCode: "NORTHSTAR",
+    displayName: "Northstar",
+    role: "owner",
+    billingAccess: "manage",
+    availableEnvironments: ["production"],
+  };
   let current = entry;
-  const client = createWorkspaceCatalogClient(async () => ({ workspaces: [current] }));
-  assert.deepEqual(await client.listWorkspaces(), [{ slug: "northstar", name: "Northstar", role: "owner",
-    billing_access: "manage", available_environments: ["production"] }]);
+  const client = createWorkspaceCatalogClient(async () => ({
+    workspaces: [current],
+  }));
+  assert.deepEqual(await client.listWorkspaces(), [
+    {
+      slug: "northstar",
+      name: "Northstar",
+      role: "owner",
+      billing_access: "manage",
+      available_environments: ["production"],
+    },
+  ]);
   current = { ...entry, role: null, billingAccess: "view" };
   assert.equal((await client.listWorkspaces())[0].role, null);
-  for (const patch of [{ billingAccess: "owner" }, { billingAccess: null },
-    { role: null, billingAccess: "none" }, { unrelatedAuthority: true }]) {
+  for (const patch of [
+    { billingAccess: "owner" },
+    { billingAccess: null },
+    { role: null, billingAccess: "none" },
+    { unrelatedAuthority: true },
+  ]) {
     current = { ...entry, ...patch };
-    await assert.rejects(client.listWorkspaces(), error => error.reason === "core_operator_receipt_invalid");
+    await assert.rejects(
+      client.listWorkspaces(),
+      (error) => error.reason === "core_operator_receipt_invalid",
+    );
+  }
+});
+
+test("metadata workspace contexts reuse catalog validation for billing access and bootstrap metadata", async () => {
+  const entry = {
+    workspaceId: "synthetic-workspace",
+    tenantId: "synthetic-workspace",
+    accountId: "synthetic-account",
+    slug: "northstar",
+    workspaceSlug: "northstar",
+    workspaceCode: "NORTHSTAR",
+    displayName: "Northstar",
+    role: "owner",
+    billingAccess: "manage",
+    availableEnvironments: ["production"],
+    localBootstrapIdentity: { kind: "synthetic" },
+  };
+  let current = entry;
+  const client = createWorkspaceInvitationClient(async () => ({
+    workspaces: [current],
+  }));
+  assert.equal(
+    (await client.listWorkspaceContexts())[0].billing_access,
+    "manage",
+  );
+  current = { ...entry, role: null, billingAccess: "view" };
+  assert.equal((await client.listWorkspaceContexts())[0].role, null);
+  for (const patch of [
+    { billingAccess: "owner" },
+    { role: null, billingAccess: "none" },
+    { tenantId: "foreign" },
+    { unrelatedAuthority: true },
+  ]) {
+    current = { ...entry, ...patch };
+    await assert.rejects(
+      client.listWorkspaceContexts(),
+      (error) => error.reason === "core_operator_receipt_invalid",
+    );
   }
 });
