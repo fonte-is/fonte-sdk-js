@@ -11,3 +11,7 @@ Run focused tests and the build for the package being changed.
 - Contact research uses the ordinary workspace-authenticated Core requester, stable
   mutation identities and observed revisions. Creation and research never imply
   subscription or sending permission. Check `tests/cli-mcp-contact-directory.test.mjs`.
+- Organization outreach stops require an explicit organization-wide request,
+  current revision and stable operation ID. Only confirmed enforcement means
+  queued SMTP is blocked; personal newsletter subscriptions stay unchanged.
+  Check `tests/cli-mcp-contact-directory.test.mjs`.

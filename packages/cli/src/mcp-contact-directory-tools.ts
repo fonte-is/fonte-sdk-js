@@ -7,6 +7,7 @@ export const MCP_CONTACT_DIRECTORY_TOOLS = [
   "fonte_link_contact","fonte_set_contact_list_membership","fonte_append_contact_research",
   "fonte_set_contact_email","fonte_read_contact_research","fonte_read_contact_list_history",
   "fonte_define_contact_view","fonte_list_contact_research",
+  "fonte_stop_organization_outreach",
 ] as const;
 type Register = (name:string,schema:z.ZodType,description:string,mutation:boolean,operation:(input:any)=>Promise<unknown>)=>void;
 const value=z.union([z.string(),z.number().finite(),z.boolean(),z.array(z.string()).max(100),z.null()]);
@@ -86,4 +87,8 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
   register(MCP_CONTACT_DIRECTORY_TOOLS[14],z.strictObject({...record,after:z.string().min(1).max(2048).optional()}),
     'Page the complete retained research history for one contact. Follow nextAfter until null; read individual entries for full bodies, all sources and original payloads.',false,
     v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/history?environment=production${v.after?'&after='+encodeURIComponent(v.after):''}`));
+  register(MCP_CONTACT_DIRECTORY_TOOLS[15],z.strictObject({...edit,requested_by:z.string().trim().min(1).max(200),
+    request:z.string().trim().min(1).max(4000),whole_organization:z.literal(true)}),
+    'Record an explicit organization-wide stop request. Blocks SMTP correspondence to the organization and its linked contacts across campaigns, without changing personal newsletter subscriptions. Requires an organization and its current revision. Reuse operation_id after an uncertain reply; only enforcement=enforced confirms queued SMTP is fenced. Never sends a message.',true,
+    v=>call(v,'stop_organization_outreach',{contactId:v.contact_id,expectedRevision:v.expected_revision,requestedBy:v.requested_by,request:v.request,wholeOrganization:v.whole_organization}));
 }

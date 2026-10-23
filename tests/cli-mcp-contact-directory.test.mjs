@@ -29,7 +29,20 @@ test('structured queries remain read-only and keep all organization conditions t
   observed={path,options};return {result:{rows:[],matchingCount:0,nextAfter:null}};});
  assert.equal(observed.options.lostResponseEffect,'none');assert.equal(observed.options.body.organization.listId,id);assert.equal(observed.options.body.organization.filters.length,2);
  assert.equal(observed.options.body.listId,undefined);
- const names=new Set(MCP_CONTACT_DIRECTORY_TOOLS);assert.equal(names.size,15);
+ const names=new Set(MCP_CONTACT_DIRECTORY_TOOLS);assert.equal(names.size,16);
+});
+test('organization outreach stops require explicit scope and retain their original mutation identity',async()=>{
+ const args={workspace,operation_id:id,contact_id:'organization',expected_revision:'123',requested_by:'Synthetic requester',request:'Stop sales outreach to our organization.',whole_organization:true};
+ const calls=[];
+ await call('fonte_stop_organization_outreach',args,async(path,options)=>{calls.push({path,options});return {result:{replayed:false,enforcement:'enforced'}};});
+ assert.equal(calls[0].path,'/v1/workspaces/northstar/contact-directory/commands?environment=production');
+ assert.deepEqual(calls[0].options.body,{operationId:id,action:'stop_organization_outreach',contactId:'organization',expectedRevision:'123',
+  requestedBy:args.requested_by,request:args.request,wholeOrganization:true});
+ assert.equal(calls[0].options.lostResponseEffect,'unknown');
+ for(const overrides of [{whole_organization:false},{whole_organization:undefined},{requested_by:''},{request:''},{subscribe:true}]){
+  const result=await call('fonte_stop_organization_outreach',{...args,...overrides},async()=>{assert.fail('Invalid stop must never reach Core');});
+  assert.equal(result.isError,true);
+ }
 });
 test('invalid research mutation scope never reaches Core and uncertain writes are not retried',async()=>{
  let effects=0;
