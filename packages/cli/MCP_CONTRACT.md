@@ -227,3 +227,9 @@ local eligibility engine or delivery worker. There are no MCP resources.
 ```sh
 npx --package @fonte-is/cli fonte-mcp
 ```
+
+### Contact timeline
+
+`fonte_read_contact` includes at most five compact milestone highlights and a total event count. `fonte_read_contact_milestone` reads one event and its evidence. `fonte_list_contact_timeline` returns ten chronological events per page; `if_revision` avoids unchanged first-page payloads, while page cursors bind the contact revision.
+
+`fonte_save_contact_milestones` saves one to five sourced events at the current contact revision. Each title is at most 12 words/100 characters, and title plus detail is at most 40 words, with one to three sources. At most five active events may be highlights. Use stable IDs, event revision 0 for creation and the current event revision for corrections. Dates retain year/month/day precision or explicit unknowns. Include every referenced contact in erasure subjects. Corrections and archives preserve earlier versions in contact History; identical saves add no version. Research and timelines grant no sending permission.

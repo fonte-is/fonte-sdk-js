@@ -15,3 +15,5 @@ Run focused tests and the build for the package being changed.
   current revision and stable operation ID. Only confirmed enforcement means
   queued SMTP is blocked; personal newsletter subscriptions stay unchanged.
   Check `tests/cli-mcp-contact-directory.test.mjs`.
+
+- Timeline tools retain stable milestone IDs, observed revisions, partial event dates and source/word/batch limits through the ordinary checked contact API. Uncertain writes retain their operation ID and never retry automatically. Check `tests/cli-mcp-contact-timeline.test.mjs`.

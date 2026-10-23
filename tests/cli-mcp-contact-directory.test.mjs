@@ -31,7 +31,7 @@ test('structured queries remain read-only and keep all organization conditions t
   observed={path,options};return {result:{rows:[],matchingCount:0,nextAfter:null}};});
  assert.equal(observed.options.lostResponseEffect,'none');assert.equal(observed.options.body.organization.listId,id);assert.equal(observed.options.body.organization.filters.length,2);
  assert.equal(observed.options.body.listId,undefined);
- const names=new Set(MCP_CONTACT_DIRECTORY_TOOLS);assert.equal(names.size,17);
+ const names=new Set(MCP_CONTACT_DIRECTORY_TOOLS);assert.equal(names.size,20);
 });
 test('organization outreach stops require explicit scope and retain their original mutation identity',async()=>{
  const args={workspace,operation_id:id,contact_id:'organization',expected_revision:'123',requested_by:'Synthetic requester',request:'Stop sales outreach to our organization.',whole_organization:true};

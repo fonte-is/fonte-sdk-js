@@ -9,6 +9,7 @@ export const MCP_CONTACT_DIRECTORY_TOOLS = [
   "fonte_define_contact_view","fonte_list_contact_research",
   "fonte_stop_organization_outreach",
   "fonte_save_contact_context",
+  "fonte_list_contact_timeline","fonte_read_contact_milestone","fonte_save_contact_milestones",
 ] as const;
 type Register = (name:string,schema:z.ZodType,description:string,mutation:boolean,operation:(input:any)=>Promise<unknown>)=>void;
 const value=z.union([z.string(),z.number().finite(),z.boolean(),z.array(z.string()).max(100),z.null()]);
@@ -27,6 +28,12 @@ const context=z.strictObject({brief:z.string().max(1800),
   .refine(v=>wordCount([v.brief,...v.findings.map(f=>f.text),...v.questions,v.next_action].join(' '))<=150,
     'Keep context, findings, questions and next action within 150 words in total.');
 const sourceBody=(s:z.infer<typeof source>)=>({url:s.url,title:s.title,publishedAt:s.published_at,observedAt:s.observed_at});
+const milestoneDate=z.string().regex(/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/).nullable();
+const milestone=z.strictObject({id:z.uuid(),expected_revision:z.number().int().nonnegative(),occurred_on:milestoneDate,
+  title:z.string().trim().min(1).max(100).refine(v=>wordCount(v)<=12,'Keep titles within 12 words.'),detail:z.string().trim().max(800).default(''),
+  sources:z.array(source).min(1).max(3),highlight:z.boolean(),archived:z.boolean().default(false),subject_contact_ids:z.array(z.string().min(1).max(200)).min(1).max(20).optional()})
+  .refine(v=>wordCount(`${v.title} ${v.detail}`)<=40,'Keep each milestone title and detail within 40 words in total.')
+  .refine(v=>!/[\p{Cc}\p{Cf}]/u.test(v.title+v.detail),'Use plain text without control or invisible formatting characters.');
 
 export function registerContactDirectoryTools(register:Register,request:CoreRequester) {
   const workspace={workspace:z.string().min(2).max(63)},mutation={...workspace,operation_id:z.uuid()},
@@ -61,7 +68,7 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
       email:v.email,website:v.website,organizationType:v.organization_type,industry:v.industry,
       externalReference:v.external_reference?{namespace:v.external_reference.namespace,id:v.external_reference.id}:undefined},lostResponseEffect:'unknown'}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[5],z.strictObject(record),
-    'Read one contact’s current concise context, revision, values, relationships and lists. Organization context is linked rather than copied. History is explicit: use fonte_list_contact_research and fonte_read_contact_research for preserved versions and original imports.',false,
+    'Read one contact’s current concise context, up to five timeline highlight headlines, revision, values, relationships and lists. Company context stays linked. Read milestone evidence explicitly; preserved research and corrections remain available through fonte_list_contact_research and fonte_read_contact_research.',false,
     v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}?environment=production`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[6],z.strictObject({...edit,name:z.string().min(1).max(200).optional(),website:z.url().max(500).nullable().optional(),values:fields.default({})}),
     'Save explicit record properties at the observed revision. Values use field keys and stable option IDs from configuration; null clears a value. Concurrent changes conflict instead of being overwritten.',true,
@@ -105,4 +112,16 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
     v=>call(v,'save_context',{contactId:v.contact_id,expectedRevision:v.expected_revision,context:{brief:v.context.brief,
       findings:v.context.findings.map((f:z.infer<typeof context>['findings'][number])=>({...f,sources:f.sources.map(sourceBody)})),
       questions:v.context.questions,nextAction:v.context.next_action},subjectContactIds:v.subject_contact_ids}));
+  register(MCP_CONTACT_DIRECTORY_TOOLS[17],z.strictObject({...record,after:z.string().min(1).max(2048).optional(),if_revision:edit.expected_revision.optional()}),
+    'Read ten sourced milestones from this contact’s timeline in chronological order. Follow nextAfter for more. Event dates preserve known year/month/day precision; null means unknown. if_revision skips unchanged first-page reads. A changed record invalidates old page cursors. Company events stay on the company record.',false,
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/timeline?environment=production${v.after?'&after='+encodeURIComponent(v.after):''}${v.if_revision?'&ifRevision='+encodeURIComponent(v.if_revision):''}`));
+  register(MCP_CONTACT_DIRECTORY_TOOLS[18],z.strictObject({...record,milestone_id:z.uuid()}),
+    'Read one current milestone with its source references, precise known event date, recorded time and revision. Use the ID from the contact’s highlights instead of loading all research.',false,
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/timeline/${v.milestone_id}?environment=production`));
+  register(MCP_CONTACT_DIRECTORY_TOOLS[19],z.strictObject({...edit,milestones:z.array(milestone).min(1).max(5)})
+    .refine(v=>new Set(v.milestones.map(m=>m.id)).size===v.milestones.length,'Update each milestone once per request.')
+    .refine(v=>v.milestones.every(m=>!m.subject_contact_ids||m.subject_contact_ids.includes(v.contact_id)),'Every milestone must include this contact in its erasure subjects.'),
+    'Save one to five material milestones, each at most 40 words including a title of at most 12 words/100 characters, with one to three public source links. Use YYYY, YYYY-MM, YYYY-MM-DD or null without inventing a day. At most five active highlights per contact. Correct existing stable IDs at their current revisions; 0 creates. Earlier versions remain in History. Include referenced people for erasure. Reuse operation_id after uncertainty. No sending or subscription effect.',true,
+    v=>call(v,'save_milestones',{contactId:v.contact_id,expectedRevision:v.expected_revision,milestones:v.milestones.map((m:z.infer<typeof milestone>)=>({id:m.id,expectedRevision:m.expected_revision,
+      occurredOn:m.occurred_on,title:m.title,detail:m.detail,sources:m.sources.map(sourceBody),highlight:m.highlight,archived:m.archived,subjectContactIds:m.subject_contact_ids}))}));
 }
