@@ -97,8 +97,8 @@ test("fresh MCP process rejects incomplete preparation and keeps Send explicit",
   const tools = listed.result.tools;
   const names = tools.map(({ name }) => name);
   assert.deepEqual(names, [...MCP_FONTE_TOOLS]);
-  assert.equal(names.length, 56);
-  assert.equal(new Set(names).size, 56);
+  assert.equal(names.length, 76);
+  assert.equal(new Set(names).size, 76);
 
   const statusTool = tools.find(({ name }) => name === "fonte_status");
   const prepareTool = tools.find(

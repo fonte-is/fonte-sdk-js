@@ -17,3 +17,13 @@ Run focused tests and the build for the package being changed.
   Check `tests/cli-mcp-contact-directory.test.mjs`.
 
 - Timeline tools retain stable milestone IDs, observed revisions, partial event dates and source/word/batch limits through the ordinary checked contact API. Uncertain writes retain their operation ID and never retry automatically. Check `tests/cli-mcp-contact-timeline.test.mjs`.
+
+- A fresh local MCP process exposes the same checked contact operations as the
+  hosted server, including organizations, people, relationships, context and
+  lists. Discovery makes no authenticated request; each operation uses current
+  custody. Check `tests/cli-mcp-local-contacts.test.mjs`.
+- On macOS arm64, setup resolves both the private auth host and sandbox client
+  inside the executing installed package. It must not depend on a development
+  checkout. Check `tests/cli-local-mcp-host.test.mjs`,
+  `tests/cli-trusted-mcp-launch-agent.test.mjs` and
+  `tests/cli-trusted-mcp-ipc.test.mjs`.

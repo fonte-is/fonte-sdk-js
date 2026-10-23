@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { CoreRequester } from "./operator-core-request.js";
+import { sequenceMcpFailure } from "./mcp-sequence-failure.js";
 
 export const MCP_CONTACT_DIRECTORY_TOOLS = [
   "fonte_read_contact_configuration","fonte_define_contact_field","fonte_define_contact_list",
@@ -12,6 +14,23 @@ export const MCP_CONTACT_DIRECTORY_TOOLS = [
   "fonte_list_contact_timeline","fonte_read_contact_milestone","fonte_save_contact_milestones",
 ] as const;
 type Register = (name:string,schema:z.ZodType,description:string,mutation:boolean,operation:(input:any)=>Promise<unknown>)=>void;
+
+/** Both MCP transports use the same checked contact contract and current auth. */
+export function registerMcpContactDirectoryTools(server:McpServer,requester:()=>Promise<CoreRequester>) {
+  registerContactDirectoryTools((name,schema,description,mutation,operation)=>{
+    server.registerTool(name,{description,inputSchema:schema,annotations:{
+      readOnlyHint:!mutation,destructiveHint:false,idempotentHint:true,openWorldHint:false,
+    }},async input=>{
+      try {
+        const value={outcome:'completed',receipt:await operation(input)};
+        return {content:[{type:'text' as const,text:JSON.stringify(value)}],structuredContent:value};
+      } catch(error) {
+        const value=sequenceMcpFailure(error);
+        return {content:[{type:'text' as const,text:JSON.stringify(value)}],structuredContent:value,isError:true};
+      }
+    });
+  },async(path,options)=>(await requester())(path,options));
+}
 const value=z.union([z.string(),z.number().finite(),z.boolean(),z.array(z.string()).max(100),z.null()]);
 const fields=z.record(z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),value);
 const filter=z.strictObject({field:z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),operator:z.enum(['is','is_any_of','is_empty']),value:value.optional()});

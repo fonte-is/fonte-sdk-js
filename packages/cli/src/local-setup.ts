@@ -17,6 +17,7 @@ export interface FonteSetupDependencies extends Omit<
 > {
   readonly codexConfig: CodexMcpConfigStore;
   readonly locateInstalledHost: () => Promise<LocalMcpHostCommand>;
+  readonly ensureTrustedHost?: () => Promise<void>;
   readonly inspectInstalledHost: (host: LocalMcpHostCommand) => Promise<{
     readonly initialized: boolean;
     readonly tools: readonly string[];
@@ -35,6 +36,12 @@ export async function runFonteSetup(
   let host: LocalMcpHostCommand;
   try {
     host = await dependencies.locateInstalledHost();
+  } catch {
+    return unavailable("mcp_host_unavailable");
+  }
+
+  try {
+    await dependencies.ensureTrustedHost?.();
   } catch {
     return unavailable("mcp_host_unavailable");
   }

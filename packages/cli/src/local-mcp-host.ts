@@ -22,53 +22,24 @@ export interface LocalMcpHostProbeOptions {
 export async function locateInstalledLocalMcpHost(
   moduleUrl = import.meta.url,
 ): Promise<InstalledLocalMcpHost> {
-  let modulePath: string;
-  try {
-    modulePath = fileURLToPath(moduleUrl);
-  } catch {
-    throw new Error("local_mcp_host_unavailable");
-  }
-  const packageRoot = path.resolve(path.dirname(modulePath), "..");
-  let metadata: unknown;
-  try {
-    metadata = JSON.parse(
-      await readFile(path.join(packageRoot, "package.json"), "utf8"),
-    );
-  } catch {
-    throw new Error("local_mcp_host_unavailable");
-  }
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
-    throw new Error("local_mcp_host_unavailable");
-  const record = metadata as {
-    name?: unknown;
-    version?: unknown;
-    bin?: unknown;
-  };
-  const bins =
-    typeof record.bin === "object" && record.bin !== null
-      ? (record.bin as Record<string, unknown>)
-      : null;
-  if (
-    record.name !== "@fonte-is/cli" ||
-    record.version !== CLI_VERSION ||
-    bins?.["fonte-mcp"] !== "./dist/mcp-main.js"
-  )
-    throw new Error("local_mcp_host_unavailable");
-  const expectedRoot = await realpath(packageRoot).catch(() => null);
-  const entryPath = path.join(packageRoot, "dist", "mcp-main.js");
-  const resolvedEntry = await realpath(entryPath).catch(() => null);
-  if (!expectedRoot || !resolvedEntry)
-    throw new Error("local_mcp_host_unavailable");
-  const relative = path.relative(expectedRoot, resolvedEntry);
-  if (relative !== path.join("dist", "mcp-main.js"))
-    throw new Error("local_mcp_host_unavailable");
-  const entryStat = await lstat(entryPath).catch(() => null);
-  if (!entryStat?.isFile()) throw new Error("local_mcp_host_unavailable");
+  const filename = isSandboxedMacAgent() ? "mcp-client-main.js" : "mcp-main.js";
+  const { packageRoot, entryPath } = await installedEntry(moduleUrl, filename);
   return {
-    packageRoot: expectedRoot,
+    packageRoot,
     command: process.execPath,
-    args: [resolvedEntry],
+    args: [entryPath],
   };
+}
+
+/** Resolves the LaunchAgent executable from the same installed CLI package. */
+export async function locateInstalledTrustedMcpHost(
+  moduleUrl = import.meta.url,
+): Promise<LocalMcpHostCommand & { readonly packageRoot: string }> {
+  const { packageRoot, entryPath } = await installedEntry(
+    moduleUrl,
+    "mcp-host-main.js",
+  );
+  return { packageRoot, command: process.execPath, args: [entryPath] };
 }
 
 /** Starts the package-owned stdio host and proves initialize plus tools/list. */
@@ -250,4 +221,57 @@ function probeEnvironment(): NodeJS.ProcessEnv {
     if (value !== undefined) environment[key] = value;
   }
   return environment;
+}
+
+function isSandboxedMacAgent(): boolean {
+  return process.platform === "darwin" && process.arch === "arm64";
+}
+
+async function installedEntry(
+  moduleUrl: string,
+  filename: string,
+): Promise<{ readonly packageRoot: string; readonly entryPath: string }> {
+  let modulePath: string;
+  try {
+    modulePath = fileURLToPath(moduleUrl);
+  } catch {
+    throw new Error("local_mcp_host_unavailable");
+  }
+  const packageRoot = path.resolve(path.dirname(modulePath), "..");
+  let metadata: unknown;
+  try {
+    metadata = JSON.parse(
+      await readFile(path.join(packageRoot, "package.json"), "utf8"),
+    );
+  } catch {
+    throw new Error("local_mcp_host_unavailable");
+  }
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
+    throw new Error("local_mcp_host_unavailable");
+  const record = metadata as {
+    name?: unknown;
+    version?: unknown;
+    bin?: unknown;
+  };
+  const bins =
+    typeof record.bin === "object" && record.bin !== null
+      ? (record.bin as Record<string, unknown>)
+      : null;
+  if (
+    record.name !== "@fonte-is/cli" ||
+    record.version !== CLI_VERSION ||
+    bins?.["fonte-mcp"] !== "./dist/mcp-main.js"
+  )
+    throw new Error("local_mcp_host_unavailable");
+  const expectedRoot = await realpath(packageRoot).catch(() => null);
+  const pathOnDisk = path.join(packageRoot, "dist", filename);
+  const entryPath = await realpath(pathOnDisk).catch(() => null);
+  if (!expectedRoot || !entryPath)
+    throw new Error("local_mcp_host_unavailable");
+  if (path.relative(expectedRoot, entryPath) !== path.join("dist", filename))
+    throw new Error("local_mcp_host_unavailable");
+  const entryStat = await lstat(pathOnDisk).catch(() => null);
+  if (!entryStat?.isFile() || entryStat.isSymbolicLink())
+    throw new Error("local_mcp_host_unavailable");
+  return { packageRoot: expectedRoot, entryPath };
 }

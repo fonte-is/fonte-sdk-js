@@ -147,6 +147,16 @@ as the corresponding `fonte` commands. Access tokens stay in memory. Local
 Broadcast requests are saved before submission so their exact input and request
 ID can be recovered after a restart or lost response.
 
+The local and hosted servers also expose the same workspace-scoped contact
+operations: create organizations and people, link them, maintain concise sourced
+context, and manage configurable fields and lists. Creating a record grants no
+subscription or sending permission.
+
+Run `fonte setup --json` after installing or updating the CLI. On macOS arm64,
+setup starts the private per-user authentication host and configures Codex with
+the client from the installed package. Credentials remain with that host;
+sandbox clients forward MCP requests through a user-owned local socket.
+
 Activation freezes one exact Core draft revision and its sender/scope/render
 references. It cannot enroll a subscriber, select a recipient, send email,
 report a provider outcome, or control runtime work. Create, update, and

@@ -1,6 +1,8 @@
 import { createConnectionClient, type ConnectionClient } from "./connection-client.js";
 import { registerMcpConnectionTools } from "./mcp-connection-tools.js";
 import { McpServer } from "@modelcontextprotocol/server";
+import { registerMcpContactDirectoryTools } from "./mcp-contact-directory-tools.js";
+import type { CoreRequester } from "./operator-core-request.js";
 
 import { CLI_VERSION } from "./constants.js";
 import { registerMcpBroadcastHtmlPreparationTools } from "./mcp-broadcast-html-preparation-registration.js";
@@ -73,6 +75,7 @@ export type SequenceMcpSessionOptions = McpClientAuthOptions;
 export type BroadcastRecipientSetClientProvider =
   () => Promise<BroadcastRecipientSetClient>;
 export interface FonteMcpClientProviders {
+  readonly contactDirectory: () => Promise<CoreRequester>;
   readonly connections: () => Promise<ConnectionClient>;
   readonly broadcastBg: BroadcastMcpProvider;
   readonly workspaceCatalog: WorkspaceCatalogClientProvider;
@@ -124,6 +127,7 @@ export function createDurableFonteMcpSession(
     render,
   });
   return {
+    contactDirectory: async () => (await authenticated()).request,
     connections: async () => createConnectionClient((await authenticated()).request),
     broadcastBg: createAuthenticatedBroadcastProvider(options),
     workspaceCatalog: async () =>
@@ -227,6 +231,7 @@ export function createFonteMcpServer(
   );
   registerMcpCampaignTools(server, providers.campaignMetadata);
   registerMcpSegmentTools(server, providers.segmentMetadata);
+  registerMcpContactDirectoryTools(server, providers.contactDirectory);
   return server;
 }
 

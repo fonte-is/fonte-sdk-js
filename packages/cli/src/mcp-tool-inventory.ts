@@ -1,4 +1,5 @@
 import { MCP_CONNECTION_TOOLS } from "./mcp-connection-tools.js";
+import { MCP_CONTACT_DIRECTORY_TOOLS } from "./mcp-contact-directory-tools.js";
 import {
   MCP_BROADCAST_DRAFT_CREATE_TOOL,
   MCP_BROADCAST_DRAFT_READ_TOOL,
@@ -79,6 +80,7 @@ export const MCP_FONTE_TOOLS = [
   ),
   ...MCP_CAMPAIGN_TOOLS,
   ...MCP_SEGMENT_TOOLS,
+  ...MCP_CONTACT_DIRECTORY_TOOLS,
 ] as const;
 
 export const MCP_FONTE_ALLOWLIST = { tools: MCP_FONTE_TOOLS } as const;

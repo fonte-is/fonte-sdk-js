@@ -13,7 +13,13 @@ test("local host resolution points inside the package executing setup", async ()
   const host = await locateInstalledLocalMcpHost();
 
   assert.equal(host.command.startsWith("/"), true);
-  assert.match(host.args[0], /\/packages\/cli\/dist\/mcp-main\.js$/);
+  assert.match(
+    host.args[0],
+    process.platform === "darwin" && process.arch === "arm64"
+      ? /\/packages\/cli\/dist\/mcp-client-main\.js$/
+      : /\/packages\/cli\/dist\/mcp-main\.js$/,
+  );
+  assert.equal(host.args.length, 1);
   assert.match(host.packageRoot, /\/packages\/cli$/);
 });
 
