@@ -191,11 +191,21 @@ separate from application outcomes.
 
 ## Uncertain responses
 
-Contact research tools use native Contacts. Read the workspace configuration
+Contact context tools use the native contact record. Read the workspace configuration
 before assigning field choices; field keys and choice IDs survive label changes.
 People can link to multiple organizations. Organization filters and list
-membership in one query must match the same organization. Research entries retain
-their sources and full imported payloads, with paged history for complete reads.
+membership in one query must match the same organization.
+
+Use `fonte_save_contact_context` to replace the current working brief: 150 words
+in total across the brief, at most five sourced findings, three open questions
+and one next action. Keep shared company facts on the organization. Previous
+versions are retained automatically; identical context saves create no version.
+`fonte_read_contact` returns current context without a history dump. Use
+`fonte_list_contact_research` and `fonte_read_contact_research` explicitly for
+previous versions, full sources and original imported payloads. New raw research
+imports and arbitrary activity payloads are rejected. Activity notes are limited
+to 80 words and three sources; exact duplicate notes are ignored.
+
 Lists, fields and saved views are workspace configuration. Creating a contact,
 recording research or adding a list membership grants no subscription or sending
 permission. Mutations require a stable operation ID; edits also require the
