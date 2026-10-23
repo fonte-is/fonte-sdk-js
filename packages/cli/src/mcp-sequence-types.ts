@@ -154,7 +154,8 @@ export const activateSequenceInputSchema = z
   })
   .strict();
 
-const planStepSchema = z.discriminatedUnion("kind", [
+const planStepSchema = z.union([
+  z.object({ step_id: z.string().min(1), kind: z.enum(["action","wait_calendar","wait_event","wait_condition","branch","parallel","repeat","child","experiment","exit"]) }).strict(),
   z
     .object({
       step_id: z.string().min(1),
@@ -174,7 +175,7 @@ const planStepSchema = z.discriminatedUnion("kind", [
 const planSchema = z
   .object({
     title: z.string().min(1),
-    entry: z.literal("subscription_episode"),
+    entry: z.enum(["subscription_episode", "event_episode"]),
     reentry: z.enum(["once", "each_qualifying_episode"]),
     steps: z.array(planStepSchema),
   })

@@ -73,27 +73,12 @@ export function renderSequenceOperatorHuman(
       "",
     ].join("\n");
   }
+  if(result.kind==="sequence_management")return JSON.stringify(result.data,null,2)+"\n";
+  if (result.kind === "sequence_execution") return JSON.stringify(result.data, null, 2) + "\n";
   return null;
 }
 
-function planLines(plan: {
-  readonly title: string;
-  readonly entry: "subscription_episode";
-  readonly reentry: "once" | "each_qualifying_episode";
-  readonly steps: readonly (
-    | {
-        readonly step_id: string;
-        readonly kind: "send";
-        readonly content: "complete" | "incomplete";
-        readonly subject: string | null;
-      }
-    | {
-        readonly step_id: string;
-        readonly kind: "wait_duration";
-        readonly duration_seconds: number;
-      }
-  )[];
-}): readonly string[] {
+function planLines(plan: import("./operator-sequence-types.js").SequencePlan): readonly string[] {
   return [
     `Title: ${plan.title}.`,
     `Entry/reentry: ${plan.entry}/${plan.reentry}.`,
@@ -101,7 +86,7 @@ function planLines(plan: {
     ...plan.steps.map((step) =>
       step.kind === "send"
         ? `- send ${step.step_id}; ${step.content}; ${step.subject ?? "subject incomplete"}.`
-        : `- wait ${step.step_id}; ${step.duration_seconds} seconds.`,
+        : step.kind === "wait_duration" ? `- wait ${step.step_id}; ${step.duration_seconds} seconds.` : `- ${step.kind} ${step.step_id}.`,
     ),
   ];
 }

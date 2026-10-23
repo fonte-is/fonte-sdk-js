@@ -1,3 +1,5 @@
+import { registerMcpSequenceManagementTools } from "./mcp-sequence-management-registration.js";
+import { registerMcpSequenceRuntimeTools } from "./mcp-sequence-runtime-registration.js";
 import type { McpServer } from "@modelcontextprotocol/server";
 
 import {
@@ -42,6 +44,8 @@ export function registerMcpSequenceTools(
   provider: SequenceMcpClientProvider,
 ): void {
   const handlers = createSequenceToolHandlers(provider);
+  registerMcpSequenceRuntimeTools(server, provider);
+  registerMcpSequenceManagementTools(server,provider);
   server.registerTool(
     MCP_SEQUENCE_TOOLS[0],
     {

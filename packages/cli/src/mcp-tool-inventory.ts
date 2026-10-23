@@ -31,14 +31,18 @@ import { MCP_BROADCAST_BG_TOOLS } from "./mcp-broadcast-bg-tools.js";
 import { MCP_BROADCAST_LEGACY_SEND_READ_TOOL } from "./mcp-broadcast-send-instruction-registration.js";
 import { MCP_CAMPAIGN_TOOLS } from "./mcp-campaign-tools.js";
 import { MCP_SEGMENT_TOOLS } from "./mcp-segment-tools.js";
+import { MCP_SEQUENCE_MANAGEMENT_TOOLS } from "./mcp-sequence-management-registration.js";
+import { MCP_SEQUENCE_RUNTIME_TOOLS } from "./mcp-sequence-runtime-registration.js";
 import { MCP_SEQUENCE_TOOLS } from "./mcp-sequence-tools.js";
 import { MCP_FONTE_STATUS_TOOL } from "./mcp-status-types.js";
 import { MCP_WORKSPACE_LIST_TOOL } from "./mcp-workspace-catalog-tools.js";
 
-export const MCP_SEQUENCE_ALLOWLIST = { tools: MCP_SEQUENCE_TOOLS } as const;
+export const MCP_SEQUENCE_ALLOWLIST = { tools: [...MCP_SEQUENCE_TOOLS,...MCP_SEQUENCE_RUNTIME_TOOLS,...MCP_SEQUENCE_MANAGEMENT_TOOLS] } as const;
 
 export const MCP_CAMPAIGN_SEGMENT_TOOLS = [
   ...MCP_SEQUENCE_TOOLS,
+  ...MCP_SEQUENCE_RUNTIME_TOOLS,
+  ...MCP_SEQUENCE_MANAGEMENT_TOOLS,
   ...MCP_CAMPAIGN_TOOLS,
   ...MCP_SEGMENT_TOOLS,
 ] as const;
@@ -73,6 +77,8 @@ export const MCP_FONTE_TOOLS = [
   MCP_BROADCAST_BG_TOOLS.read,
   MCP_WORKSPACE_LIST_TOOL,
   ...MCP_SEQUENCE_TOOLS,
+  ...MCP_SEQUENCE_RUNTIME_TOOLS,
+  ...MCP_SEQUENCE_MANAGEMENT_TOOLS,
   ...MCP_BROADCAST_TOOLS.map((tool) =>
     tool === MCP_BROADCAST_SEND_READ_TOOL
       ? MCP_BROADCAST_LEGACY_SEND_READ_TOOL

@@ -22,6 +22,11 @@ export function executeSequenceCommand(
   command: SequenceOperatorCommand,
   client: CoreOperatorClient,
 ): Promise<OperatorResult> {
+  if(command.kind==="sequence_manage")return client.manageSequence(command);
+  if (command.kind === "sequence_participants") return client.listSequenceParticipants(command);
+  if (command.kind === "sequence_inspect") return client.inspectSequenceParticipant(command);
+  if (command.kind === "sequence_enroll") return client.enrollSequenceEvent(command);
+  if (command.kind === "sequence_control") return client.controlSequenceParticipant(command);
   if (command.kind === "sequence_list") return client.listSequences(command);
   if (command.kind === "sequence_read") return client.readSequence(command);
   if (command.kind === "sequence_create") return client.createSequence(command);
@@ -40,6 +45,9 @@ export function sequenceReceiptDescriptor(
   result: OperatorResult,
 ): SequenceReceiptDescriptor | null {
   if (!isSequenceCommand(command)) return null;
+  if(result.kind==="sequence_management")return completed("sequence_configuration_observed",result.operation==="read_import"?"none":"replaced");
+  if (result.kind === "sequence_execution") return completed("sequence_execution_observed",
+    result.operation === "control" ? "replaced" : result.operation === "enroll" && result.data.created === true ? "created" : "none");
   if (result.kind === "sequence_list") {
     return completed("sequence_list_observed", "none");
   }

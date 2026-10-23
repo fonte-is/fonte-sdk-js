@@ -136,7 +136,7 @@ function sequencePlan(value: unknown): SequencePlan {
   const plan = object(value);
   const entry = plan.entry;
   const reentry = plan.reentry;
-  if (entry !== "subscription_episode") invalid();
+  if (entry !== "subscription_episode" && entry !== "event_episode") invalid();
   if (reentry !== "once" && reentry !== "each_qualifying_episode") invalid();
   return {
     title: text(plan.title),
@@ -169,6 +169,9 @@ function sequencePlanStep(value: unknown): SequencePlanStep {
       kind: "wait_duration",
       duration_seconds: positiveInteger(step.durationSeconds),
     };
+  }
+  if (["action","wait_calendar","wait_event","wait_condition","branch","parallel","repeat","child","experiment","exit"].includes(String(step.kind))) {
+    return { step_id: stepId, kind: step.kind as Exclude<SequencePlanStep["kind"], "send" | "wait_duration"> };
   }
   invalid();
 }

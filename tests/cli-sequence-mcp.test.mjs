@@ -25,9 +25,13 @@ import {
   workspace,
 } from "./cli-sequence-authoring-support.mjs";
 
+import {MCP_SEQUENCE_MANAGEMENT_TOOLS} from "../packages/cli/dist/mcp-sequence-management-registration.js";
+import { MCP_SEQUENCE_RUNTIME_TOOLS } from "../packages/cli/dist/mcp-sequence-runtime-registration.js";
+import { registerMcpSequenceTools } from "../packages/cli/dist/mcp-sequence-registration.js";
+
 const scope = { workspace, environment: "sandbox" };
 
-test("Sequence MCP has one closed authoring and activation tool allowlist and no resources", () => {
+test("Sequence MCP retains the closed authoring contract and advertises its authorized runtime tools", () => {
   assert.deepEqual(MCP_SEQUENCE_TOOLS, [
     "fonte_list_sequences",
     "fonte_read_sequence",
@@ -39,7 +43,10 @@ test("Sequence MCP has one closed authoring and activation tool allowlist and no
     "fonte_simulate_sequence",
     "fonte_activate_sequence",
   ]);
-  assert.deepEqual(MCP_SEQUENCE_ALLOWLIST, { tools: MCP_SEQUENCE_TOOLS });
+  assert.deepEqual(MCP_SEQUENCE_RUNTIME_TOOLS,["fonte_list_sequence_participants","fonte_inspect_sequence_participant","fonte_enroll_sequence_event","fonte_control_sequence_participant"]);
+  assert.deepEqual(MCP_SEQUENCE_ALLOWLIST, { tools: [...MCP_SEQUENCE_TOOLS,...MCP_SEQUENCE_RUNTIME_TOOLS,...MCP_SEQUENCE_MANAGEMENT_TOOLS] });
+  const registered=[];registerMcpSequenceTools({registerTool:(name)=>registered.push(name)},async()=>recordingClient([]));
+  assert.deepEqual(registered.toSorted(),MCP_SEQUENCE_ALLOWLIST.tools.toSorted());
   assert.equal("resources" in MCP_SEQUENCE_ALLOWLIST, false);
 });
 
@@ -442,3 +449,14 @@ function assertCoreInputs(calls) {
     ],
   ]);
 }
+
+
+test("malformed runtime mutation receipts retain uncertain effect without retry",async()=>{
+  let requests=0;
+  const client=createSequenceAuthoringClient(createCoreRequester({coreApiBaseUrl:"http://127.0.0.1:43112",bearer,
+    fetch:async()=>{requests++;return json({tenantId:"tenant",environment:"sandbox",participant:{participationId:"wrong",status:"completed"}});}}));
+  await assert.rejects(()=>client.controlSequenceParticipant({...scope,sequenceId,participationId:"selected",operation:"stop"}),error=>{
+    assert.equal(error.reason,"sequence_runtime_response_invalid");assert.equal(error.coreEffect,"unknown");return true;
+  });
+  assert.equal(requests,1);
+});

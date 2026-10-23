@@ -1,3 +1,5 @@
+import type {SequenceManagementInput,SequenceManagementResult} from "./operator-sequence-management-client.js";
+import type { SequenceExecutionResult } from "./operator-sequence-runtime-client.js";
 /**
  * Sequence definitions remain Core-owned JSON. The CLI deliberately does not
  * duplicate the definition grammar or retain a local copy of a Sequence.
@@ -83,7 +85,7 @@ export interface SequenceActivateInput extends SequenceReadInput {
 
 export interface SequencePlan {
   readonly title: string;
-  readonly entry: "subscription_episode";
+  readonly entry: "subscription_episode" | "event_episode";
   readonly reentry: "once" | "each_qualifying_episode";
   readonly steps: readonly SequencePlanStep[];
 }
@@ -99,7 +101,7 @@ export type SequencePlanStep =
       readonly step_id: string;
       readonly kind: "wait_duration";
       readonly duration_seconds: number;
-    };
+    } | { readonly step_id: string; readonly kind: "action" | "wait_calendar" | "wait_event" | "wait_condition" | "branch" | "parallel" | "repeat" | "child" | "experiment" | "exit" };
 
 export type SequenceMutationOutcome = "applied" | "no_change" | "replayed";
 
@@ -186,6 +188,11 @@ export interface SequenceActivationResult {
 }
 
 export type SequenceOperatorCommand =
+  | ({readonly kind:"sequence_manage"}&SequenceManagementInput)
+  | ({ readonly kind: "sequence_participants" } & SequenceReadInput)
+  | ({ readonly kind: "sequence_inspect"; readonly participationId: string } & SequenceReadInput)
+  | ({ readonly kind: "sequence_enroll"; readonly sourceEventId: string } & SequenceReadInput)
+  | ({ readonly kind: "sequence_control"; readonly participationId: string; readonly operation: "pause" | "resume" | "stop" } & SequenceReadInput)
   | ({ readonly kind: "sequence_list" } & SequenceScopeInput)
   | ({ readonly kind: "sequence_read" } & SequenceReadInput)
   | ({ readonly kind: "sequence_create" } & SequenceCreateInput)
@@ -197,6 +204,8 @@ export type SequenceOperatorCommand =
   | ({ readonly kind: "sequence_activate" } & SequenceActivateInput);
 
 export type SequenceOperatorResult =
+  | SequenceManagementResult
+  | SequenceExecutionResult
   | SequenceDraftResult
   | SequenceListResult
   | SequenceValidationResult

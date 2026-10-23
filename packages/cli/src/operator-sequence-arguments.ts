@@ -20,6 +20,11 @@ export function parseSequenceOperatorArguments(
 ): ParsedOperatorArguments | null {
   if (argv[0] !== "sequence") return null;
   const operation = argv[1];
+  if(operation==="manage")return parsed(scope(argv.slice(2),["--action","--identity","--configuration"]),{kind:"sequence_manage"});
+  if (operation === "participants") return parsed(scope(argv.slice(2), ["--sequence-id"]), { kind: "sequence_participants" });
+  if (operation === "inspect") return parsed(scope(argv.slice(2), ["--sequence-id","--participation-id"]), { kind: "sequence_inspect" });
+  if (operation === "enroll") return parsed(scope(argv.slice(2), ["--sequence-id","--source-event-id"]), { kind: "sequence_enroll" });
+  if (operation === "control") return parsed(scope(argv.slice(2), ["--sequence-id","--participation-id","--operation"]), { kind: "sequence_control" });
   if (operation === "list")
     return parsed(scope(argv.slice(2)), { kind: "sequence_list" });
   if (operation === "read")
@@ -116,6 +121,17 @@ function sequenceCommand(
   },
 ): SequenceOperatorCommand {
   switch (kind) {
+    case "sequence_manage": {
+      const action=required(options,"--action");if(!["review_import","read_import","bind_form","bind_event","configure_policy","configure_cutover","configure_action_connection","read_action_connection","revoke_action_connection"].includes(action))invalid("invalid_field","action");
+      return {kind,...scoped,operation:action as import("./operator-sequence-management-client.js").SequenceManagementOperation,identity:required(options,"--identity"),configuration:jsonObject(required(options,"--configuration"),"--configuration")};
+    }
+    case "sequence_participants": return { kind, ...scoped, sequenceId: sequenceId(options) };
+    case "sequence_inspect": return { kind, ...scoped, sequenceId: sequenceId(options), participationId: required(options,"--participation-id") };
+    case "sequence_enroll": return { kind, ...scoped, sequenceId: sequenceId(options), sourceEventId: required(options,"--source-event-id") };
+    case "sequence_control": {
+      const operation = required(options,"--operation"); if (!["pause","resume","stop"].includes(operation)) invalid("invalid_field","operation");
+      return { kind, ...scoped, sequenceId: sequenceId(options), participationId: required(options,"--participation-id"), operation: operation as "pause" | "resume" | "stop" };
+    }
     case "sequence_list":
       return { kind, ...scoped };
     case "sequence_read":

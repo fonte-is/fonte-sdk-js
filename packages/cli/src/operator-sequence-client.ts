@@ -1,3 +1,4 @@
+import { createSequenceRuntimeClient, type SequenceRuntimeClient } from "./operator-sequence-runtime-client.js";
 import type { CoreRequester } from "./operator-core-request.js";
 import {
   CoreOperatorError,
@@ -29,7 +30,7 @@ import type {
   SequenceValidationResult,
 } from "./operator-sequence-types.js";
 
-export interface SequenceAuthoringClient {
+export interface SequenceAuthoringClient extends SequenceRuntimeClient {
   listSequences(input: {
     readonly workspace: string;
     readonly environment: "sandbox" | "production";
@@ -52,6 +53,7 @@ export function createSequenceAuthoringClient(
   request: CoreRequester,
 ): SequenceAuthoringClient {
   return {
+    ...createSequenceRuntimeClient(request),
     async listSequences(input) {
       return sequenceList(
         await request(collectionPath(input.workspace, input.environment)),

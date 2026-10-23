@@ -101,6 +101,36 @@ const entries: readonly HelpEntry[] = [
     json: true,
   },
   {
+    command: ["sequence", "participants"],
+    usage: [["--workspace <slug> --environment <sandbox|production>", "--sequence-id <id>"]],
+    detail: "Lists persisted v2 participants through current Core access.",
+    json: true,
+  },
+  {
+    command: ["sequence", "inspect"],
+    usage: [["--workspace <slug> --environment <sandbox|production>", "--sequence-id <id> --participation-id <id>"]],
+    detail: "Explains actual persisted frames, waits, decisions and action outcomes.",
+    json: true,
+  },
+  {
+    command: ["sequence", "enroll"],
+    usage: [["--workspace <slug> --environment <sandbox|production>", "--sequence-id <id> --source-event-id <id>"]],
+    detail: "Requests entry from an existing canonical source event; current binding and routing authority apply.",
+    json: true,
+  },
+  {
+    command: ["sequence", "control"],
+    usage: [["--workspace <slug> --environment <sandbox|production>", "--sequence-id <id> --participation-id <id> --operation <pause|resume|stop>"]],
+    detail: "Controls one v2 participation at the next controllable boundary.",
+    json: true,
+  },
+  {
+    command: ["sequence", "manage"],
+    usage: [["--workspace <slug> --environment <sandbox|production>", "--action <review_import|read_import|bind_form|bind_event|configure_policy|configure_cutover|configure_action_connection|read_action_connection|revoke_action_connection>", "--identity <id> --configuration <json-object>"]],
+    detail: "Reviews preserved import data or applies revision-checked native configuration. Binding and policy writes require Core owner/admin authority.",
+    json: true,
+  },
+  {
     command: ["sequence", "validate"],
     usage: [
       [
