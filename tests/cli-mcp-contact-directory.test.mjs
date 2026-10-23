@@ -50,7 +50,7 @@ test('invalid research mutation scope never reaches Core and uncertain writes ar
  let effects=0;
  for(const args of [{workspace,operation_id:'unstable',record_type:'organization',name:'A'},
   {workspace,operation_id:id,record_type:'organization',name:'A',email:'company@example.test'},
-  {workspace,operation_id:id,record_type:'individual',name:'A',environment:'sandbox'}]){
+  {workspace,operation_id:id,record_type:'individual',name:'A',environment:'development'}]){
   const result=await call('fonte_create_contact',args,async()=>{effects++;});assert.equal(result.isError,true);
  }
  assert.equal(effects,0);
@@ -88,4 +88,28 @@ test('descriptions retain sources and revisions and reject overflow on create an
    const denied=await call(name,{...args,...invalid},async()=>assert.fail('Invalid identity must not reach Core'));assert.equal(denied.isError,true);
   }
  }
+});
+
+
+test('contact dates pass through the normal read tools and cannot be supplied as edits',async()=>{
+ const dates={lastContactedAt:'2026-10-21T14:00:00.000Z',lastClickedAt:'2026-10-22T10:00:00.000Z',emailActivityCoverage:'recorded_broadcast_email',createdAt:'2026-01-01T00:00:00.000Z'};
+ let reads=0;
+ const read=await call('fonte_read_contact',{workspace,contact_id:id},async()=>{reads++;return {result:{contactId:id,...dates}};});
+ assert.deepEqual(read.structuredContent.receipt.result,{contactId:id,...dates});
+ let body;
+ const filters=[{field:'last_contacted',operator:'before',value:'2026-10-01T00:00:00Z'},{field:'last_clicked',operator:'is_empty'}];
+ const found=await call('fonte_find_contacts',{workspace,dates:filters},async(path,options)=>{reads++;body=options.body;assert.equal(options.lostResponseEffect,'none');return {result:{rows:[{contactId:id,...dates}]}};});
+ assert.deepEqual(body.dates,filters);assert.equal(found.structuredContent.receipt.result.rows[0].lastClickedAt,dates.lastClickedAt);
+ for(const field of ['lastContactedAt','lastClickedAt','emailActivityCoverage']){
+  const invalid=await call('fonte_update_contact',{workspace,contact_id:id,operation_id:id,expected_revision:'123',[field]:'invented'},async()=>{assert.fail('Read-only activity cannot reach Core');});
+  assert.equal(invalid.isError,true);
+ }
+ assert.equal(reads,2);
+});
+
+
+test('contact reads accept an explicit sandbox while preserving the production default',async()=>{
+ let path;
+ await call('fonte_read_contact',{workspace,contact_id:id,environment:'sandbox'},async(value)=>{path=value;return {result:{contactId:id}};});
+ assert.equal(path,'/v1/workspaces/northstar/contact-directory/records/'+id+'?environment=sandbox');
 });

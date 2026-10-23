@@ -241,3 +241,23 @@ characters on one plain-text line. Create and update require 1–3
 `description_sources` for a nonempty description; null clears it. Omission leaves
 it unchanged. Previous descriptions and sources stay in the contact's History.
 Do not substitute slogans, revenue, hypotheses or next actions for this identity.
+
+
+Contact reads and queries include read-only `lastContactedAt`, `lastClickedAt` and
+`emailActivityCoverage: "recorded_broadcast_email"`. The first date comes from
+confirmed provider acceptance of a broadcast; acceptance does not mean delivery.
+The second comes from Fonte recipient link observations, excluding known
+automation; remaining clicks are not guaranteed human. Missing dates mean no
+recorded activity within this coverage. Older servers may omit these fields.
+`createdAt` remains the original Added date. Profile edits, research, opens,
+queued/failed sends and current organization relationships do not advance the
+dates. Agents cannot set them or derive sending permission from them.
+
+`fonte_find_contacts` accepts up to six `dates` predicates, each with `field`
+(`added`, `last_contacted`, `last_clicked`), `operator` (`before`, `after`,
+`is_empty`) and a UTC `value` for before/after. Conditions combine with AND
+and the existing search, field, list and organization predicates. Boundaries
+are exclusive; `is_empty` has no value. Saved views retain the same query.
+
+Contact tools accept `environment: "production" | "sandbox"`, defaulting to
+production. Environment selection never grants workspace access.

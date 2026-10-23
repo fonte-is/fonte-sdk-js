@@ -32,3 +32,8 @@ Run focused tests and the build for the package being changed.
   one plain-text line of at most 20 words/160 characters with 1–3 sources; invalid
   input is refused before authorization or a Core request. Check
   `tests/cli-mcp-contact-directory.test.mjs` and `cli-mcp-local-contacts.test.mjs`.
+
+- Contact activity reads retain Added and explicit recorded-broadcast coverage.
+  Confirmed send/click dates are read-only; date predicates use UTC and never
+  grant permission. Workspace environment selection still uses Core authority.
+  Check `tests/cli-mcp-contact-directory.test.mjs` and the local MCP test.

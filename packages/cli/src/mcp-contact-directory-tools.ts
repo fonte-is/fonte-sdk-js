@@ -64,14 +64,15 @@ const milestone=z.strictObject({id:z.uuid(),expected_revision:z.number().int().n
   .refine(v=>!/[\p{Cc}\p{Cf}]/u.test(v.title+v.detail),'Use plain text without control or invisible formatting characters.');
 
 export function registerContactDirectoryTools(register:Register,request:CoreRequester) {
-  const workspace={workspace:z.string().min(2).max(63)},mutation={...workspace,operation_id:z.uuid()},
+  const workspace={workspace:z.string().min(2).max(63),environment:z.enum(['production','sandbox']).default('production')},mutation={...workspace,operation_id:z.uuid()},
     record={...workspace,contact_id:z.string().min(1).max(200)},edit={...mutation,contact_id:record.contact_id,expected_revision:z.string().regex(/^[0-9]+$/).max(100)};
+  const environment=(v:{environment?:'production'|'sandbox'})=>v.environment??'production';
   const path=(v:{workspace:string})=>`/v1/workspaces/${encodeURIComponent(v.workspace)}/contact-directory`;
-  const call=(v:{workspace:string;operation_id:string},action:string,body:Record<string,unknown>)=>request(`${path(v)}/commands?environment=production`,{
+  const call=(v:{workspace:string;environment?:'production'|'sandbox';operation_id:string},action:string,body:Record<string,unknown>)=>request(`${path(v)}/commands?environment=${environment(v)}`,{
     body:{operationId:v.operation_id,action,...body},lostResponseEffect:'unknown'});
   register(MCP_CONTACT_DIRECTORY_TOOLS[0],z.strictObject(workspace),
     'Read this workspace’s field definitions, stable choices and configurable contact lists. Does not create defaults or change records.',false,
-    v=>request(`${path(v)}/configuration?environment=production`));
+    v=>request(`${path(v)}/configuration?environment=${environment(v)}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[1],z.strictObject({...mutation,expected_revision:z.number().int().nonnegative(),field}),
     'Create a workspace field at revision 0 or update its label, applicability and choices at the current revision. Choice IDs remain stable; omitted existing choices are archived. Existing field types cannot change.',true,
     v=>call(v,'define_field',{expectedRevision:v.expected_revision,field:{key:v.field.key,label:v.field.label,type:v.field.type,
@@ -82,10 +83,12 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
     v=>call(v,'define_list',{id:v.list_id,name:v.name,criteria:v.criteria,expectedRevision:v.expected_revision,archived:v.archived}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[3],z.strictObject({...workspace,records:z.enum(['individuals','organizations']).optional(),search:z.string().min(1).max(200).optional(),
     list_id:z.uuid().optional(),filters:z.array(filter).max(20).default([]),
+    dates:z.array(z.strictObject({field:z.enum(['added','last_contacted','last_clicked']),operator:z.enum(['before','after','is_empty']),value:z.iso.datetime().optional()})
+      .refine(v=>v.operator==='is_empty'?v.value===undefined:v.value!==undefined,'Before/after require a UTC timestamp; is_empty takes no value.')).max(6).optional(),
     organization:z.strictObject({list_id:z.uuid().optional(),filters:z.array(filter).max(20).default([])}).optional(),
     after:z.string().min(1).max(2048).optional(),limit:z.number().int().min(1).max(100).default(25)}),
-    'Find contact records by name or website, workspace field values and list membership. All organization predicates must match the same linked organization. Follow nextAfter to page the complete result.',false,
-    v=>request(`${path(v)}/query?environment=production`,{body:{records:v.records,search:v.search,listId:v.list_id,filters:v.filters,
+    'Find contact records by name or website, workspace field values and list membership. Rows include read-only lastContactedAt (provider-confirmed broadcast), lastClickedAt (Fonte tracked link, excluding known automation) and emailActivityCoverage; null means no recorded activity. Added/createdAt remains creation time. Optional dates filter Added, last_contacted or last_clicked with before/after UTC timestamps or is_empty. All organization predicates must match the same linked organization. Follow nextAfter to page the complete result.',false,
+    v=>request(`${path(v)}/query?environment=${environment(v)}`,{body:{records:v.records,search:v.search,listId:v.list_id,filters:v.filters,dates:v.dates,
       organization:v.organization?{listId:v.organization.list_id,filters:v.organization.filters}:undefined,after:v.after,limit:v.limit},lostResponseEffect:'none'}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[4],z.strictObject({...mutation,record_type:z.enum(['individual','organization']),name:z.string().min(1).max(200),
     email:z.email().max(320).optional(),website:z.string().max(500).optional(),organization_type:z.string().max(200).optional(),industry:z.string().max(200).optional(),
@@ -93,12 +96,12 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
     .refine(v=>v.record_type==='individual'?!v.website&&!v.organization_type&&!v.industry:!v.email)
     .refine(validDescription,'Include 1–3 description_sources for a nonempty Description; include Description when changing sources.'),
     'Create an individual or organization with only a name. Optional Description: prefer 6–12 words, maximum 20 words/160 characters, plain text on one line, with 1–3 description_sources. Explain the product/service and its customer, or the person’s sourced role and organization. Avoid slogans, promotional claims, revenue and next actions; never infer a role. Reuse operation_id after uncertainty. Stable external references reconcile imports. Does not subscribe, enroll or send.',true,
-    v=>request(`/v1/workspaces/${encodeURIComponent(v.workspace)}/contacts?environment=production`,{body:{operationId:v.operation_id,contactKind:v.record_type,displayName:v.name,
+    v=>request(`/v1/workspaces/${encodeURIComponent(v.workspace)}/contacts?environment=${environment(v)}`,{body:{operationId:v.operation_id,contactKind:v.record_type,displayName:v.name,
       email:v.email,website:v.website,organizationType:v.organization_type,industry:v.industry,...descriptionBody(v),
       externalReference:v.external_reference?{namespace:v.external_reference.namespace,id:v.external_reference.id}:undefined},lostResponseEffect:'unknown'}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[5],z.strictObject(record),
-    'Read one contact’s current concise context, up to five timeline highlight headlines, revision, values, relationships and lists. Company context stays linked. Read milestone evidence explicitly; preserved research and corrections remain available through fonte_list_contact_research and fonte_read_contact_research.',false,
-    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}?environment=production`));
+    'Read one contact’s current concise context, up to five timeline highlight headlines, revision, values, relationships and lists. Read-only lastContactedAt comes from provider-confirmed broadcasts; lastClickedAt from Fonte tracked links excluding known automation. Null means no recorded activity, not never; createdAt remains Added. Activity grants no permission and current organization links do not rewrite history. Company context stays linked. Read milestone evidence explicitly; preserved research and corrections remain available through fonte_list_contact_research and fonte_read_contact_research.',false,
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}?environment=${environment(v)}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[6],z.strictObject({...edit,name:z.string().min(1).max(200).optional(),website:z.url().max(500).nullable().optional(),values:fields.default({}),...descriptionFields})
     .refine(validDescription,'Include 1–3 description_sources for a nonempty Description; include Description when changing sources.'),
     'Save record properties at the observed revision. Description is identity, separate from Context: prefer 6–12 words; maximum 20 words/160 characters on one plain-text line, with 1–3 description_sources. State product/service and customer, or sourced role and organization. Avoid slogans, promotional claims, revenue and next actions. Never infer a role. Null clears it; omitted fields stay unchanged. Prior descriptions and sources remain in History. Values use configured field/choice IDs; concurrent changes conflict.',true,
@@ -122,17 +125,17 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
     v=>call(v,'set_email',{contactId:v.contact_id,expectedRevision:v.expected_revision,email:v.email}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[11],z.strictObject({...record,entry_id:z.string().min(1).max(200)}),
     'Read one complete retained research entry, including its original imported payload and source history.',false,
-    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/entries/${encodeURIComponent(v.entry_id)}?environment=production`));
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/entries/${encodeURIComponent(v.entry_id)}?environment=${environment(v)}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[12],z.strictObject({...workspace,list_id:z.uuid()}),
     'Read all saved definition versions for this workspace contact list without changing its criteria or membership.',false,
-    v=>request(`${path(v)}/lists/${v.list_id}?environment=production`));
+    v=>request(`${path(v)}/lists/${v.list_id}?environment=${environment(v)}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[13],z.strictObject({...mutation,view_id:z.uuid(),name:z.string().min(1).max(200),query:z.record(z.string(),z.unknown()),
     expected_revision:z.number().int().nonnegative(),archived:z.boolean().default(false)}),
     'Save or revise a workspace view using the same camelCase query returned by the contact directory API. Views retain stable field and list IDs through label changes.',true,
     v=>call(v,'define_view',{id:v.view_id,name:v.name,query:v.query,expectedRevision:v.expected_revision,archived:v.archived}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[14],z.strictObject({...record,after:z.string().min(1).max(2048).optional()}),
     'Page the complete retained research history for one contact. Follow nextAfter until null; read individual entries for full bodies, all sources and original payloads.',false,
-    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/history?environment=production${v.after?'&after='+encodeURIComponent(v.after):''}`));
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/history?environment=${environment(v)}${v.after?'&after='+encodeURIComponent(v.after):''}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[15],z.strictObject({...edit,requested_by:z.string().trim().min(1).max(200),
     request:z.string().trim().min(1).max(4000),whole_organization:z.literal(true)}),
     'Record an explicit organization-wide stop request. Blocks SMTP correspondence to the organization and its linked contacts across campaigns, without changing personal newsletter subscriptions. Requires an organization and its current revision. Reuse operation_id after an uncertain reply; only enforcement=enforced confirms queued SMTP is fenced. Never sends a message.',true,
@@ -144,10 +147,10 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
       questions:v.context.questions,nextAction:v.context.next_action},subjectContactIds:v.subject_contact_ids}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[17],z.strictObject({...record,after:z.string().min(1).max(2048).optional(),if_revision:edit.expected_revision.optional()}),
     'Read ten sourced milestones from this contact’s timeline in chronological order. Follow nextAfter for more. Event dates preserve known year/month/day precision; null means unknown. if_revision skips unchanged first-page reads. A changed record invalidates old page cursors. Company events stay on the company record.',false,
-    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/timeline?environment=production${v.after?'&after='+encodeURIComponent(v.after):''}${v.if_revision?'&ifRevision='+encodeURIComponent(v.if_revision):''}`));
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/timeline?environment=${environment(v)}${v.after?'&after='+encodeURIComponent(v.after):''}${v.if_revision?'&ifRevision='+encodeURIComponent(v.if_revision):''}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[18],z.strictObject({...record,milestone_id:z.uuid()}),
     'Read one current milestone with its source references, precise known event date, recorded time and revision. Use the ID from the contact’s highlights instead of loading all research.',false,
-    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/timeline/${v.milestone_id}?environment=production`));
+    v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}/timeline/${v.milestone_id}?environment=${environment(v)}`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[19],z.strictObject({...edit,milestones:z.array(milestone).min(1).max(5)})
     .refine(v=>new Set(v.milestones.map(m=>m.id)).size===v.milestones.length,'Update each milestone once per request.')
     .refine(v=>v.milestones.every(m=>!m.subject_contact_ids||m.subject_contact_ids.includes(v.contact_id)),'Every milestone must include this contact in its erasure subjects.'),
