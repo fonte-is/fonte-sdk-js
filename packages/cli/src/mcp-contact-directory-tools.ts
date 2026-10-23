@@ -64,7 +64,7 @@ const milestone=z.strictObject({id:z.uuid(),expected_revision:z.number().int().n
   .refine(v=>!/[\p{Cc}\p{Cf}]/u.test(v.title+v.detail),'Use plain text without control or invisible formatting characters.');
 
 export function registerContactDirectoryTools(register:Register,request:CoreRequester) {
-  const workspace={workspace:z.string().min(2).max(63),environment:z.enum(['production','sandbox']).default('production')},mutation={...workspace,operation_id:z.uuid()},
+  const workspace={workspace:z.string().min(2).max(63),environment:z.enum(['production','sandbox']).default('production')},mutation={...workspace,environment:z.literal('production').default('production'),operation_id:z.uuid()},
     record={...workspace,contact_id:z.string().min(1).max(200)},edit={...mutation,contact_id:record.contact_id,expected_revision:z.string().regex(/^[0-9]+$/).max(100)};
   const environment=(v:{environment?:'production'|'sandbox'})=>v.environment??'production';
   const path=(v:{workspace:string})=>`/v1/workspaces/${encodeURIComponent(v.workspace)}/contact-directory`;

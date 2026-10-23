@@ -50,7 +50,7 @@ test('invalid research mutation scope never reaches Core and uncertain writes ar
  let effects=0;
  for(const args of [{workspace,operation_id:'unstable',record_type:'organization',name:'A'},
   {workspace,operation_id:id,record_type:'organization',name:'A',email:'company@example.test'},
-  {workspace,operation_id:id,record_type:'individual',name:'A',environment:'development'}]){
+  {workspace,operation_id:id,record_type:'individual',name:'A',environment:'sandbox'}]){
   const result=await call('fonte_create_contact',args,async()=>{effects++;});assert.equal(result.isError,true);
  }
  assert.equal(effects,0);

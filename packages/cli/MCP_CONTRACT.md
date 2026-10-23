@@ -259,5 +259,6 @@ dates. Agents cannot set them or derive sending permission from them.
 and the existing search, field, list and organization predicates. Boundaries
 are exclusive; `is_empty` has no value. Saved views retain the same query.
 
-Contact tools accept `environment: "production" | "sandbox"`, defaulting to
-production. Environment selection never grants workspace access.
+Contact reads accept `environment: "production" | "sandbox"`, defaulting to
+production. Agent mutations retain the existing production restriction.
+Environment selection never grants workspace access.
