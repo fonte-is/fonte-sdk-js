@@ -32,7 +32,7 @@ const campaignConfigurationSchema = z.strictObject({
   archived: z.boolean(),
   createdAt: z.string().datetime({ offset: false }),
   updatedAt: z.string().datetime({ offset: false }),
-  scopeBindingStatus: z.literal("not_qualified"),
+  scopeBindingStatus: z.enum(["not_qualified", "bound"]),
 });
 const campaignReceiptSchema = z.strictObject({
   operationId: uuid,

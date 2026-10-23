@@ -44,7 +44,7 @@ export interface CampaignConfigurationWire {
   readonly archived: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly scopeBindingStatus: "not_qualified";
+  readonly scopeBindingStatus: "not_qualified" | "bound";
 }
 
 export interface CampaignWireReceipt {

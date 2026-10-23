@@ -5,6 +5,7 @@ import { CoreOperatorError } from "../packages/cli/dist/operator-core-request.js
 import { parseCampaignOperatorArguments } from "../packages/cli/dist/operator-campaign-arguments.js";
 import { createCampaignMetadataClient } from "../packages/cli/dist/operator-campaign-client.js";
 import { runCampaignOperatorCommand } from "../packages/cli/dist/operator-campaign-run.js";
+import { campaignOperatorReceiptSchema } from "../packages/cli/dist/mcp-campaign-types.js";
 
 const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const campaignA = "11111111-1111-4111-8111-111111111111";
@@ -71,6 +72,72 @@ function requester(responses) {
     },
   };
 }
+
+test("campaign reads preserve current and historical scope binding status in CLI and MCP receipts", async () => {
+  for (const status of ["not_qualified", "bound"]) {
+    const state = { ...configuration(campaignA), scopeBindingStatus: status };
+    const core = requester([
+      {
+        schemaVersion: "campaign_configuration.v1",
+        tenantId: workspaceId,
+        environment: "sandbox",
+        configuration: state,
+      },
+    ]);
+    const client = createCampaignMetadataClient(
+      core.request,
+      async () => contexts,
+    );
+    const result = await client.read({
+      workspace: "acme-workspace",
+      environment: "sandbox",
+      campaignId: campaignA,
+    });
+    assert.equal(result.configuration.scopeBindingStatus, status);
+    const receipt = {
+      schema_version: "fonte.cli.operator_receipt.v1",
+      command: "campaign_read",
+      outcome: "completed",
+      reason: "core_campaign_read",
+      workspace: "acme-workspace",
+      authority: {
+        status: "current",
+        contract_id: "fonte.core.campaign_configuration.v1",
+      },
+      core_effect: "none",
+      result,
+    };
+    assert.equal(
+      campaignOperatorReceiptSchema.parse(receipt).result.configuration
+        .scopeBindingStatus,
+      status,
+    );
+  }
+  for (const status of ["guessed", ["bound"], null]) {
+    const core = requester([
+      {
+        schemaVersion: "campaign_configuration.v1",
+        tenantId: workspaceId,
+        environment: "sandbox",
+        configuration: {
+          ...configuration(campaignA),
+          scopeBindingStatus: status,
+        },
+      },
+    ]);
+    const client = createCampaignMetadataClient(
+      core.request,
+      async () => contexts,
+    );
+    await assert.rejects(
+      client.read({
+        workspace: "acme-workspace",
+        environment: "sandbox",
+        campaignId: campaignA,
+      }),
+    );
+  }
+});
 
 test("Campaign parser is explicit, strict, and uses caller-owned UUIDs", () => {
   const parsed = parseCampaignOperatorArguments([

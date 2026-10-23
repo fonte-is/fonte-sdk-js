@@ -1,5 +1,9 @@
 # Fonte SDK JS
 
+- Campaign reads retain both current bound scopes and historical unqualified
+  scopes through CLI and MCP validation; unknown or malformed statuses refuse.
+  Check `tests/cli-campaign-metadata.test.mjs`.
+
 Keep public APIs compatible and browser code safe to run on customer sites.
 Core APIs own tenant and business state; keep credentials out of browser bundles.
 Run focused tests and the build for the package being changed.

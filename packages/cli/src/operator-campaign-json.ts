@@ -217,7 +217,8 @@ function campaignConfiguration(
   if (
     body.workspaceId !== scope.tenantId ||
     body.environment !== scope.environment ||
-    body.scopeBindingStatus !== "not_qualified"
+    (body.scopeBindingStatus !== "not_qualified" &&
+      body.scopeBindingStatus !== "bound")
   ) {
     invalid();
   }
