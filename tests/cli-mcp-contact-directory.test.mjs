@@ -72,3 +72,20 @@ test('agent limits reject dossier writes before making a request',async()=>{
   assert.equal(result.isError,true);
  }
 });
+
+test('descriptions retain sources and revisions and reject overflow on create and update',async()=>{
+ const sources=[{url:'https://observatory.example.test/about',observed_at:'2026-10-23'}];
+ const description='Monitoring software for operations teams.';
+ const operations=[['fonte_create_contact',{record_type:'organization',name:'Observatory'}],['fonte_update_contact',{contact_id:'company',expected_revision:'123'}]];
+ for(const [name,fields] of operations){
+  const args={workspace,operation_id:id,...fields,description,description_sources:sources};let effect;
+  const saved=await call(name,args,async(path,options)=>{effect=options;return {result:{replayed:false}};});
+  assert.equal(saved.structuredContent.outcome,'completed');assert.equal(effect.body.description,description);
+  assert.deepEqual(effect.body.descriptionSources,[{url:sources[0].url,title:undefined,publishedAt:undefined,observedAt:'2026-10-23'}]);
+  for(const invalid of [{description:'a'.repeat(161)},{description:Array(21).fill('a').join(' ')},{description:'Two\nlines'},
+    {description:'Hidden\u200bwords'},{description:'<b>Markup</b>'},{description_sources:[]},{description_sources:Array(4).fill(sources[0])},
+    {description:undefined},{description_sources:[sources[0],sources[0]]}]){
+   const denied=await call(name,{...args,...invalid},async()=>assert.fail('Invalid identity must not reach Core'));assert.equal(denied.isError,true);
+  }
+ }
+});

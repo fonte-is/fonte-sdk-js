@@ -41,6 +41,15 @@ const field=z.strictObject({key:z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),label
 const source=z.strictObject({url:z.url().max(1000).refine(v=>{const u=new URL(v);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password;}),
   title:z.string().trim().min(1).max(120).optional(),published_at:z.string().max(40).optional(),observed_at:z.string().max(40).optional()});
 const wordCount=(text:string)=>[...new Intl.Segmenter('en',{granularity:'word'}).segment(text)].filter(part=>part.isWordLike).length;
+const descriptionFields={description:z.string().max(160)
+  .refine(v=>!/[\p{Cc}\p{Cf}\u2028\u2029<>`]/u.test(v)&&!/\[[^\]]*\]\s*\(/u.test(v),'Use plain text on one line.')
+  .refine(v=>wordCount(v)<=20,'Keep Description within 20 words.').nullable().optional(),
+  description_sources:z.array(source).max(3).optional()};
+const validDescription=(v:{description?:string|null;description_sources?:z.infer<typeof source>[]})=>
+  v.description===undefined?v.description_sources===undefined:v.description?.trim()?!!v.description_sources&&v.description_sources.length>0
+    &&new Set(v.description_sources.map(s=>s.url)).size===v.description_sources.length:!v.description_sources?.length;
+const descriptionBody=(v:{description?:string|null;description_sources?:z.infer<typeof source>[]})=>v.description===undefined?{}:
+  {description:v.description,descriptionSources:(v.description_sources??[]).map(sourceBody)};
 const context=z.strictObject({brief:z.string().max(1800),
   findings:z.array(z.strictObject({id:z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,79}$/),text:z.string().trim().min(1).max(240),sources:z.array(source).min(1).max(3)})).max(5),
   questions:z.array(z.string().trim().min(1).max(200)).max(3),next_action:z.string().max(240)})
@@ -80,18 +89,20 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
       organization:v.organization?{listId:v.organization.list_id,filters:v.organization.filters}:undefined,after:v.after,limit:v.limit},lostResponseEffect:'none'}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[4],z.strictObject({...mutation,record_type:z.enum(['individual','organization']),name:z.string().min(1).max(200),
     email:z.email().max(320).optional(),website:z.string().max(500).optional(),organization_type:z.string().max(200).optional(),industry:z.string().max(200).optional(),
-    external_reference:z.strictObject({namespace:z.string().regex(/^[a-z][a-z0-9_-]{0,99}$/),id:z.uuid()}).optional()})
-    .refine(v=>v.record_type==='individual'?!v.website&&!v.organization_type&&!v.industry:!v.email),
-    'Create an individual or organization with only a name. Reuse operation_id after an uncertain response. An optional stable source reference reconciles imported research without merging businesses by website. Does not subscribe, enroll or send.',true,
+    external_reference:z.strictObject({namespace:z.string().regex(/^[a-z][a-z0-9_-]{0,99}$/),id:z.uuid()}).optional(),...descriptionFields})
+    .refine(v=>v.record_type==='individual'?!v.website&&!v.organization_type&&!v.industry:!v.email)
+    .refine(validDescription,'Include 1–3 description_sources for a nonempty Description; include Description when changing sources.'),
+    'Create an individual or organization with only a name. Optional Description: prefer 6–12 words, maximum 20 words/160 characters, plain text on one line, with 1–3 description_sources. Explain the product/service and its customer, or the person’s sourced role and organization. Avoid slogans, promotional claims, revenue and next actions; never infer a role. Reuse operation_id after uncertainty. Stable external references reconcile imports. Does not subscribe, enroll or send.',true,
     v=>request(`/v1/workspaces/${encodeURIComponent(v.workspace)}/contacts?environment=production`,{body:{operationId:v.operation_id,contactKind:v.record_type,displayName:v.name,
-      email:v.email,website:v.website,organizationType:v.organization_type,industry:v.industry,
+      email:v.email,website:v.website,organizationType:v.organization_type,industry:v.industry,...descriptionBody(v),
       externalReference:v.external_reference?{namespace:v.external_reference.namespace,id:v.external_reference.id}:undefined},lostResponseEffect:'unknown'}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[5],z.strictObject(record),
     'Read one contact’s current concise context, up to five timeline highlight headlines, revision, values, relationships and lists. Company context stays linked. Read milestone evidence explicitly; preserved research and corrections remain available through fonte_list_contact_research and fonte_read_contact_research.',false,
     v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}?environment=production`));
-  register(MCP_CONTACT_DIRECTORY_TOOLS[6],z.strictObject({...edit,name:z.string().min(1).max(200).optional(),website:z.url().max(500).nullable().optional(),values:fields.default({})}),
-    'Save explicit record properties at the observed revision. Values use field keys and stable option IDs from configuration; null clears a value. Concurrent changes conflict instead of being overwritten.',true,
-    v=>call(v,'save_record',{contactId:v.contact_id,expectedRevision:v.expected_revision,displayName:v.name,website:v.website,values:v.values}));
+  register(MCP_CONTACT_DIRECTORY_TOOLS[6],z.strictObject({...edit,name:z.string().min(1).max(200).optional(),website:z.url().max(500).nullable().optional(),values:fields.default({}),...descriptionFields})
+    .refine(validDescription,'Include 1–3 description_sources for a nonempty Description; include Description when changing sources.'),
+    'Save record properties at the observed revision. Description is identity, separate from Context: prefer 6–12 words; maximum 20 words/160 characters on one plain-text line, with 1–3 description_sources. State product/service and customer, or sourced role and organization. Avoid slogans, promotional claims, revenue and next actions. Never infer a role. Null clears it; omitted fields stay unchanged. Prior descriptions and sources remain in History. Values use configured field/choice IDs; concurrent changes conflict.',true,
+    v=>call(v,'save_record',{contactId:v.contact_id,expectedRevision:v.expected_revision,displayName:v.name,website:v.website,values:v.values,...descriptionBody(v)}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[7],z.strictObject({...mutation,person_id:record.contact_id,organization_id:record.contact_id,
     expected_revision:edit.expected_revision,role:z.string().max(200).nullable().optional(),is_primary:z.boolean().default(false),source_url:z.url().max(2000).optional()}),
     'Link a person to an existing organization with a role and optional source. Both records must belong to this workspace; a person may have multiple organizations.',true,

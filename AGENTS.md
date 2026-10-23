@@ -27,3 +27,8 @@ Run focused tests and the build for the package being changed.
   checkout. Check `tests/cli-local-mcp-host.test.mjs`,
   `tests/cli-trusted-mcp-launch-agent.test.mjs` and
   `tests/cli-trusted-mcp-ipc.test.mjs`.
+
+- Contact Description stays optional and separate from Context. Create/update accept
+  one plain-text line of at most 20 words/160 characters with 1–3 sources; invalid
+  input is refused before authorization or a Core request. Check
+  `tests/cli-mcp-contact-directory.test.mjs` and `cli-mcp-local-contacts.test.mjs`.

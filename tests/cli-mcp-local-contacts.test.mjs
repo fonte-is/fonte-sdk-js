@@ -33,7 +33,7 @@ test('a fresh local MCP exposes contact operations, uses current auth, and prese
  const operation='10000000-0000-4000-8000-000000000001';
  for(const args of [{record_type:'organization',name:'Synthetic company',website:'https://example.test'},
   {record_type:'individual',name:'Synthetic founder'}]){
-  const value=await call('fonte_create_contact',{operation_id:operation,...args});assert.equal(value.structuredContent.outcome,'completed',JSON.stringify(value.structuredContent));
+  const value=await call('fonte_create_contact',{operation_id:operation,...args,description:args.record_type==='organization'?'Monitoring software for operations teams.':'Founder at the synthetic company.',description_sources:[{url:'https://example.test/about'}]});assert.equal(value.structuredContent.outcome,'completed',JSON.stringify(value.structuredContent));
  }
  await call('fonte_link_contact',{operation_id:operation,person_id:'person',organization_id:'company',expected_revision:'123',role:'Founder',is_primary:true});
  await call('fonte_save_contact_context',{operation_id:operation,contact_id:'company',expected_revision:'124',context:{brief:'A sourced prospect.',findings:[],questions:[],next_action:'Review the offer.'}});
@@ -41,11 +41,14 @@ test('a fresh local MCP exposes contact operations, uses current auth, and prese
  await call('fonte_find_contacts',{records:'organizations',search:'Synthetic company'});
  const invalid=await call('fonte_save_contact_context',{operation_id:operation,contact_id:'company',expected_revision:'126',context:{brief:'word '.repeat(151),findings:[],questions:[],next_action:''}});
  assert.equal(invalid.isError,true);
+ for(const description of ['a'.repeat(161),Array(21).fill('a').join(' '),'Two\nlines']){
+  const rejected=await call('fonte_update_contact',{operation_id:operation,contact_id:'company',expected_revision:'126',description,description_sources:[{url:'https://example.test/about'}]});assert.equal(rejected.isError,true);
+ }
  const loggedOut=await call('fonte_read_contact',{contact_id:'company'});assert.equal(loggedOut.structuredContent.reason,'login_required');
  await close();const proof=JSON.parse(await readFile(effects,'utf8'));
  assert.equal(proof.authorizations,7);assert.equal(proof.requests.length,6);
  assert.deepEqual(proof.requests.slice(0,2).map(r=>r.body.contactKind),['organization','individual']);
- assert.equal(proof.requests[0].body.operationId,operation);assert.equal(proof.requests[0].body.permissionConfirmed,undefined);
+ assert.equal(proof.requests[0].body.operationId,operation);assert.equal(proof.requests[0].body.permissionConfirmed,undefined);assert.equal(proof.requests[0].body.description,'Monitoring software for operations teams.');assert.equal(proof.requests[0].body.descriptionSources[0].url,'https://example.test/about');
  assert.deepEqual(proof.requests.slice(2,5).map(r=>r.body.action),['link_contact','save_context','set_membership']);
  assert.equal(proof.requests[3].body.context.nextAction,'Review the offer.');
  assert.ok(proof.requests.every(r=>r.path.endsWith('?environment=production')));

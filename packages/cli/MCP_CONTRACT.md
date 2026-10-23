@@ -233,3 +233,11 @@ npx --package @fonte-is/cli fonte-mcp
 `fonte_read_contact` includes at most five compact milestone highlights and a total event count. `fonte_read_contact_milestone` reads one event and its evidence. `fonte_list_contact_timeline` returns ten chronological events per page; `if_revision` avoids unchanged first-page payloads, while page cursors bind the contact revision.
 
 `fonte_save_contact_milestones` saves one to five sourced events at the current contact revision. Each title is at most 12 words/100 characters, and title plus detail is at most 40 words, with one to three sources. At most five active events may be highlights. Use stable IDs, event revision 0 for creation and the current event revision for corrections. Dates retain year/month/day precision or explicit unknowns. Include every referenced contact in erasure subjects. Corrections and archives preserve earlier versions in contact History; identical saves add no version. Research and timelines grant no sending permission.
+
+Contact identity can include an optional `description`, separate from working
+context. Prefer 6–12 concrete words about the product/service and customer, or a
+person's sourced role and organization. The checked maximum is 20 words and 160
+characters on one plain-text line. Create and update require 1–3
+`description_sources` for a nonempty description; null clears it. Omission leaves
+it unchanged. Previous descriptions and sources stay in the contact's History.
+Do not substitute slogans, revenue, hypotheses or next actions for this identity.
