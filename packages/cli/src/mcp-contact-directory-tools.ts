@@ -8,6 +8,7 @@ export const MCP_CONTACT_DIRECTORY_TOOLS = [
   "fonte_set_contact_email","fonte_read_contact_research","fonte_read_contact_list_history",
   "fonte_define_contact_view","fonte_list_contact_research",
   "fonte_stop_organization_outreach",
+  "fonte_save_contact_context",
 ] as const;
 type Register = (name:string,schema:z.ZodType,description:string,mutation:boolean,operation:(input:any)=>Promise<unknown>)=>void;
 const value=z.union([z.string(),z.number().finite(),z.boolean(),z.array(z.string()).max(100),z.null()]);
@@ -17,7 +18,15 @@ const choice=z.strictObject({id:z.string().min(1).max(200),label:z.string().min(
 const field=z.strictObject({key:z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),label:z.string().min(1).max(200),
   type:z.enum(['string','number','boolean','date','datetime','select','multiselect']),
   applies_to:z.enum(['any','individual','organization']).default('any'),choices:z.array(choice).max(500).default([]),state:z.enum(['active','archived','deleted']).default('active')});
-const source=z.object({url:z.url().max(2000),title:z.string().max(500).optional()}).passthrough();
+const source=z.strictObject({url:z.url().max(1000).refine(v=>{const u=new URL(v);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password;}),
+  title:z.string().trim().min(1).max(120).optional(),published_at:z.string().max(40).optional(),observed_at:z.string().max(40).optional()});
+const wordCount=(text:string)=>[...new Intl.Segmenter('en',{granularity:'word'}).segment(text)].filter(part=>part.isWordLike).length;
+const context=z.strictObject({brief:z.string().max(1800),
+  findings:z.array(z.strictObject({id:z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,79}$/),text:z.string().trim().min(1).max(240),sources:z.array(source).min(1).max(3)})).max(5),
+  questions:z.array(z.string().trim().min(1).max(200)).max(3),next_action:z.string().max(240)})
+  .refine(v=>wordCount([v.brief,...v.findings.map(f=>f.text),...v.questions,v.next_action].join(' '))<=150,
+    'Keep context, findings, questions and next action within 150 words in total.');
+const sourceBody=(s:z.infer<typeof source>)=>({url:s.url,title:s.title,publishedAt:s.published_at,observedAt:s.observed_at});
 
 export function registerContactDirectoryTools(register:Register,request:CoreRequester) {
   const workspace={workspace:z.string().min(2).max(63)},mutation={...workspace,operation_id:z.uuid()},
@@ -52,7 +61,7 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
       email:v.email,website:v.website,organizationType:v.organization_type,industry:v.industry,
       externalReference:v.external_reference?{namespace:v.external_reference.namespace,id:v.external_reference.id}:undefined},lostResponseEffect:'unknown'}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[5],z.strictObject(record),
-    'Read a native contact’s current revision, values, linked people/organizations, lists and sourced research summaries. Read individual research entries for full preserved payloads.',false,
+    'Read one contact’s current concise context, revision, values, relationships and lists. Organization context is linked rather than copied. History is explicit: use fonte_list_contact_research and fonte_read_contact_research for preserved versions and original imports.',false,
     v=>request(`${path(v)}/records/${encodeURIComponent(v.contact_id)}?environment=production`));
   register(MCP_CONTACT_DIRECTORY_TOOLS[6],z.strictObject({...edit,name:z.string().min(1).max(200).optional(),website:z.url().max(500).nullable().optional(),values:fields.default({})}),
     'Save explicit record properties at the observed revision. Values use field keys and stable option IDs from configuration; null clears a value. Concurrent changes conflict instead of being overwritten.',true,
@@ -65,12 +74,12 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
   register(MCP_CONTACT_DIRECTORY_TOOLS[8],z.strictObject({...edit,list_id:z.uuid(),member:z.boolean(),context:z.record(z.string(),z.unknown()).default({})}),
     'Add or remove explicit list membership with optional list-specific research context. Does not grant subscription, associate a campaign or send a message.',true,
     v=>call(v,'set_membership',{contactId:v.contact_id,listId:v.list_id,expectedRevision:v.expected_revision,member:v.member,context:v.context}));
-  register(MCP_CONTACT_DIRECTORY_TOOLS[9],z.strictObject({...edit,entry_id:z.string().min(1).max(200),kind:z.enum(['note','evidence','question','inference','import']),
-    body:z.string().max(65536),sources:z.array(source).max(100).default([]),observed_at:z.iso.datetime({offset:true}).optional(),
-    payload:z.record(z.string(),z.unknown()).default({}),subject_contact_ids:z.array(record.contact_id).min(1).max(100).optional()}),
-    'Append immutable sourced research, questions or a preserved import snapshot at the current contact revision. Distinguish evidence from inference. Include every referenced person in subject_contact_ids for erasure ownership; the owning contact must be included.',true,
+  register(MCP_CONTACT_DIRECTORY_TOOLS[9],z.strictObject({...edit,entry_id:z.string().min(1).max(200),kind:z.literal('note'),
+    body:z.string().trim().min(1).max(600).refine(v=>wordCount(v)<=80,'Keep activity within 80 words.'),sources:z.array(source).max(3).default([]),observed_at:z.iso.datetime({offset:true}).optional(),
+    payload:z.strictObject({}).default({}),subject_contact_ids:z.array(record.contact_id).min(1).max(100).optional()}),
+    'Record one brief decision or meaningful activity, at most 80 words. Exact duplicate notes are ignored. Use fonte_save_contact_context for current findings, questions and the next action. Raw payloads and new research imports are rejected; existing history remains readable. Include referenced people for erasure ownership.',true,
     v=>call(v,'append_research',{contactId:v.contact_id,expectedRevision:v.expected_revision,entryId:v.entry_id,kind:v.kind,body:v.body,
-      sources:v.sources,observedAt:v.observed_at,payload:v.payload,subjectContactIds:v.subject_contact_ids}));
+      sources:v.sources.map(sourceBody),observedAt:v.observed_at,payload:v.payload,subjectContactIds:v.subject_contact_ids}));
   register(MCP_CONTACT_DIRECTORY_TOOLS[10],z.strictObject({...edit,email:z.email().max(320)}),
     'Attach one encrypted email route to an individual or organization at its observed revision. A company inbox remains an organization route. Existing endpoint ownership and erasure restrictions remain authoritative; no permission or sending effect.',true,
     v=>call(v,'set_email',{contactId:v.contact_id,expectedRevision:v.expected_revision,email:v.email}));
@@ -91,4 +100,9 @@ export function registerContactDirectoryTools(register:Register,request:CoreRequ
     request:z.string().trim().min(1).max(4000),whole_organization:z.literal(true)}),
     'Record an explicit organization-wide stop request. Blocks SMTP correspondence to the organization and its linked contacts across campaigns, without changing personal newsletter subscriptions. Requires an organization and its current revision. Reuse operation_id after an uncertain reply; only enforcement=enforced confirms queued SMTP is fenced. Never sends a message.',true,
     v=>call(v,'stop_organization_outreach',{contactId:v.contact_id,expectedRevision:v.expected_revision,requestedBy:v.requested_by,request:v.request,wholeOrganization:v.whole_organization}));
+  register(MCP_CONTACT_DIRECTORY_TOOLS[16],z.strictObject({...edit,context,subject_contact_ids:z.array(record.contact_id).min(1).max(100).optional()}),
+    'Replace this contact’s current working context: 150 words TOTAL across brief, up to five sourced findings, up to three open questions and one next action. Use stable finding IDs; keep shared company facts on the organization. Replaced versions are preserved automatically in History. Identical saves create no version. Include every referenced person for erasure ownership. No subscription or sending effect.',true,
+    v=>call(v,'save_context',{contactId:v.contact_id,expectedRevision:v.expected_revision,context:{brief:v.context.brief,
+      findings:v.context.findings.map((f:z.infer<typeof context>['findings'][number])=>({...f,sources:f.sources.map(sourceBody)})),
+      questions:v.context.questions,nextAction:v.context.next_action},subjectContactIds:v.subject_contact_ids}));
 }

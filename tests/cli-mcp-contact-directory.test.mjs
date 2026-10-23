@@ -10,18 +10,20 @@ async function call(name,args,requester){
   body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})}),requester,'https://api.example.test');
  return (await response.json()).result;
 }
-test('research MCP passes stable identity, revisions and complete evidence through the ordinary requester',async()=>{
+test('contact context keeps stable identity, revisions and sources through the ordinary requester',async()=>{
  const calls=[],requester=async(path,options)=>{calls.push({path,options});return {result:{replayed:false}};};
  const created=await call('fonte_create_contact',{workspace,operation_id:id,record_type:'organization',name:'Observatory',
   website:'https://observatory.example.test',organization_type:'workspace-choice',external_reference:{namespace:'research_fixture',id}},requester);
  assert.equal(created.structuredContent.outcome,'completed');assert.equal(calls[0].path,'/v1/workspaces/northstar/contacts?environment=production');
  assert.deepEqual(calls[0].options.body.externalReference,{namespace:'research_fixture',id});
  assert.equal(calls[0].options.body.permissionConfirmed,undefined);
- const payload={originalId:id,versions:[{revision:1,unknowns:['current email practice']}]};
- await call('fonte_append_contact_research',{workspace,operation_id:id,contact_id:'organization',expected_revision:'123',entry_id:id,kind:'import',body:'Preserved',payload,
-  sources:[{url:'https://observatory.example.test/about',sourceId:'source-1'}],subject_contact_ids:['organization','person']},requester);
- assert.deepEqual(calls[1].options.body.payload,payload);assert.deepEqual(calls[1].options.body.subjectContactIds,['organization','person']);
+ const context={brief:'Established monitoring software.',findings:[{id:'company',text:'Independent since 2014.',sources:[{url:'https://observatory.example.test/about',observed_at:'2026-10-23'}]}],questions:['What have they tried?'],next_action:'Draft an invitation.'};
+ await call('fonte_save_contact_context',{workspace,operation_id:id,contact_id:'organization',expected_revision:'123',context,subject_contact_ids:['organization','person']},requester);
+ assert.deepEqual(JSON.parse(JSON.stringify(calls[1].options.body.context)),{brief:context.brief,questions:context.questions,nextAction:context.next_action,findings:[{...context.findings[0],sources:[{url:context.findings[0].sources[0].url,observedAt:'2026-10-23'}]}]});
+ assert.deepEqual(calls[1].options.body.subjectContactIds,['organization','person']);
  assert.equal(calls[1].options.body.expectedRevision,'123');assert.equal(calls[1].options.lostResponseEffect,'unknown');
+ await call('fonte_read_contact_research',{workspace,contact_id:'organization',entry_id:'original'},requester);
+ assert.equal(calls[2].path,'/v1/workspaces/northstar/contact-directory/records/organization/entries/original?environment=production');
 });
 test('structured queries remain read-only and keep all organization conditions together',async()=>{
  let observed;
@@ -29,7 +31,7 @@ test('structured queries remain read-only and keep all organization conditions t
   observed={path,options};return {result:{rows:[],matchingCount:0,nextAfter:null}};});
  assert.equal(observed.options.lostResponseEffect,'none');assert.equal(observed.options.body.organization.listId,id);assert.equal(observed.options.body.organization.filters.length,2);
  assert.equal(observed.options.body.listId,undefined);
- const names=new Set(MCP_CONTACT_DIRECTORY_TOOLS);assert.equal(names.size,16);
+ const names=new Set(MCP_CONTACT_DIRECTORY_TOOLS);assert.equal(names.size,17);
 });
 test('organization outreach stops require explicit scope and retain their original mutation identity',async()=>{
  const args={workspace,operation_id:id,contact_id:'organization',expected_revision:'123',requested_by:'Synthetic requester',request:'Stop sales outreach to our organization.',whole_organization:true};
@@ -54,4 +56,19 @@ test('invalid research mutation scope never reaches Core and uncertain writes ar
  assert.equal(effects,0);
  const result=await call('fonte_update_contact',{workspace,operation_id:id,contact_id:'person',expected_revision:'123',values:{country:'US'}},async()=>{effects++;throw new CoreOperatorError('connection_lost',null,'unknown');});
  assert.equal(effects,1);assert.equal(result.structuredContent.outcome,'ambiguous');assert.equal(result.structuredContent.core_effect,'unknown');
+});
+
+test('agent limits reject dossier writes before making a request',async()=>{
+ const base={brief:'Current opportunity.',findings:[],questions:[],next_action:'Ask what they have tried.'};
+ const finding={id:'source',text:'A sourced fact.',sources:[{url:'https://observatory.example.test/about'}]};
+ for(const context of [{...base,brief:'word '.repeat(151)},{...base,findings:Array.from({length:6},(_,i)=>({...finding,id:String(i)}))},
+  {...base,questions:['one','two','three','four']},{...base,next_action:['one','two']},{...base,payload:{raw:'dump'}},
+  {...base,findings:[{...finding,sources:[]}]}]){
+  const result=await call('fonte_save_contact_context',{workspace,operation_id:id,contact_id:'organization',expected_revision:'123',context},async()=>assert.fail('Oversized context must not reach Core'));
+  assert.equal(result.isError,true);
+ }
+ for(const overrides of [{kind:'import'},{payload:{raw:'dump'}},{body:'word '.repeat(81)}]){
+  const result=await call('fonte_append_contact_research',{workspace,operation_id:id,contact_id:'organization',expected_revision:'123',entry_id:id,kind:'note',body:'A decision.',...overrides},async()=>assert.fail('Raw research must not reach Core'));
+  assert.equal(result.isError,true);
+ }
 });
