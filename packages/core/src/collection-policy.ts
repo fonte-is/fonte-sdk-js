@@ -110,6 +110,9 @@ export function minimizeScope(
   if (policy.sourceTokens) {
     const value = identifier(scope.fonte);
     if (value) result.fonte = value;
+    const click = scope.fonte_click;
+    if (value && click && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(click))
+      result.fonte_click = click.toLowerCase();
   }
   return result;
 }

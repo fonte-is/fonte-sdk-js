@@ -5,7 +5,9 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <FonteRuntime>{children}</FonteRuntime>
+        <FonteRuntime websiteSite={process.env.FONTE_WEBSITE_SITE}>
+          {children}
+        </FonteRuntime>
       </body>
     </html>
   );

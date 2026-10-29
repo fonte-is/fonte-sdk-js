@@ -6,6 +6,10 @@ import { packageOrder, readJson, root, run } from "./workspace-utils.mjs";
 const packDir = join(root, ".artifacts", "packs");
 const report = readJson(join(packDir, "pack-report.json"));
 const verified = [];
+const arguments_ = process.argv.slice(2);
+assert.ok(arguments_.length === 0 || arguments_.length === 1 && arguments_[0] === "--application",
+  "usage: verify-packed-manifests.mjs [--application]");
+const selected = arguments_.length ? packageOrder.filter(name => name !== "cli") : packageOrder;
 
 function exportTargets(value, targets = []) {
   if (typeof value === "string") targets.push(value);
@@ -15,7 +19,7 @@ function exportTargets(value, targets = []) {
   return targets;
 }
 
-for (const name of packageOrder) {
+for (const name of selected) {
   const manifest = readJson(join(root, "packages", name, "package.json"));
   const packed = report.packages.find((item) => item.name === manifest.name);
   assert.ok(packed, `missing pack report for ${manifest.name}`);

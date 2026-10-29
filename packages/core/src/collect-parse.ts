@@ -14,7 +14,7 @@ import type { Scope } from "./types.js";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const eventTypes = new Set<CollectEventType>(["page_view", "source_touch"]);
+const eventTypes = new Set<CollectEventType>(["page_view", "source_touch", "browser_landing"]);
 
 const origin = (value: string | null | undefined): string | null => {
   if (!value) return null;
@@ -89,6 +89,13 @@ const normalizeBody = (value: unknown): CollectBody | null => {
     eventType === "source_touch"
       ? normalizeInstallationVerification(input.verification)
       : null;
+  const browserEvidence = input.browserEvidence as CollectBody["browserEvidence"];
+  if (eventType === "browser_landing" &&
+    (typeof input.pageEventId !== "string" || !uuidPattern.test(input.pageEventId) ||
+      !browserEvidence || typeof browserEvidence !== "object" ||
+      Object.keys(browserEvidence).sort().join(",") !== "interaction,version,visibility" ||
+      browserEvidence.version !== "interaction.v1" || browserEvidence.visibility !== "visible" ||
+      !["pointerdown", "keydown", "touchstart"].includes(browserEvidence.interaction))) return null;
   return {
     schemaVersion: "fonte.acquisition.v1",
     classifierVersion: "source.v2",
@@ -99,6 +106,8 @@ const normalizeBody = (value: unknown): CollectBody | null => {
     eventType,
     journeyId,
     ...(verification ? { verification } : {}),
+    ...(eventType === "browser_landing" ? { pageEventId: input.pageEventId as string,
+      browserEvidence: { ...browserEvidence! } } : {}),
     scope,
   };
 };

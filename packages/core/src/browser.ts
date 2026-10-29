@@ -1,6 +1,9 @@
 "use client";
 import { shouldCaptureSourceTouch } from "./browser-attribution.js";
-import { createDeliveryClient } from "./browser-delivery.js";
+import {
+  createDeliveryClient,
+  type BrowserObservationTransport,
+} from "./browser-delivery.js";
 import { createScopeReader } from "./browser-scope.js";
 import { clean } from "./collect-contract.js";
 import { permitted } from "./collection-policy.js";
@@ -11,12 +14,21 @@ import type {
   CaptureConfig,
   CaptureDeliveryReason,
   CaptureEventType,
+  CapturePageResult,
 } from "./browser-types.js";
 import type { Scope } from "./types.js";
 import type { CollectionPolicy } from "./collection-policy.js";
-import type { CollectBody } from "./collect-types.js";
+import type { BrowserLandingEvidence, CollectBody } from "./collect-types.js";
 const eventTypes: CaptureEventType[] = ["page_view", "source_touch"];
 export function createCapture(config: CaptureConfig): Capture {
+  const engine = createCaptureEngine(config);
+  return { page: engine.page, retry: engine.retry, reset: engine.reset };
+}
+/** Internal supplier shared by the unchanged legacy wrapper and website port. */
+export function createCaptureEngine(
+  config: CaptureConfig,
+  transport?: BrowserObservationTransport,
+): Capture & { resetContext(): void; landing(evidence: BrowserLandingEvidence): Promise<CapturePageResult> } {
   const storage = clean(config.storage, 120).replace(/:+$/g, "");
   if (!storage) throw Error("fonte_storage_key_required");
   const collectPath = config.collect ?? "/api/fonte/collect";
@@ -55,9 +67,12 @@ export function createCapture(config: CaptureConfig): Capture {
     collectPath,
     policy,
     onDelivery: config.onDelivery,
+    transport,
   });
   let currentHref: string | undefined;
   let currentDocument: Document | undefined;
+  let pageSnapshot: CollectBody | null = null;
+  let landingSent = false;
   const skipped = (reason: CaptureDeliveryReason) => ({
     deliveries: eventTypes.map((eventType) =>
       delivery.notify({ eventType, status: "skipped", reason }),
@@ -70,6 +85,8 @@ export function createCapture(config: CaptureConfig): Capture {
         delivery.reset();
         scopeReader.reset();
         currentHref = undefined;
+        pageSnapshot = null;
+        landingSent = false;
         return skipped("collection_not_permitted");
       }
       if (typeof window === "undefined" || typeof document === "undefined")
@@ -105,6 +122,8 @@ export function createCapture(config: CaptureConfig): Capture {
         occurrenceId,
         occurredAt,
       );
+      pageSnapshot = snapshots.find(body => body.eventType === "page_view") ?? null;
+      landingSent = false;
       for (const body of snapshots)
         try {
           config.onObservation?.(JSON.parse(JSON.stringify(body)));
@@ -120,11 +139,33 @@ export function createCapture(config: CaptureConfig): Capture {
     async retry() {
       return { deliveries: await delivery.retry() };
     },
+    async landing(browserEvidence) {
+      const approved = policy();
+      if (!pageSnapshot || landingSent || !permitted(approved) ||
+        approved.version !== pageSnapshot.collectionVersion || typeof document === "undefined" ||
+        currentDocument !== document || currentHref !== window.location.href ||
+        document.visibilityState !== "visible") return { deliveries: [] };
+      landingSent = true;
+      const body: CollectBody = { ...pageSnapshot, eventType: "browser_landing",
+        eventId: createClientAttemptId(), occurredAt: new Date().toISOString(),
+        pageEventId: pageSnapshot.eventId, browserEvidence };
+      return { deliveries: [await delivery.submit(body, approved)] };
+    },
     reset() {
       delivery.reset();
       scopeReader.reset(true);
       currentHref = undefined;
       currentDocument = undefined;
+      pageSnapshot = null;
+      landingSent = false;
+    },
+    resetContext() {
+      currentHref = undefined;
+      currentDocument = undefined;
+      scopeReader.reset();
+      delivery.reset();
+      pageSnapshot = null;
+      landingSent = false;
     },
   };
 }

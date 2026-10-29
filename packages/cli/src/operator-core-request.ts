@@ -11,8 +11,8 @@ export interface CoreRequestOptions {
 }
 
 export interface CorePostOptions {
-  /** POST remains the default; revisioned Core commands may require PUT/PATCH. */
-  readonly method?: "POST" | "PUT" | "PATCH";
+  /** POST remains the default; other ordinary Core mutations select their method. */
+  readonly method?: "POST" | "PUT" | "PATCH" | "DELETE";
   readonly idempotencyKey?: string;
   readonly body: Record<string, unknown>;
   readonly lostResponseEffect: "none" | "unknown";
@@ -21,6 +21,8 @@ export interface CorePostOptions {
 
 export interface CoreReadOptions {
   readonly timeoutMs?: number;
+  /** Only a route whose read contract explicitly includes JSON null may opt in. */
+  readonly allowNullReceipt?: true;
 }
 
 export type CoreRequester = (
@@ -124,7 +126,9 @@ export function createCoreRequester(
         failureEffect(post, response.status, reason),
       );
     }
-    if (!parsed.ok || parsed.value === null) {
+    const allowNullReceipt = !post && callOptions &&
+      "allowNullReceipt" in callOptions && callOptions.allowNullReceipt === true;
+    if (!parsed.ok || (parsed.value === null && !allowNullReceipt)) {
       throw new CoreOperatorError(
         "core_operator_receipt_invalid",
         null,
@@ -137,7 +141,7 @@ export function createCoreRequester(
 
 interface PreparedRequest {
   readonly url: string;
-  readonly method: "GET" | "POST" | "PUT" | "PATCH";
+  readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly headers: Record<string, string>;
   readonly body: string | undefined;
 }
@@ -185,7 +189,7 @@ function requestMethod(
 ): PreparedRequest["method"] {
   if (!hasBody) return "GET";
   if (method === undefined) return "POST";
-  if (method === "POST" || method === "PUT" || method === "PATCH") {
+  if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
     return method;
   }
   throw new CoreOperatorError("core_request_invalid", null, "none");
