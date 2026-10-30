@@ -2,6 +2,7 @@ import { createConnectionClient, type ConnectionClient } from "./connection-clie
 import { registerMcpConnectionTools } from "./mcp-connection-tools.js";
 import { McpServer } from "@modelcontextprotocol/server";
 import { registerMcpContactDirectoryTools } from "./mcp-contact-directory-tools.js";
+import { registerMcpBroadcastControlTools } from "./mcp-broadcast-control-registration.js";
 import type { CoreRequester } from "./operator-core-request.js";
 
 import { CLI_VERSION } from "./constants.js";
@@ -232,6 +233,7 @@ export function createFonteMcpServer(
   registerMcpCampaignTools(server, providers.campaignMetadata);
   registerMcpSegmentTools(server, providers.segmentMetadata);
   registerMcpContactDirectoryTools(server, providers.contactDirectory);
+  registerMcpBroadcastControlTools(server, async () => (await providers.broadcastBg()).request);
   return server;
 }
 

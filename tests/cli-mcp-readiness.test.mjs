@@ -29,7 +29,7 @@ function reader(overrides = {}) {
 }
 
 test("signed-in selected workspace projects one ready state", async () => {
-  assert.equal(REQUIRED_PRODUCT_TOOLS.length, 76);
+  assert.equal(REQUIRED_PRODUCT_TOOLS.length, 91);
   const result = await readFonteReadiness(reader());
 
   assert.equal(result.state, "ready");
@@ -135,6 +135,17 @@ test("missing required product tools requests one exact repair action", async ()
     result.next_action,
     "Update Fonte CLI to a build with the required tools, then run fonte setup again.",
   );
+});
+
+test("a local catalog missing current broadcast controls cannot report ready", async () => {
+  const controls = ["fonte_read_broadcast_control", "fonte_cancel_broadcast"];
+  const result = await readFonteReadiness(reader({
+    inspectHost: async () => ({ initialized: true, tools: REQUIRED_PRODUCT_TOOLS.filter(name => !controls.includes(name)) }),
+    readSession: async () => { throw Error("catalog failure must precede authentication"); },
+  }));
+  assert.equal(result.state, "repair_required");
+  assert.equal(result.authentication, "not_checked");
+  assert.deepEqual(result.missing_tools, controls);
 });
 
 test("workspace choices are bounded", async () => {

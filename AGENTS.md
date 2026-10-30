@@ -41,3 +41,8 @@ Run focused tests and the build for the package being changed.
   Confirmed send/click dates are read-only; date predicates use UTC and never
   grant permission. Workspace environment selection still uses Core authority.
   Check `tests/cli-mcp-contact-directory.test.mjs` and the local MCP test.
+
+- Local and hosted MCP expose the same generation-fenced broadcast control
+  reads and End command; discovery never authenticates, and uncertain commands
+  retain their original identity. Checks: `tests/cli-mcp-broadcast-controls.test.mjs`,
+  `tests/cli-mcp-core-http.test.mjs` and `tests/cli-mcp-readiness.test.mjs`.

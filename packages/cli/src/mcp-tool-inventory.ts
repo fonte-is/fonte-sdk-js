@@ -1,4 +1,5 @@
 import { MCP_CONNECTION_TOOLS } from "./mcp-connection-tools.js";
+import { MCP_BROADCAST_CONTROL_TOOLS } from "./mcp-broadcast-control-registration.js";
 import { MCP_CONTACT_DIRECTORY_TOOLS } from "./mcp-contact-directory-tools.js";
 import {
   MCP_BROADCAST_DRAFT_CREATE_TOOL,
@@ -76,9 +77,9 @@ export const MCP_FONTE_TOOLS = [
   MCP_BROADCAST_BG_TOOLS.recover,
   MCP_BROADCAST_BG_TOOLS.read,
   MCP_WORKSPACE_LIST_TOOL,
-  ...MCP_SEQUENCE_TOOLS,
   ...MCP_SEQUENCE_RUNTIME_TOOLS,
   ...MCP_SEQUENCE_MANAGEMENT_TOOLS,
+  ...MCP_SEQUENCE_TOOLS,
   ...MCP_BROADCAST_TOOLS.map((tool) =>
     tool === MCP_BROADCAST_SEND_READ_TOOL
       ? MCP_BROADCAST_LEGACY_SEND_READ_TOOL
@@ -87,6 +88,7 @@ export const MCP_FONTE_TOOLS = [
   ...MCP_CAMPAIGN_TOOLS,
   ...MCP_SEGMENT_TOOLS,
   ...MCP_CONTACT_DIRECTORY_TOOLS,
+  ...MCP_BROADCAST_CONTROL_TOOLS,
 ] as const;
 
 export const MCP_FONTE_ALLOWLIST = { tools: MCP_FONTE_TOOLS } as const;
